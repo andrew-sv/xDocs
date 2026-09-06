@@ -28,6 +28,14 @@ export function App() {
     setSelected(doc);
   }
 
+  // The DB copy of the title is only written on Hocuspocus's debounce, so keep
+  // the sidebar in step with what the author is typing right now.
+  const handleTitleChange = useCallback((id: string, title: string) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
+    );
+  }, []);
+
   async function deleteDocument(doc: DocumentDTO) {
     await api.deleteDocument(doc.id);
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
@@ -44,7 +52,9 @@ export function App() {
         onDelete={(doc) => void deleteDocument(doc)}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
-      {!error && selected && <DocumentEditor key={selected.id} document={selected} />}
+      {!error && selected && (
+        <DocumentEditor key={selected.id} document={selected} onTitleChange={handleTitleChange} />
+      )}
       {!error && !selected && (
         <main className="editor empty-state">
           <p>Select a document, or create one to start writing.</p>

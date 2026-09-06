@@ -6,6 +6,15 @@ import { z } from 'zod';
  */
 export const BLOCKS_KEY = 'blocks';
 
+/**
+ * Yjs top-level Y.Text holding the document title.
+ *
+ * The title lives in the CRDT rather than in a REST field so that editing it is
+ * collaborative like everything else, and so nothing can overwrite it out of
+ * band. The `documents.title` column is a denormalised copy for the sidebar.
+ */
+export const TITLE_KEY = 'title';
+
 /** Y.XmlFragment key bound to a single block's TipTap editor. */
 export function blockFragmentName(blockId: string): string {
   return `block-${blockId}`;
@@ -41,7 +50,3 @@ export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
 });
 export type CreateDocumentInput = z.input<typeof createDocumentSchema>;
-
-export const updateDocumentSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-});

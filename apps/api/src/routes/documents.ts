@@ -1,7 +1,6 @@
 import {
   BLOCKS_KEY,
   createDocumentSchema,
-  updateDocumentSchema,
   type BlockMeta,
   type DocumentDTO,
 } from '@xdocs/shared';
@@ -82,18 +81,6 @@ export const documentsRoute = new Hono()
     return c.json(toDTO(row));
   })
 
-  .patch('/:id', async (c) => {
-    const body = updateDocumentSchema.safeParse(await c.req.json().catch(() => ({})));
-    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
-
-    const [row] = await getDb()
-      .update(documents)
-      .set({ title: body.data.title, updatedAt: new Date() })
-      .where(eq(documents.id, c.req.param('id')))
-      .returning(columns);
-    if (!row) return c.json({ error: 'Not found' }, 404);
-    return c.json(toDTO(row));
-  })
 
   .delete('/:id', async (c) => {
     const [row] = await getDb()

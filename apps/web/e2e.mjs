@@ -4,6 +4,7 @@ import * as Y from 'yjs';
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:1234';
 const BLOCKS_KEY = 'blocks';
+const TITLE_KEY = 'title';
 const frag = (id) => `block-${id}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
@@ -51,7 +52,8 @@ const seeded = A.doc.getArray(BLOCKS_KEY).toArray();
 check('new document is seeded with exactly one block', seeded.length === 1);
 const b1 = seeded[0]?.id;
 
-// 3. A types into the seeded block and appends a second one
+// 3. A titles the document and types into the seeded block
+A.doc.getText(TITLE_KEY).insert(0, 'Quarterly notes');
 writeParagraph(A.doc, b1, 'Hello from the first block');
 const b2 = crypto.randomUUID();
 A.doc.getArray(BLOCKS_KEY).push([{ id: b2, type: 'paragraph' }]);
@@ -64,6 +66,12 @@ await B.synced;
 await sleep(600);
 check('client B sees both blocks', B.doc.getArray(BLOCKS_KEY).length === 2);
 check('client B sees block 1 text', readText(B.doc, b1) === 'Hello from the first block');
+check('client B sees the title', B.doc.getText(TITLE_KEY).toString() === 'Quarterly notes');
+
+// Title edits are collaborative too: B renames, A must see it.
+B.doc.getText(TITLE_KEY).insert(15, ' 2026');
+await sleep(600);
+check('A receives B\'s title edit', A.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026');
 
 const b3 = crypto.randomUUID();
 B.doc.getArray(BLOCKS_KEY).push([{ id: b3, type: 'paragraph' }]);
@@ -83,12 +91,14 @@ await sleep(600);
 check('persisted: block count restored', C.doc.getArray(BLOCKS_KEY).length === 3);
 check('persisted: block 1 text restored', readText(C.doc, b1) === 'Hello from the first block');
 check('persisted: block 3 text restored', readText(C.doc, b3) === 'Added by B');
+const C2Title = C.doc.getText(TITLE_KEY).toString();
 C.provider.destroy();
 
-// 7. Title derived from first block, visible over REST
+// 7. Title persisted to the column and served over REST
 const list = await fetch(`${API}/api/documents`).then((r) => r.json());
 const row = list.find((d) => d.id === id);
-check('title derived from first block', row?.title === 'Hello from the first block');
+check('persisted: title restored in CRDT', C2Title === 'Quarterly notes 2026');
+check('title mirrored to the documents.title column', row?.title === 'Quarterly notes 2026');
 check('REST never returns ystate', row && !('ystate' in row));
 
 // 8. Unknown document is rejected by the collab server

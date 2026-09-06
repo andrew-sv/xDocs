@@ -1,6 +1,6 @@
 import { Database } from '@hocuspocus/extension-database';
 import { Server } from '@hocuspocus/server';
-import { BLOCKS_KEY, blockFragmentName, type BlockMeta } from '@xdocs/shared';
+import { TITLE_KEY } from '@xdocs/shared';
 import { eq } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { getDb } from './db/index.js';
@@ -12,33 +12,13 @@ function documentIdFrom(documentName: string): string | null {
   return prefix === 'doc' && id ? id : null;
 }
 
-/** Collect plain text out of a Y.XmlFragment without needing a DOM. */
-function fragmentText(fragment: Y.XmlFragment): string {
-  let out = '';
-  const walk = (node: Y.XmlElement | Y.XmlFragment | Y.XmlText | Y.XmlHook): void => {
-    if (node instanceof Y.XmlText) {
-      out += node.toString();
-      return;
-    }
-    if (node instanceof Y.XmlElement || node instanceof Y.XmlFragment) {
-      for (const child of node.toArray()) walk(child);
-    }
-  };
-  walk(fragment);
-  return out;
-}
-
 /**
- * Title is derived from the first block's text so the sidebar stays meaningful
- * without a separate title input. Falls back to whatever is already stored.
+ * The title is authored in the CRDT; this mirrors it into the `title` column so
+ * the document list can be served over REST without loading each Yjs doc.
  */
-function deriveTitle(doc: Y.Doc): string | null {
-  const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY).toArray();
-  const first = blocks[0];
-  if (!first) return null;
-  const text = fragmentText(doc.getXmlFragment(blockFragmentName(first.id))).trim();
-  if (!text) return null;
-  return text.slice(0, 200);
+function readTitle(doc: Y.Doc): string {
+  const title = doc.getText(TITLE_KEY).toString().trim();
+  return title.length > 0 ? title.slice(0, 200) : 'Untitled';
 }
 
 const server = new Server({
@@ -59,13 +39,12 @@ const server = new Server({
       store: async ({ documentName, state, document }) => {
         const id = documentIdFrom(documentName);
         if (!id) return;
-        const title = deriveTitle(document);
         await getDb()
           .update(documents)
           .set({
             ystate: Buffer.from(state),
+            title: readTitle(document),
             updatedAt: new Date(),
-            ...(title ? { title } : {}),
           })
           .where(eq(documents.id, id));
       },

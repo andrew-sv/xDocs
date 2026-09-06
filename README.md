@@ -35,6 +35,12 @@ handles document-level metadata (list/create/rename/delete). All text goes over
 the collab socket, and Hocuspocus writes the encoded Yjs state to the
 `documents.ystate` bytea column, debounced.
 
+The **title is a `Y.Text` on the same doc**, so renaming is collaborative and
+concurrent renames merge rather than overwrite. `documents.title` is a
+denormalised copy that Hocuspocus mirrors on save, purely so the sidebar can be
+served without loading every Yjs doc. There is deliberately no REST endpoint for
+renaming — it would be silently clobbered by the next debounced save.
+
 A new document is seeded with its first block **server-side**, at creation. Doing
 it in the client would race: two people opening a fresh document would each see
 an empty list and each seed a block.
