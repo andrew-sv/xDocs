@@ -58,7 +58,7 @@ Open http://localhost:5173. To see collaboration, open it in two windows and
 type in the same block.
 
 ```bash
-pnpm test        # unit: reorder index math, every drop permutation
+pnpm test        # unit: reorder index math; undo survives editor teardown
 pnpm e2e         # end-to-end: 2-client sync, reorder, persistence across disconnect
 pnpm typecheck
 ```
@@ -74,7 +74,16 @@ deletion in the order they actually happened. The alternative — TipTap's
 default, one manager per editor — gives each block a private history that
 cannot see structural changes, so deleting a block would be unundoable.
 
-Two details make it work:
+The manager is deliberately **not** passed to Collaboration's `yUndoOptions`.
+That plugin assumes it owns its manager's lifecycle and calls
+`undoManager.destroy()` when its editor view tears down; Yjs's `destroy()`
+detaches the `afterTransaction` handler and drops every observer, so a shared
+manager silently stops recording the moment any one block unmounts. Instead
+each editor keeps the private manager TipTap can safely destroy, and a
+higher-priority `DocumentUndo` extension claims Mod-z and applies it to the
+document stack.
+
+Two further details make it work:
 
 - `trackedOrigins` is `{null, ySyncPluginKey}`. Our own mutations transact with
   origin `null`; ProseMirror's arrive under `ySyncPluginKey`. Remote peers'

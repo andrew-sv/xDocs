@@ -7,6 +7,7 @@ import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
+import { DocumentUndo } from '../lib/documentUndo';
 import { BLOCK_DRAG_MIME, type DropEdge } from '../lib/reorder';
 import { Toolbar } from './Toolbar';
 
@@ -79,7 +80,10 @@ export function BlockEditor({
         // Yjs owns undo/redo via its own UndoManager; StarterKit's history
         // plugin would fight it and corrupt the shared history stack.
         StarterKit.configure({ undoRedo: false }),
-        Collaboration.configure({ fragment, yUndoOptions: { undoManager } }),
+        // Deliberately NOT given our undoManager: Collaboration destroys the
+        // manager it is handed when this editor unmounts. See documentUndo.ts.
+        Collaboration.configure({ fragment }),
+        DocumentUndo.configure({ undoManager }),
         CollaborationCaret.configure({ provider, user: localUser }),
       ],
       onFocus: () => setFocused(true),
