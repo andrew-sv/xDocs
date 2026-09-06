@@ -1,5 +1,6 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
+import { resolveMove, applyMove } from './src/lib/reorder.ts';
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:1234';
@@ -80,6 +81,17 @@ await sleep(700);
 check("A receives B's new block", A.doc.getArray(BLOCKS_KEY).length === 3);
 check("A receives B's text", readText(A.doc, b3) === 'Added by B');
 
+// 4b. A reorders: drag the last block to the top. B must see the new order.
+const orderBefore = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const mv = resolveMove(A.doc.getArray(BLOCKS_KEY).toArray(), b3, b1, 'above');
+applyMove(A.doc.getArray(BLOCKS_KEY), mv.from, mv.to);
+await sleep(700);
+const orderAfter = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+check('reorder moves block to the front', orderAfter.join() === [b3, b1, b2].join());
+check('reorder preserves every block', [...orderAfter].sort().join() === [...orderBefore].sort().join());
+check('B sees the reorder', B.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === orderAfter.join());
+check('reordered block keeps its text', readText(B.doc, b3) === 'Added by B');
+
 // 5. Disconnect everything, let Hocuspocus flush to Postgres
 A.provider.destroy(); B.provider.destroy();
 await sleep(3500);
@@ -91,6 +103,10 @@ await sleep(600);
 check('persisted: block count restored', C.doc.getArray(BLOCKS_KEY).length === 3);
 check('persisted: block 1 text restored', readText(C.doc, b1) === 'Hello from the first block');
 check('persisted: block 3 text restored', readText(C.doc, b3) === 'Added by B');
+check(
+  'persisted: block order restored',
+  C.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === [b3, b1, b2].join(),
+);
 const C2Title = C.doc.getText(TITLE_KEY).toString();
 C.provider.destroy();
 

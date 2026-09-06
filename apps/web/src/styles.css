@@ -55,19 +55,42 @@ body {
 
 /* Blocks */
 .blocks { display: flex; flex-direction: column; max-width: 720px; padding-top: 34px; }
-/* `position: relative` anchors the floating toolbar; see .toolbar below. */
-.block { display: grid; grid-template-columns: 28px 1fr; align-items: start; border-radius: 6px; position: relative; }
+/* `position: relative` anchors both the floating toolbar and the drop line. */
+.block { display: grid; grid-template-columns: 52px 1fr; align-items: start; border-radius: 6px; position: relative; }
 .block.focused { background: #fff; box-shadow: 0 0 0 1px var(--border); }
-.block-gutter { display: flex; justify-content: center; padding-top: 6px; }
-.block-remove { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
-.block:hover .block-remove { opacity: 1; }
+.block-gutter { display: flex; align-items: center; gap: 2px; padding-top: 4px; }
+.block-remove { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 3px; border-radius: 4px; }
+.block-handle { opacity: 0; display: flex; align-items: center; color: #b8b5af; cursor: grab; padding: 3px 1px; border-radius: 4px; }
+.block-handle:active { cursor: grabbing; }
+.block:hover .block-remove, .block:hover .block-handle { opacity: 1; }
+.block-remove:hover { background: var(--panel); color: var(--text); }
+.block-handle:hover { background: var(--panel); color: var(--muted); }
+/* Keyboard users get the handle permanently, plus a visible focus ring. */
+.block-handle:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Drop indicator: a line on the edge the block would land against. */
+.block.drop-above::before, .block.drop-below::after {
+  content: ''; position: absolute; left: 52px; right: 0; height: 2px;
+  background: var(--accent); border-radius: 2px;
+}
+.block.drop-above::before { top: -1px; }
+.block.drop-below::after { bottom: -1px; }
+.block.dragging { opacity: 0.4; }
+
+/*
+ * While a drag is in flight, take the editors out of hit-testing entirely.
+ * ProseMirror runs its own drop handling on the editable region, so a drop
+ * landing inside a paragraph would be intercepted before the block ever saw
+ * it. Events pass straight through to the block container instead.
+ */
+.blocks.dragging .block-body { pointer-events: none; }
 .block-body { padding: 2px 10px 2px 0; min-width: 0; }
 
 /*
  * Floating, not in flow. An in-flow toolbar changed the page height every time
  * a block gained or lost focus, which shifted every control below it mid-click.
  */
-.toolbar { position: absolute; top: -34px; left: 28px; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.07); }
+.toolbar { position: absolute; top: -34px; left: 52px; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.07); }
 .tb { min-width: 26px; height: 26px; border: 1px solid transparent; background: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: var(--muted); }
 .tb:hover { background: var(--panel); }
 .tb.active { background: #fff; border-color: var(--border); color: var(--accent); }

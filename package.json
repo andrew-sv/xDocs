@@ -7,7 +7,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "db:push": "pnpm -F @xdocs/api db:push",
-    "e2e": "pnpm -F @xdocs/web e2e"
+    "e2e": "pnpm -F @xdocs/web e2e",
+    "test": "pnpm -F @xdocs/web test"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

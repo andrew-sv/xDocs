@@ -58,9 +58,18 @@ Open http://localhost:5173. To see collaboration, open it in two windows and
 type in the same block.
 
 ```bash
-pnpm e2e         # end-to-end: 2-client sync, persistence across disconnect
+pnpm test        # unit: reorder index math, every drop permutation
+pnpm e2e         # end-to-end: 2-client sync, reorder, persistence across disconnect
 pnpm typecheck
 ```
+
+Blocks reorder by dragging the handle in the left gutter, or by focusing that
+handle and pressing arrow up/down.
+
+Yjs has no atomic move, so reordering is a delete plus an insert in one
+transaction. If two people move the *same* block at the same instant it can
+duplicate or vanish — that is why upstream never shipped a move primitive, and
+it is an accepted tradeoff here. Ordinary concurrent editing is unaffected.
 
 ## Notes for later
 

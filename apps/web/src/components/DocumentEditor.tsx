@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { useYArray } from '../hooks/useYArray';
+import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { TitleEditor } from './TitleEditor';
 
@@ -26,6 +27,8 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; edge: DropEdge } | null>(null);
 
   useEffect(() => {
     // One Y.Doc + one socket per open document. Every block is a fragment on
@@ -61,6 +64,38 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   );
 
   const clearPendingFocus = useCallback(() => setPendingFocusId(null), []);
+
+  const endDrag = useCallback(() => {
+    setDraggingId(null);
+    setDropTarget(null);
+  }, []);
+
+  const handleDragOverBlock = useCallback(
+    (id: string, edge: DropEdge) => {
+      if (!draggingId) return;
+      // Only mark a target when the drop would actually change the order, so
+      // no indicator appears for a drag that would land where it started.
+      setDropTarget(resolveMove(blocks, draggingId, id, edge) ? { id, edge } : null);
+    },
+    [draggingId, blocks],
+  );
+
+  const handleDrop = useCallback(() => {
+    if (draggingId && dropTarget && blocksArray) {
+      const move = resolveMove(blocks, draggingId, dropTarget.id, dropTarget.edge);
+      if (move) applyMove(blocksArray, move.from, move.to);
+    }
+    endDrag();
+  }, [draggingId, dropTarget, blocks, blocksArray, endDrag]);
+
+  const handleNudge = useCallback(
+    (id: string, direction: -1 | 1) => {
+      if (!blocksArray) return;
+      const move = resolveNudge(blocks, id, direction);
+      if (move) applyMove(blocksArray, move.from, move.to);
+    },
+    [blocks, blocksArray],
+  );
 
   function addBlock(afterIndex?: number) {
     if (!blocksArray) return;
@@ -99,7 +134,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
 
       {synced && provider && ydoc && (
         <>
-          <div className="blocks">
+          <div className={draggingId ? 'blocks dragging' : 'blocks'}>
             {blocks.map((block) => (
               <BlockEditor
                 key={block.id}
@@ -110,6 +145,14 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
                 onRemove={() => removeBlock(block.id)}
                 autoFocus={block.id === pendingFocusId}
                 onAutoFocusHandled={clearPendingFocus}
+                canReorder={blocks.length > 1}
+                isDragging={block.id === draggingId}
+                dropEdge={dropTarget?.id === block.id ? dropTarget.edge : null}
+                onDragStart={setDraggingId}
+                onDragEnd={endDrag}
+                onDragOverBlock={handleDragOverBlock}
+                onDropBlock={handleDrop}
+                onNudge={handleNudge}
               />
             ))}
           </div>

@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "e2e": "node e2e.mjs"
+    "e2e": "node e2e.mjs",
+    "test": "node reorder.test.mjs"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.6.0",
