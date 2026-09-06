@@ -39,6 +39,12 @@ body {
 .editor-header { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; max-width: 720px; }
 .title-input { flex: 1; min-width: 0; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; font-family: inherit; color: var(--text); background: none; border: 0; border-radius: 6px; padding: 2px 6px; margin-left: -6px; outline: none; }
 .title-input::placeholder { color: #c4c1bb; }
+/* Mirrors .title-input's metrics so the swap to the real input doesn't jump. */
+.title-loading { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 650; letter-spacing: -0.02em; padding: 2px 6px; margin-left: -6px; color: var(--muted); }
+.title-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.spinner { flex: none; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--muted); border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 .title-input:hover { background: var(--panel); }
 .title-input:focus { background: #fff; box-shadow: 0 0 0 1px var(--border); }
 .status { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; }

@@ -81,17 +81,21 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   return (
     <main className="editor">
       <header className="editor-header">
-        {titleText ? (
+        {synced && titleText ? (
           <TitleEditor title={titleText} onChange={handleTitleChange} />
         ) : (
-          <span className="title-input placeholder">{doc.title}</span>
+          // Until the CRDT has synced its Y.Text is empty, which would render as
+          // the "Untitled" placeholder. Show the title the list already knows
+          // from REST, with a spinner, rather than flashing a wrong name.
+          <span className="title-loading">
+            <span className="title-name">{doc.title}</span>
+            <span className="spinner" role="status" aria-label="Loading document" />
+          </span>
         )}
         <span className={`status status-${status}`}>
           {status === 'connected' && synced ? 'Live' : status === 'connected' ? 'Syncing…' : status}
         </span>
       </header>
-
-      {!synced && <p className="hint">Loading document…</p>}
 
       {synced && provider && ydoc && (
         <>
