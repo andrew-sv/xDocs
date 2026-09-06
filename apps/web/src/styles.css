@@ -58,7 +58,36 @@ body {
 /* `position: relative` anchors both the floating toolbar and the drop line. */
 .block { display: grid; grid-template-columns: 52px 1fr; align-items: start; border-radius: 6px; position: relative; }
 .block.focused { background: #fff; box-shadow: 0 0 0 1px var(--border); }
-.block-gutter { display: flex; align-items: center; gap: 2px; padding-top: 4px; }
+/*
+ * Centre the gutter icons on the block's FIRST LINE, not on the block as a
+ * whole — a long paragraph would otherwise push them to its vertical middle.
+ *
+ * --first-line-top    distance from the block's top to the top of that line
+ *                     (.block-body's 2px padding + the first node's margin-top)
+ * --first-line-height that line's own line box
+ *
+ * The gutter is then exactly that tall, with the offset as padding, so
+ * `align-items: center` lands the icons on the line's midpoint. Values are
+ * overridden per first-child type below, since a heading's line box is taller.
+ */
+.block {
+  --first-line-top: calc(2px + 0.35em);  /* p margin-top: 0.35em */
+  --first-line-height: 1.6em;            /* body line-height x 15px = 24px */
+}
+/* h1: 24px font, margin-top 0.5em = 12px, line box 1.6 x 24px = 38.4px */
+.block:has(.tiptap > h1:first-child) { --first-line-top: 14px; --first-line-height: 38.4px; }
+/* h2: 19px font, margin-top 0.5em = 9.5px, line box 1.6 x 19px = 30.4px */
+.block:has(.tiptap > h2:first-child) { --first-line-top: 11.5px; --first-line-height: 30.4px; }
+/* blockquote keeps the body font but uses a 0.4em top margin */
+.block:has(.tiptap > blockquote:first-child) { --first-line-top: calc(2px + 0.4em); }
+
+.block-gutter {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: var(--first-line-top);
+  height: calc(var(--first-line-top) + var(--first-line-height));
+}
 .block-remove { opacity: 0; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px 3px; border-radius: 4px; }
 .block-handle { opacity: 0; display: flex; align-items: center; color: #b8b5af; cursor: grab; padding: 3px 1px; border-radius: 4px; }
 .block-handle:active { cursor: grabbing; }
