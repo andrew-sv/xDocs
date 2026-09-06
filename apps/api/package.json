@@ -1,0 +1,33 @@
+{
+  "name": "@xdocs/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "dotenv -e ../../.env.local -- tsx watch src/server.ts",
+    "dev:collab": "dotenv -e ../../.env.local -- tsx watch src/collab.ts",
+    "db:push": "dotenv -e ../../.env.local -- drizzle-kit push",
+    "db:generate": "dotenv -e ../../.env.local -- drizzle-kit generate",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "^4.6.0",
+    "@hocuspocus/server": "^4.6.0",
+    "@hono/node-server": "^1.19.9",
+    "@xdocs/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.7",
+    "pg": "^8.23.0",
+    "yjs": "^13.6.32",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  }
+}

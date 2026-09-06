@@ -1,0 +1,21 @@
+{
+  "name": "xdocs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,collab,web -c cyan,magenta,green \"pnpm -F @xdocs/api dev\" \"pnpm -F @xdocs/api dev:collab\" \"pnpm -F @xdocs/web dev\"",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:push": "pnpm -F @xdocs/api db:push",
+    "e2e": "pnpm -F @xdocs/web e2e"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
