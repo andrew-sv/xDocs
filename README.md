@@ -88,6 +88,12 @@ refused by the collab server until restored.
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.
 
+**Shift+Enter** while editing adds an empty paragraph directly below the
+current block and moves the caret into it. StarterKit's HardBreak owns that key
+by default, so `BlockKeymap` sits above it at priority 1000 and claims the
+keystroke; without a handler it still falls through to a hard break. Note this
+inserts an empty block — it does not split the text at the caret.
+
 ### Undo
 
 One `Y.UndoManager` per document, shared by every block editor, so a single

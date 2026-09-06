@@ -7,6 +7,7 @@ import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
+import { BlockKeymap } from '../lib/blockKeymap';
 import { DocumentUndo } from '../lib/documentUndo';
 import { BLOCK_DRAG_MIME, type DropEdge } from '../lib/reorder';
 import { Toolbar } from './Toolbar';
@@ -29,6 +30,8 @@ type Props = {
   onDragOverBlock: (id: string, edge: DropEdge) => void;
   onDropBlock: () => void;
   onNudge: (id: string, direction: -1 | 1) => void;
+  /** Shift+Enter: add a block right below this one and focus it. */
+  onInsertBelow: (id: string) => void;
   /** Document-wide undo stack, shared by every block. */
   undoManager: Y.UndoManager;
 };
@@ -59,6 +62,7 @@ export function BlockEditor({
   onDragOverBlock,
   onDropBlock,
   onNudge,
+  onInsertBelow,
   undoManager,
 }: Props) {
   const [focused, setFocused] = useState(false);
@@ -67,6 +71,13 @@ export function BlockEditor({
     () => ydoc.getXmlFragment(blockFragmentName(block.id)),
     [ydoc, block.id],
   );
+
+  // The extension list is frozen when the editor is built, so the handler is
+  // read through a ref — a captured callback would go stale on re-render.
+  const insertBelowRef = useRef(onInsertBelow);
+  useEffect(() => {
+    insertBelowRef.current = onInsertBelow;
+  }, [onInsertBelow]);
 
   // y-tiptap only auto-scopes an UndoManager it constructs itself, so a shared
   // one has to be told about each block's fragment or typing here is untracked.
@@ -84,6 +95,7 @@ export function BlockEditor({
         // manager it is handed when this editor unmounts. See documentUndo.ts.
         Collaboration.configure({ fragment }),
         DocumentUndo.configure({ undoManager }),
+        BlockKeymap.configure({ onInsertBelow: () => insertBelowRef.current(block.id) }),
         CollaborationCaret.configure({ provider, user: localUser }),
       ],
       onFocus: () => setFocused(true),

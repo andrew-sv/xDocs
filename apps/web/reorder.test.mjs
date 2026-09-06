@@ -70,5 +70,20 @@ applyMove(arr, m.from, m.to);
 ck('moved block keeps its fragment', d.getXmlFragment('block-a').toString().includes('content of a'));
 ck('order after fragment move', arr.toArray().map(b=>b.id).join('') === 'bca');
 
+// Shift+Enter inserts directly below the current block (DocumentEditor's
+// handleInsertBelow: find the index, insert at index + 1).
+function insertBelow(count, afterId) {
+  const d = new Y.Doc();
+  const arr = d.getArray('blocks');
+  arr.push(ids(count));
+  const i = arr.toArray().findIndex((b) => b.id === afterId);
+  arr.insert(i + 1, [{ id: 'n', type: 'paragraph' }]);
+  return arr.toArray().map((b) => b.id).join('');
+}
+ck('insert below first block', insertBelow(3, 'a') === 'anbc');
+ck('insert below middle block', insertBelow(3, 'b') === 'abnc');
+ck('insert below last block', insertBelow(3, 'c') === 'abcn');
+ck('insert below only block', insertBelow(1, 'a') === 'an');
+
 console.log(fail === 0 ? 'ALL PASS' : `${fail} FAILED`);
 process.exit(fail ? 1 : 0);

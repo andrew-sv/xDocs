@@ -162,12 +162,24 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
     [blocks, blocksArray],
   );
 
-  function addBlock(afterIndex?: number) {
-    if (!blocksArray) return;
-    const block: BlockMeta = { id: crypto.randomUUID(), type: 'paragraph' };
-    blocksArray.insert(afterIndex === undefined ? blocksArray.length : afterIndex + 1, [block]);
-    setPendingFocusId(block.id);
-  }
+  const addBlock = useCallback(
+    (afterIndex?: number) => {
+      if (!blocksArray) return;
+      const block: BlockMeta = { id: crypto.randomUUID(), type: 'paragraph' };
+      blocksArray.insert(afterIndex === undefined ? blocksArray.length : afterIndex + 1, [block]);
+      setPendingFocusId(block.id);
+    },
+    [blocksArray],
+  );
+
+  const handleInsertBelow = useCallback(
+    (id: string) => {
+      if (!blocksArray) return;
+      const index = blocksArray.toArray().findIndex((b) => b.id === id);
+      addBlock(index === -1 ? undefined : index);
+    },
+    [blocksArray, addBlock],
+  );
 
   function removeBlock(id: string) {
     if (!blocksArray) return;
@@ -222,6 +234,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
                 onDropBlock={handleDrop}
                 onNudge={handleNudge}
                 undoManager={undoManager}
+                onInsertBelow={handleInsertBelow}
               />
             ))}
           </div>
