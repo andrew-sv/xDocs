@@ -2,12 +2,14 @@ import type { DocumentDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
 import { DocumentList } from './components/DocumentList';
+import { Toast } from './components/Toast';
 import { api } from './lib/api';
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -40,7 +42,45 @@ export function App() {
     await api.deleteDocument(doc.id);
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     setSelected((prev) => (prev?.id === doc.id ? null : prev));
+    setPendingRestore({ id: doc.id, title: doc.title });
   }
+
+  const restoreDocument = useCallback(async () => {
+    if (!pendingRestore) return;
+    setPendingRestore(null);
+    const restored = await api.restoreDocument(pendingRestore.id);
+    // Refetch rather than splice it back: the list is ordered by updatedAt and
+    // restore leaves that untouched, so this returns it to its original place.
+    await refresh();
+    setSelected(restored);
+  }, [pendingRestore, refresh]);
+
+  /*
+   * Cmd/Ctrl+Z for an undoable document deletion.
+   *
+   * Captured, not bubbled: an open DocumentEditor has its own window listener
+   * for the CRDT undo stack. Handling this in the capture phase lets the most
+   * recent action win — while a deletion is undoable it claims the keystroke
+   * and stops propagation; otherwise the editor's handler runs untouched.
+   */
+  useEffect(() => {
+    if (!pendingRestore) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+      if (event.shiftKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void restoreDocument();
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [pendingRestore, restoreDocument]);
+
+  useEffect(() => {
+    if (!pendingRestore) return;
+    const timer = setTimeout(() => setPendingRestore(null), 7000);
+    return () => clearTimeout(timer);
+  }, [pendingRestore]);
 
   return (
     <div className="app">
@@ -59,6 +99,13 @@ export function App() {
         <main className="editor empty-state">
           <p>Select a document, or create one to start writing.</p>
         </main>
+      )}
+      {pendingRestore && (
+        <Toast
+          message={`Deleted “${pendingRestore.title}”`}
+          onUndo={() => void restoreDocument()}
+          onDismiss={() => setPendingRestore(null)}
+        />
       )}
     </div>
   );

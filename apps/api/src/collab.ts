@@ -1,7 +1,7 @@
 import { Database } from '@hocuspocus/extension-database';
 import { Server } from '@hocuspocus/server';
 import { TITLE_KEY } from '@xdocs/shared';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
@@ -59,7 +59,8 @@ const server = new Server({
     const [row] = await getDb()
       .select({ id: documents.id })
       .from(documents)
-      .where(eq(documents.id, id));
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
+    // A soft-deleted document is not editable until it is restored.
     if (!row) throw new Error(`Unknown document: ${id}`);
   },
 });

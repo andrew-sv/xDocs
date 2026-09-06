@@ -166,10 +166,51 @@ const rejected = await Promise.race([
 check('unknown document rejected', rejected === true);
 bogus.provider.destroy();
 
-// 9. Cleanup
+// 9. Document deletion is a soft delete, and is undoable.
 await fetch(`${API}/api/documents/${id}`, { method: 'DELETE' });
 const after = await fetch(`${API}/api/documents`).then((r) => r.json());
-check('delete removes document', !after.some((d) => d.id === id));
+check('delete removes document from the list', !after.some((d) => d.id === id));
+check(
+  'deleted document 404s',
+  (await fetch(`${API}/api/documents/${id}`)).status === 404,
+);
+
+// A deleted document must not be editable until it comes back.
+const whileDeleted = connect(id);
+const blocked = await Promise.race([
+  // The server rejects with authenticationFailed/permission-denied; 'close'
+  // alone never fires, so watching only for that would miss the rejection.
+  new Promise((res) => whileDeleted.provider.on('authenticationFailed', () => res(true))),
+  new Promise((res) => whileDeleted.provider.on('close', () => res(true))),
+  whileDeleted.synced.then(() => false),
+  sleep(4000).then(() => 'timeout'),
+]);
+check('collab refuses a deleted document', blocked === true);
+whileDeleted.provider.destroy();
+
+const restoredDoc = await fetch(`${API}/api/documents/${id}/restore`, { method: 'POST' })
+  .then((r) => r.json());
+check('restore returns the same document id', restoredDoc.id === id);
+check('restore keeps the title', restoredDoc.title === 'Quarterly notes 2026');
+
+const backInList = await fetch(`${API}/api/documents`).then((r) => r.json());
+check('restored document is listed again', backInList.some((d) => d.id === id));
+
+// The whole point of the soft delete: the Yjs state came back with it.
+const D = connect(id);
+await D.synced;
+await sleep(600);
+check('restored document keeps its blocks', D.doc.getArray(BLOCKS_KEY).length === 3);
+check(
+  'restored document keeps its block order',
+  D.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === [b3, b1, b2].join(),
+);
+check('restored document keeps its text', readText(D.doc, b1) === 'Hello from the first block');
+check('restored document keeps its title', D.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026');
+D.provider.destroy();
+
+// 10. Cleanup
+await fetch(`${API}/api/documents/${id}`, { method: 'DELETE' });
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

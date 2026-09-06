@@ -4,7 +4,7 @@ import {
   type BlockMeta,
   type DocumentDTO,
 } from '@xdocs/shared';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
@@ -57,6 +57,7 @@ export const documentsRoute = new Hono()
     const rows = await getDb()
       .select(columns)
       .from(documents)
+      .where(isNull(documents.deletedAt))
       .orderBy(desc(documents.updatedAt));
     return c.json(rows.map(toDTO));
   })
@@ -76,17 +77,32 @@ export const documentsRoute = new Hono()
     const [row] = await getDb()
       .select(columns)
       .from(documents)
-      .where(eq(documents.id, c.req.param('id')));
+      .where(and(eq(documents.id, c.req.param('id')), isNull(documents.deletedAt)));
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.json(toDTO(row));
   })
 
 
+  // Soft delete: the row and its Yjs state survive so /restore can bring the
+  // document back under the same id, with its content intact.
   .delete('/:id', async (c) => {
     const [row] = await getDb()
-      .delete(documents)
-      .where(eq(documents.id, c.req.param('id')))
+      .update(documents)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(documents.id, c.req.param('id')), isNull(documents.deletedAt)))
       .returning({ id: documents.id });
     if (!row) return c.json({ error: 'Not found' }, 404);
     return c.body(null, 204);
+  })
+
+  .post('/:id/restore', async (c) => {
+    // updatedAt is deliberately untouched, so a restored document returns to
+    // its original place in the list rather than jumping to the top.
+    const [row] = await getDb()
+      .update(documents)
+      .set({ deletedAt: null })
+      .where(eq(documents.id, c.req.param('id')))
+      .returning(columns);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.json(toDTO(row));
   });

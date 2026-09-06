@@ -59,9 +59,31 @@ type in the same block.
 
 ```bash
 pnpm test        # unit: reorder index math; undo survives editor teardown
-pnpm e2e         # end-to-end: 2-client sync, reorder, persistence across disconnect
+pnpm e2e         # server integration: 2-client sync, reorder, undo, persistence
 pnpm typecheck
 ```
+
+### What the tests do and do not cover
+
+`pnpm e2e` is a **server integration** test, not a browser test. It drives
+Hocuspocus and REST from Node and touches **no React component** — no
+rendering, no clicks, no keystrokes. It covers the REST contract, two-client
+CRDT convergence, CRDT-level undo, and persistence through a full disconnect.
+
+It does **not** cover the UI layer: toasts, buttons, drag-and-drop DOM events,
+focus, layout, or whether a keybinding actually reaches its handler. That gap
+is not theoretical — it is exactly why the undo bug shipped green: the CRDT was
+provably correct while the feature was dead in the app.
+
+`undo.test.mjs` is the only test that mounts real editors (jsdom), which is why
+it can catch teardown bugs. Closing the rest of the gap needs Playwright.
+
+### Deleting a document
+
+Deletion is a soft delete (`documents.deleted_at`). A hard delete would drop
+the Yjs state with the row, so the document could never come back under the
+same id. Deleted documents are hidden from the list, 404 over REST, and are
+refused by the collab server until restored.
 
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.

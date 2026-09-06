@@ -14,4 +14,6 @@ export const api = {
   createDocument: (title = 'Untitled') =>
     request<DocumentDTO>('/documents', { method: 'POST', body: JSON.stringify({ title }) }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
+  restoreDocument: (id: string) =>
+    request<DocumentDTO>(`/documents/${id}/restore`, { method: 'POST' }),
 };
