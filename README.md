@@ -88,6 +88,12 @@ refused by the collab server until restored.
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.
 
+StarterKit's `trailingNode` is disabled. It appends a real paragraph whenever
+the document's last node is not one, and re-appends it the moment you delete
+it — so a heading or list block grew a permanent, unremovable empty line. That
+behaviour is right for a single whole-document editor (it lets you click past a
+trailing table); here every block *is* one node.
+
 **Shift+Enter** while editing adds an empty paragraph directly below the
 current block and moves the caret into it. StarterKit's HardBreak owns that key
 by default, so `BlockKeymap` sits above it at priority 1000 and claims the

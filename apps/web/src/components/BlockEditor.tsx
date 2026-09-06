@@ -88,9 +88,15 @@ export function BlockEditor({
   const editor = useEditor(
     {
       extensions: [
-        // Yjs owns undo/redo via its own UndoManager; StarterKit's history
-        // plugin would fight it and corrupt the shared history stack.
-        StarterKit.configure({ undoRedo: false }),
+        // undoRedo: Yjs owns undo/redo via its own UndoManager; StarterKit's
+        // history plugin would fight it and corrupt the shared history stack.
+        //
+        // trailingNode: it appends a real paragraph whenever the last node is
+        // not one, so a heading or list block grew a permanent empty line that
+        // came straight back when deleted. That behaviour exists so you can
+        // click past a trailing table in a whole-document editor; here each
+        // block IS one node, and new blocks come from Shift+Enter instead.
+        StarterKit.configure({ undoRedo: false, trailingNode: false }),
         // Deliberately NOT given our undoManager: Collaboration destroys the
         // manager it is handed when this editor unmounts. See documentUndo.ts.
         Collaboration.configure({ fragment }),
