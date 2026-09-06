@@ -56,7 +56,7 @@ body {
 /* Blocks */
 .blocks { display: flex; flex-direction: column; max-width: 720px; padding-top: 34px; }
 /* `position: relative` anchors both the floating toolbar and the drop line. */
-.block { display: grid; grid-template-columns: 52px 1fr; align-items: start; border-radius: 6px; position: relative; }
+.block { display: grid; grid-template-columns: 58px 1fr; align-items: start; border-radius: 6px; position: relative; }
 .block.focused { background: #fff; box-shadow: 0 0 0 1px var(--border); }
 /*
  * Centre the gutter icons on the block's FIRST LINE, not on the block as a
@@ -84,7 +84,7 @@ body {
 .block-gutter {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 7px;
   padding-top: var(--first-line-top);
   height: calc(var(--first-line-top) + var(--first-line-height));
 }
@@ -99,7 +99,7 @@ body {
 
 /* Drop indicator: a line on the edge the block would land against. */
 .block.drop-above::before, .block.drop-below::after {
-  content: ''; position: absolute; left: 52px; right: 0; height: 2px;
+  content: ''; position: absolute; left: 58px; right: 0; height: 2px;
   background: var(--accent); border-radius: 2px;
 }
 .block.drop-above::before { top: -1px; }
@@ -119,7 +119,7 @@ body {
  * Floating, not in flow. An in-flow toolbar changed the page height every time
  * a block gained or lost focus, which shifted every control below it mid-click.
  */
-.toolbar { position: absolute; top: -34px; left: 52px; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.07); }
+.toolbar { position: absolute; top: -34px; left: 58px; z-index: 2; display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #fff; border: 1px solid var(--border); border-radius: 7px; box-shadow: 0 2px 8px rgb(0 0 0 / 0.07); }
 .tb { min-width: 26px; height: 26px; border: 1px solid transparent; background: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: var(--muted); }
 .tb:hover { background: var(--panel); }
 .tb.active { background: #fff; border-color: var(--border); color: var(--accent); }
@@ -139,3 +139,50 @@ body {
 /* Remote collaborator carets */
 .collaboration-carets__caret { border-left: 1px solid; border-right: 1px solid; margin-left: -1px; margin-right: -1px; pointer-events: none; position: relative; word-break: normal; }
 .collaboration-carets__label { border-radius: 3px 3px 3px 0; color: #fff; font-size: 11px; font-style: normal; font-weight: 600; left: -1px; line-height: normal; padding: 1px 5px; position: absolute; top: -1.4em; user-select: none; white-space: nowrap; }
+
+/* Undo toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 16px;
+  background: #1b1b19;
+  color: #f4f3f1;
+  border-radius: 9px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.22);
+  font-size: 13px;
+  animation: toast-in 140ms ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+.toast-message { white-space: nowrap; }
+.toast-undo {
+  border: 0;
+  background: #38352f;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+.toast-undo:hover { background: #4a463e; }
+.toast-key { color: #8f8b83; font-size: 11px; letter-spacing: 0.02em; }
+.toast-close {
+  border: 0;
+  background: none;
+  color: #8f8b83;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.toast-close:hover { color: #f4f3f1; }

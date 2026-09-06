@@ -10,3 +10,9 @@ export const localUser = {
   name: `${pick(NAMES)} ${Math.floor(Math.random() * 90 + 10)}`,
   color: pick(COLORS),
 };
+
+/** Platform-appropriate label for the undo shortcut. */
+export const undoShortcutLabel =
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
+    ? '⌘Z'
+    : 'Ctrl+Z';

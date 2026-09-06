@@ -4,7 +4,7 @@ import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
 import { BLOCK_DRAG_MIME, type DropEdge } from '../lib/reorder';
@@ -28,6 +28,8 @@ type Props = {
   onDragOverBlock: (id: string, edge: DropEdge) => void;
   onDropBlock: () => void;
   onNudge: (id: string, direction: -1 | 1) => void;
+  /** Document-wide undo stack, shared by every block. */
+  undoManager: Y.UndoManager;
 };
 
 function DragDots() {
@@ -56,9 +58,20 @@ export function BlockEditor({
   onDragOverBlock,
   onDropBlock,
   onNudge,
+  undoManager,
 }: Props) {
   const [focused, setFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fragment = useMemo(
+    () => ydoc.getXmlFragment(blockFragmentName(block.id)),
+    [ydoc, block.id],
+  );
+
+  // y-tiptap only auto-scopes an UndoManager it constructs itself, so a shared
+  // one has to be told about each block's fragment or typing here is untracked.
+  useEffect(() => {
+    undoManager.addToScope([fragment]);
+  }, [undoManager, fragment]);
 
   const editor = useEditor(
     {
@@ -66,13 +79,13 @@ export function BlockEditor({
         // Yjs owns undo/redo via its own UndoManager; StarterKit's history
         // plugin would fight it and corrupt the shared history stack.
         StarterKit.configure({ undoRedo: false }),
-        Collaboration.configure({ fragment: ydoc.getXmlFragment(blockFragmentName(block.id)) }),
+        Collaboration.configure({ fragment, yUndoOptions: { undoManager } }),
         CollaborationCaret.configure({ provider, user: localUser }),
       ],
       onFocus: () => setFocused(true),
       onBlur: () => setFocused(false),
     },
-    [block.id, ydoc, provider],
+    [block.id, ydoc, provider, fragment, undoManager],
   );
 
   // `useEditor` returns null on the first render, so focusing a freshly added

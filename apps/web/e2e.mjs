@@ -1,6 +1,7 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { resolveMove, applyMove } from './src/lib/reorder.ts';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:1234';
@@ -91,6 +92,43 @@ check('reorder moves block to the front', orderAfter.join() === [b3, b1, b2].joi
 check('reorder preserves every block', [...orderAfter].sort().join() === [...orderBefore].sort().join());
 check('B sees the reorder', B.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === orderAfter.join());
 check('reordered block keeps its text', readText(B.doc, b3) === 'Added by B');
+
+// 4c. Undo. Built exactly as the app builds it, including trackedOrigins.
+const undoA = new Y.UndoManager([A.doc.getArray(BLOCKS_KEY), A.doc.getText(TITLE_KEY)], {
+  trackedOrigins: new Set([null, ySyncPluginKey]),
+});
+for (const b of A.doc.getArray(BLOCKS_KEY).toArray()) {
+  undoA.addToScope([A.doc.getXmlFragment(frag(b.id))]);
+}
+
+// B edits concurrently; A's undo must not touch this.
+writeParagraph(B.doc, b2, 'edit by B');
+await sleep(700);
+
+const orderBeforeDelete = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const deleteAt = orderBeforeDelete.indexOf(b1);
+A.doc.getArray(BLOCKS_KEY).delete(deleteAt, 1);
+await sleep(400);
+check('deleting a block removes it', A.doc.getArray(BLOCKS_KEY).length === 2);
+check('B sees the deletion', B.doc.getArray(BLOCKS_KEY).length === 2);
+
+undoA.undo();
+await sleep(700);
+const restored = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+check('undo restores the deleted block', restored.join() === orderBeforeDelete.join());
+check('undo restores it at its original index', restored[deleteAt] === b1);
+check('undo restores the block text', readText(A.doc, b1) === 'Hello from the first block');
+check("undo leaves B's concurrent edit alone", readText(A.doc, b2).includes('edit by B'));
+check('B sees the restored block', B.doc.getArray(BLOCKS_KEY).length === 3);
+
+// Redo must put it back again.
+undoA.redo();
+await sleep(500);
+check('redo re-deletes the block', A.doc.getArray(BLOCKS_KEY).length === 2);
+undoA.undo();
+await sleep(600);
+check('undo after redo restores again', A.doc.getArray(BLOCKS_KEY).length === 3);
+undoA.destroy();
 
 // 5. Disconnect everything, let Hocuspocus flush to Postgres
 A.provider.destroy(); B.provider.destroy();

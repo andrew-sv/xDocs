@@ -66,6 +66,26 @@ pnpm typecheck
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.
 
+### Undo
+
+One `Y.UndoManager` per document, shared by every block editor, so a single
+Cmd/Ctrl+Z walks back through text edits, title edits, reordering and block
+deletion in the order they actually happened. The alternative — TipTap's
+default, one manager per editor — gives each block a private history that
+cannot see structural changes, so deleting a block would be unundoable.
+
+Two details make it work:
+
+- `trackedOrigins` is `{null, ySyncPluginKey}`. Our own mutations transact with
+  origin `null`; ProseMirror's arrive under `ySyncPluginKey`. Remote peers'
+  changes carry the provider as origin and are deliberately excluded, so undo
+  never reverts somebody else's typing.
+- y-tiptap only auto-scopes a manager it constructs itself, so each block adds
+  its own fragment via `addToScope`.
+
+Deleting a block shows a toast offering undo; it retires as soon as any later
+change lands, so it can never apply to the wrong thing.
+
 Yjs has no atomic move, so reordering is a delete plus an insert in one
 transaction. If two people move the *same* block at the same instant it can
 duplicate or vanish — that is why upstream never shipped a move primitive, and

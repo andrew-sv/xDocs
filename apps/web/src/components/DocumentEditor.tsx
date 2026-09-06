@@ -1,4 +1,5 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import {
   BLOCKS_KEY,
   TITLE_KEY,
@@ -12,6 +13,7 @@ import { useYArray } from '../hooks/useYArray';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { TitleEditor } from './TitleEditor';
+import { Toast } from './Toast';
 
 const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:1234';
 
@@ -29,6 +31,8 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; edge: DropEdge } | null>(null);
+  const [undoManager, setUndoManager] = useState<Y.UndoManager | null>(null);
+  const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
 
   useEffect(() => {
     // One Y.Doc + one socket per open document. Every block is a fragment on
@@ -42,14 +46,35 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
       onSynced: () => setSynced(true),
     });
 
+    /*
+     * One undo stack for the whole document.
+     *
+     * Each block editor gets handed this same manager (see BlockEditor), so a
+     * single Cmd+Z walks back through text edits, title edits, reordering and
+     * block deletion in the order they happened — rather than each block
+     * keeping a private history that cannot see structural changes at all.
+     *
+     * trackedOrigins: our own mutations transact with origin null, while
+     * ProseMirror's edits arrive under ySyncPluginKey. Remote peers' changes
+     * carry the provider as origin and are deliberately absent, so undo never
+     * reverts somebody else's typing.
+     */
+    const undo = new Y.UndoManager([ydoc.getArray(BLOCKS_KEY), ydoc.getText(TITLE_KEY)], {
+      trackedOrigins: new Set([null, ySyncPluginKey]),
+    });
+
     setProvider(next);
+    setUndoManager(undo);
     setStatus('connecting');
     setSynced(false);
+    setToast(null);
 
     return () => {
+      undo.destroy();
       next.destroy();
       ydoc.destroy();
       setProvider(null);
+      setUndoManager(null);
     };
   }, [doc.id]);
 
@@ -64,6 +89,46 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   );
 
   const clearPendingFocus = useCallback(() => setPendingFocusId(null), []);
+  const dismissToast = useCallback(() => setToast(null), []);
+
+  const runUndo = useCallback(() => {
+    undoManager?.undo();
+    setToast(null);
+  }, [undoManager]);
+
+  // Cmd/Ctrl+Z outside a block editor. A focused ProseMirror binds Mod-z
+  // itself, and since it holds this very manager we let it handle its own.
+  useEffect(() => {
+    if (!undoManager) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
+      if (event.target instanceof Element && event.target.closest('.tiptap')) return;
+      event.preventDefault();
+      if (event.shiftKey) undoManager.redo();
+      else undoManager.undo();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undoManager]);
+
+  // Any later change makes the offer stale, so retire it. The deletion's own
+  // stack item is added before setToast runs, so this never eats its own toast.
+  useEffect(() => {
+    if (!undoManager) return;
+    const invalidate = () => setToast(null);
+    undoManager.on('stack-item-added', invalidate);
+    undoManager.on('stack-item-popped', invalidate);
+    return () => {
+      undoManager.off('stack-item-added', invalidate);
+      undoManager.off('stack-item-popped', invalidate);
+    };
+  }, [undoManager]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 7000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const endDrag = useCallback(() => {
     setDraggingId(null);
@@ -110,7 +175,10 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
     if (index === -1) return;
     blocksArray.delete(index, 1);
     // The block's Y.XmlFragment is intentionally left behind: Yjs has no API to
-    // drop a root type, and an empty fragment costs a few bytes.
+    // drop a root type, and an empty fragment costs a few bytes. It also means
+    // undoing this deletion restores the text for free — only the metadata
+    // entry has to come back.
+    setToast({ id: Date.now(), message: 'Paragraph deleted' });
   }
 
   return (
@@ -132,7 +200,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
         </span>
       </header>
 
-      {synced && provider && ydoc && (
+      {synced && provider && ydoc && undoManager && (
         <>
           <div className={draggingId ? 'blocks dragging' : 'blocks'}>
             {blocks.map((block) => (
@@ -153,6 +221,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
                 onDragOverBlock={handleDragOverBlock}
                 onDropBlock={handleDrop}
                 onNudge={handleNudge}
+                undoManager={undoManager}
               />
             ))}
           </div>
@@ -170,6 +239,8 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
           </button>
         </>
       )}
+
+      {toast && <Toast message={toast.message} onUndo={runUndo} onDismiss={dismissToast} />}
     </main>
   );
 }
