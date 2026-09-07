@@ -13,20 +13,31 @@ export function DocumentList({ documents, selectedId, onSelect, onCreate, onDele
     <aside className="sidebar">
       <div className="sidebar-header">
         <span className="brand">xDocs</span>
-        <button type="button" onClick={onCreate} title="New document">
+        <button type="button" onClick={onCreate} title="New document" data-testid="new-document">
           + New
         </button>
       </div>
       <ul className="doc-list">
         {documents.map((doc) => (
-          <li key={doc.id} className={doc.id === selectedId ? 'doc selected' : 'doc'}>
-            <button type="button" className="doc-open" onClick={() => onSelect(doc)}>
+          <li
+            key={doc.id}
+            className={doc.id === selectedId ? 'doc selected' : 'doc'}
+            data-testid="doc-row"
+            data-doc-id={doc.id}
+          >
+            <button
+              type="button"
+              className="doc-open"
+              data-testid="doc-open"
+              onClick={() => onSelect(doc)}
+            >
               <span className="doc-title">{doc.title}</span>
               <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
             </button>
             <button
               type="button"
               className="doc-delete"
+              data-testid="doc-delete"
               title="Delete document"
               onClick={() => onDelete(doc)}
             >

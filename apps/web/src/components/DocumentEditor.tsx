@@ -91,6 +91,17 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   const clearPendingFocus = useCallback(() => setPendingFocusId(null), []);
   const dismissToast = useCallback(() => setToast(null), []);
 
+  /*
+   * Close the current undo step before a structural change.
+   *
+   * Yjs merges edits made within its 500ms captureTimeout into one stack item,
+   * so deleting or moving a block just after typing would fold both into a
+   * single undo — one Cmd+Z would then revert the deletion AND the sentence
+   * before it. Adding, deleting and moving a block are discrete actions and
+   * each deserves its own undo step.
+   */
+  const beginUndoStep = useCallback(() => undoManager?.stopCapturing(), [undoManager]);
+
   const runUndo = useCallback(() => {
     undoManager?.undo();
     setToast(null);
@@ -148,28 +159,35 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
   const handleDrop = useCallback(() => {
     if (draggingId && dropTarget && blocksArray) {
       const move = resolveMove(blocks, draggingId, dropTarget.id, dropTarget.edge);
-      if (move) applyMove(blocksArray, move.from, move.to);
+      if (move) {
+        beginUndoStep();
+        applyMove(blocksArray, move.from, move.to);
+      }
     }
     endDrag();
-  }, [draggingId, dropTarget, blocks, blocksArray, endDrag]);
+  }, [draggingId, dropTarget, blocks, blocksArray, endDrag, beginUndoStep]);
 
   const handleNudge = useCallback(
     (id: string, direction: -1 | 1) => {
       if (!blocksArray) return;
       const move = resolveNudge(blocks, id, direction);
-      if (move) applyMove(blocksArray, move.from, move.to);
+      if (move) {
+        beginUndoStep();
+        applyMove(blocksArray, move.from, move.to);
+      }
     },
-    [blocks, blocksArray],
+    [blocks, blocksArray, beginUndoStep],
   );
 
   const addBlock = useCallback(
     (afterIndex?: number) => {
       if (!blocksArray) return;
+      beginUndoStep();
       const block: BlockMeta = { id: crypto.randomUUID(), type: 'paragraph' };
       blocksArray.insert(afterIndex === undefined ? blocksArray.length : afterIndex + 1, [block]);
       setPendingFocusId(block.id);
     },
-    [blocksArray],
+    [blocksArray, beginUndoStep],
   );
 
   const handleInsertBelow = useCallback(
@@ -185,6 +203,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
     if (!blocksArray) return;
     const index = blocksArray.toArray().findIndex((b) => b.id === id);
     if (index === -1) return;
+    beginUndoStep();
     blocksArray.delete(index, 1);
     // The block's Y.XmlFragment is intentionally left behind: Yjs has no API to
     // drop a root type, and an empty fragment costs a few bytes. It also means
@@ -202,7 +221,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
           // Until the CRDT has synced its Y.Text is empty, which would render as
           // the "Untitled" placeholder. Show the title the list already knows
           // from REST, with a spinner, rather than flashing a wrong name.
-          <span className="title-loading">
+          <span className="title-loading" data-testid="title-loading">
             <span className="title-name">{doc.title}</span>
             <span className="spinner" role="status" aria-label="Loading document" />
           </span>
@@ -241,6 +260,7 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
           <button
             type="button"
             className="add-block"
+            data-testid="add-block"
             // Without this, mousedown blurs the editor, the focused block's
             // toolbar unmounts, the layout shifts up and the button slides out
             // from under the pointer before mouseup — so the first click only

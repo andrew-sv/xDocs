@@ -1,5 +1,6 @@
 import {
   BLOCKS_KEY,
+  TITLE_KEY,
   createDocumentSchema,
   type BlockMeta,
   type DocumentDTO,
@@ -12,17 +13,23 @@ import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
 /**
- * Seed the CRDT with one empty block at creation time.
+ * Seed the CRDT with the title and one empty block at creation time.
  *
  * Doing this on the client instead would race: two people opening a brand-new
  * document at once would each see an empty block list and each seed one. The
  * server writes it exactly once, so every document starts with exactly one
  * block and clients never need to bootstrap.
+ *
+ * The title has to be seeded here too. It is CRDT-owned, so an empty Y.Text
+ * would win over whatever this endpoint was asked for the moment the document
+ * is opened — silently renaming it to 'Untitled' and making the `title`
+ * argument meaningless.
  */
-function initialYState(): Buffer {
+function initialYState(title: string): Buffer {
   const doc = new Y.Doc();
   const block: BlockMeta = { id: randomUUID(), type: 'paragraph' };
   doc.getArray<BlockMeta>(BLOCKS_KEY).push([block]);
+  doc.getText(TITLE_KEY).insert(0, title);
   const update = Buffer.from(Y.encodeStateAsUpdate(doc));
   doc.destroy();
   return update;
@@ -68,7 +75,7 @@ export const documentsRoute = new Hono()
 
     const [row] = await getDb()
       .insert(documents)
-      .values({ title: body.data.title, ystate: initialYState() })
+      .values({ title: body.data.title, ystate: initialYState(body.data.title) })
       .returning(columns);
     return c.json(toDTO(row!), 201);
   })

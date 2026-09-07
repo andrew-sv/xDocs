@@ -18,6 +18,7 @@ export function TitleEditor({ title, onChange }: Props) {
   return (
     <input
       className="title-input"
+      data-testid="title-input"
       value={value}
       placeholder="Untitled"
       aria-label="Document title"

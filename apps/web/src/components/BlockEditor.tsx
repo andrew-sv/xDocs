@@ -132,6 +132,8 @@ export function BlockEditor({
     <div
       ref={containerRef}
       className={className}
+      data-testid="block"
+      data-block-id={block.id}
       onDragOver={(event) => {
         // Without preventDefault the browser refuses the drop outright.
         event.preventDefault();
@@ -151,6 +153,7 @@ export function BlockEditor({
           // some browsers, so this carries its own role and key handling.
           <span
             className="block-handle"
+            data-testid="block-handle"
             role="button"
             tabIndex={0}
             draggable
@@ -184,6 +187,7 @@ export function BlockEditor({
           <button
             type="button"
             className="block-remove"
+            data-testid="block-delete"
             title="Delete block"
             aria-label="Delete block"
             onMouseDown={(e) => e.preventDefault()}

@@ -29,6 +29,7 @@ export function Toolbar({ editor }: { editor: Editor }) {
           key={a.title}
           type="button"
           title={a.title}
+          data-testid={`tb-${a.title.toLowerCase().replace(/\s+/g, '-')}`}
           className={a.isActive() ? 'tb active' : 'tb'}
           // Keep focus in the editor so the command applies to the live selection.
           onMouseDown={(e) => e.preventDefault()}

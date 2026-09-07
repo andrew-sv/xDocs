@@ -8,9 +8,9 @@ type Props = {
 
 export function Toast({ message, onUndo, onDismiss }: Props) {
   return (
-    <div className="toast" role="status">
+    <div className="toast" role="status" data-testid="toast">
       <span className="toast-message">{message}</span>
-      <button type="button" className="toast-undo" onClick={onUndo}>
+      <button type="button" className="toast-undo" data-testid="toast-undo" onClick={onUndo}>
         Undo
       </button>
       <span className="toast-key">{undoShortcutLabel}</span>

@@ -55,7 +55,12 @@ check('new document is seeded with exactly one block', seeded.length === 1);
 const b1 = seeded[0]?.id;
 
 // 3. A titles the document and types into the seeded block
-A.doc.getText(TITLE_KEY).insert(0, 'Quarterly notes');
+check('new document is seeded with the requested title', A.doc.getText(TITLE_KEY).toString() === 'Untitled');
+// The title is already in the CRDT, so renaming REPLACES it — the same thing
+// applyTextEdit does in the app when you select all and retype.
+const titleA = A.doc.getText(TITLE_KEY);
+titleA.delete(0, titleA.length);
+titleA.insert(0, 'Quarterly notes');
 writeParagraph(A.doc, b1, 'Hello from the first block');
 const b2 = crypto.randomUUID();
 A.doc.getArray(BLOCKS_KEY).push([{ id: b2, type: 'paragraph' }]);
