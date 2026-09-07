@@ -1,8 +1,9 @@
 import { Database } from '@hocuspocus/extension-database';
-import { Server } from '@hocuspocus/server';
+import type { ServerConfiguration } from '@hocuspocus/server';
 import { TITLE_KEY } from '@xdocs/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 import * as Y from 'yjs';
+import { authEnabled, isValidToken } from './auth.js';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
 
@@ -21,9 +22,17 @@ function readTitle(doc: Y.Doc): string {
   return title.length > 0 ? title.slice(0, 200) : 'Untitled';
 }
 
-const server = new Server({
-  port: Number(process.env.COLLAB_PORT ?? 1234),
-  address: '0.0.0.0',
+/**
+ * Collaboration configuration, applied to the Hocuspocus server in server.ts.
+ *
+ * Hocuspocus owns the HTTP server there and Hono is delegated to from its
+ * onRequest hook — the inverse of mounting Hocuspocus on a Hono server. It has
+ * to be this way round: Hocuspocus 4 handles upgrades through crossws and hands
+ * `peer.websocket` to handleConnection, so a raw `ws` socket from an external
+ * upgrade handler is silently the wrong peer type — the socket opens and then
+ * never syncs.
+ */
+export const collabConfiguration: Partial<ServerConfiguration> = {
   extensions: [
     new Database({
       fetch: async ({ documentName }) => {
@@ -51,6 +60,16 @@ const server = new Server({
     }),
   ],
 
+  // Defining onAuthenticate makes authentication REQUIRED, so it is only wired
+  // up when a password is actually configured.
+  ...(authEnabled
+    ? {
+        onAuthenticate: async ({ token }) => {
+          if (!isValidToken(token)) throw new Error('Invalid access token');
+        },
+      }
+    : {}),
+
   onConnect: async ({ documentName }) => {
     // Refuse connections for documents that were never created over REST,
     // otherwise a typo'd id silently creates an orphan CRDT in memory.
@@ -63,8 +82,4 @@ const server = new Server({
     // A soft-deleted document is not editable until it is restored.
     if (!row) throw new Error(`Unknown document: ${id}`);
   },
-});
-
-void server.listen().then(() => {
-  console.log(`[collab] ws://localhost:${process.env.COLLAB_PORT ?? 1234}`);
-});
+};

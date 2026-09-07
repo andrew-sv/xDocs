@@ -10,12 +10,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { useYArray } from '../hooks/useYArray';
+import { getToken } from '../lib/auth';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { TitleEditor } from './TitleEditor';
 import { Toast } from './Toast';
 
-const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:1234';
+const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:3001';
 
 type Status = 'connecting' | 'connected' | 'disconnected';
 
@@ -42,6 +43,9 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
       url: COLLAB_URL,
       name: collabDocName(doc.id),
       document: ydoc,
+      // Read lazily so a reconnect picks up the current token. Harmless when
+      // the server has no password configured: it simply ignores it.
+      token: () => getToken() ?? '',
       onStatus: ({ status }) => setStatus(status as Status),
       onSynced: () => setSynced(true),
     });

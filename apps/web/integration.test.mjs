@@ -4,7 +4,7 @@ import { resolveMove, applyMove } from './src/lib/reorder.ts';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 
 const API = 'http://localhost:3001';
-const WS = 'ws://localhost:1234';
+const WS = 'ws://localhost:3001';
 const BLOCKS_KEY = 'blocks';
 const TITLE_KEY = 'title';
 const frag = (id) => `block-${id}`;

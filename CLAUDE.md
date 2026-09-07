@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm install
 vercel env pull .env.local     # DATABASE_URL + DATABASE_URL_UNPOOLED (Neon)
 pnpm db:push                   # apply schema changes to Neon
-pnpm dev                       # api :3001 + collab :1234 + web :5173, concurrently
+pnpm dev                       # api+collab :3001, web :5173
 pnpm typecheck                 # all three packages
 pnpm build
 ```
@@ -38,9 +38,16 @@ npx playwright test --ui        # interactive debugging
 
 ## Architecture
 
-pnpm workspace: `apps/api` (Hono REST + Hocuspocus, one package, two entry
-points), `apps/web` (Vite + React + TipTap v3), `packages/shared` (zod schemas
-and the Yjs key names both sides must agree on).
+pnpm workspace: `apps/api` (Hono REST + Hocuspocus on ONE port), `apps/web`
+(Vite + React + TipTap v3), `packages/shared` (zod schemas and the Yjs key
+names both sides must agree on).
+
+**Hocuspocus owns the HTTP server; Hono is delegated to from its `onRequest`
+hook** — not the other way round. Hocuspocus 4 handles upgrades through crossws
+and passes `peer.websocket` to `handleConnection`, so mounting it on a Hono
+server with an external `ws` upgrade handler gives it the wrong peer type: the
+socket opens, then silently never syncs. `onRequest` must reject with a **falsy**
+value to mean "already handled", or Hocuspocus appends its own 200 response.
 
 ### The central design decision
 
@@ -155,6 +162,20 @@ Notes for writing tests here:
 ## Deployment
 
 Hocuspocus holds authoritative in-memory state per document, so it needs a
-single persistent process. Vercel Functions support WebSockets, but multiple
-instances would split-brain the document. The SPA can go to Vercel; the collab
-server needs a persistent host.
+**single persistent process**. Vercel Functions support WebSockets, but multiple
+instances would split-brain the document — hence SPA on Vercel (`vercel.json`),
+backend on Railway (`railway.json`), Neon for data.
+
+Server env: `PORT` (injected by the host), `DATABASE_URL`, `WEB_ORIGIN` (the CORS
+origin — pinned to one, so Vercel preview URLs will not work unless added), and
+`ACCESS_PASSWORD`.
+
+`ACCESS_PASSWORD` gates both surfaces: a Hono middleware on `/api/*` and
+Hocuspocus's `onAuthenticate`. **Unset means the gate is off entirely**, which is
+what keeps local dev and the whole test suite running unauthenticated. `/health`
+is always public for the platform healthcheck. It is a shared secret every
+visitor holds — a gate for staging, not authentication.
+
+`pnpm smoke <url> <password>` checks a deployment: that health is public, the
+API 401s without the password, and the websocket rejects a bad token but syncs
+with a good one.

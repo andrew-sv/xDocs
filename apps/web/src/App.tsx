@@ -2,20 +2,30 @@ import type { DocumentDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
 import { DocumentList } from './components/DocumentList';
+import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
 import { api } from './lib/api';
+import { UnauthorizedError, setToken } from './lib/auth';
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
+  const [locked, setLocked] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       setDocuments(await api.listDocuments());
+      setLocked(false);
       setError(null);
     } catch (e) {
+      // A gated deployment answers 401 until a valid password is supplied;
+      // that is a login prompt, not an error to render.
+      if (e instanceof UnauthorizedError) {
+        setLocked(true);
+        return;
+      }
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
@@ -81,6 +91,17 @@ export function App() {
     const timer = setTimeout(() => setPendingRestore(null), 7000);
     return () => clearTimeout(timer);
   }, [pendingRestore]);
+
+  if (locked) {
+    return (
+      <LoginGate
+        onSubmit={(password) => {
+          setToken(password);
+          void refresh();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="app">

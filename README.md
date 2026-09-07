@@ -11,8 +11,7 @@ Hocuspocus, Neon Postgres.
 
 ```
 apps/web     Vite + React + TipTap v3        :5173
-apps/api     Hono REST                       :3001
-             Hocuspocus (Yjs WebSocket)      :1234
+apps/api     Hono REST + Hocuspocus          :3001  (one server, both protocols)
 packages/shared   zod schemas + the Yjs key names both sides agree on
 ```
 

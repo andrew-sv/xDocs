@@ -28,16 +28,9 @@ export default defineConfig({
    */
   webServer: [
     {
+      // REST and the collaboration socket now share this one server.
       command: 'pnpm -F @xdocs/api dev',
       url: 'http://localhost:3001/health',
-      reuseExistingServer: !CI,
-      timeout: 60_000,
-      cwd: '../..',
-    },
-    {
-      command: 'pnpm -F @xdocs/api dev:collab',
-      // Hocuspocus serves plain HTTP on the same port as the websocket.
-      url: 'http://localhost:1234',
       reuseExistingServer: !CI,
       timeout: 60_000,
       cwd: '../..',
