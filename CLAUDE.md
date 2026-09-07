@@ -13,21 +13,28 @@ pnpm typecheck                 # all three packages
 pnpm build
 ```
 
-Tests:
+Tests — see **Test layers** below for what each one actually covers:
 
 ```bash
-pnpm test    # jsdom + pure-logic unit suites (apps/web/*.test.mjs)
-pnpm e2e     # server integration; REQUIRES `pnpm dev` already running
+pnpm test          # jsdom + pure-logic suites (apps/web/*.test.mjs)
+pnpm integration   # server integration (apps/web/integration.test.mjs)
+pnpm e2e           # Playwright, real Chromium (apps/web/e2e/)
 ```
 
-There is no test runner. Each suite is a plain Node script that prints
-`PASS`/`FAIL` lines and exits non-zero on failure. To run one:
+`pnpm test` and `pnpm integration` use no test runner: each suite is a plain
+Node script printing `PASS`/`FAIL` and exiting non-zero. `.ts` files are
+imported straight from `.mjs` via Node 24 type stripping. To run one:
 
 ```bash
 cd apps/web && node undo.test.mjs
 ```
 
-`.ts` files are imported directly from `.mjs` tests via Node 24 type stripping.
+For a single browser spec or test:
+
+```bash
+cd apps/web && npx playwright test e2e/undo.spec.ts -g "Cmd\+Z restores"
+npx playwright test --ui        # interactive debugging
+```
 
 ## Architecture
 
