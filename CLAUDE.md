@@ -110,29 +110,40 @@ Each of these caused a real bug. Changing them silently breaks things.
 - **`drizzle-kit` and `tsx` do not read `.env.local`**; every script wraps them
   in `dotenv-cli`.
 
-## What the tests do and do not cover
+## Test layers
 
-`pnpm e2e` is a **server integration** test. It drives Hocuspocus and REST from
-Node and touches **no React component** — no rendering, no clicks, no
-keystrokes. It covers the REST contract, two-client convergence, CRDT-level
-undo, and persistence across a disconnect.
+| Command | Layer | Catches |
+|---|---|---|
+| `pnpm test` | pure logic + jsdom editors | index math, editor teardown, keybindings |
+| `pnpm integration` | Node against the running servers | REST contract, CRDT convergence, persistence |
+| `pnpm e2e` | Playwright, real Chromium | layout, focus, event routing, multi-client UI |
 
-It does not cover the UI layer: toasts, buttons, drag-and-drop DOM events,
-focus, layout, or whether a keybinding reaches its handler. That gap is not
-theoretical — the undo bug above shipped with every test green.
+`pnpm integration` and `pnpm e2e` both need the stack running (`pnpm dev`);
+Playwright will start it itself if it is not, and reuses it if it is.
 
-`undo.test.mjs`, `keymap.test.mjs` and `trailing.test.mjs` mount real TipTap
-editors in jsdom, which is why they can catch teardown and keybinding bugs. New
-UI behaviour belongs there. Closing the rest of the gap needs Playwright, which
-is not installed.
+**Put new UI behaviour in `apps/web/e2e/`.** The first two layers cannot see
+layout, focus or event routing — the undo bug shipped completely broken with
+both of them green, and the two-click add button, the "Untitled" flash and the
+trailing-line bug were invisible for the same reason. Each of those four now has
+a spec, verified by reintroducing the defect and confirming the spec fails.
 
 Several suites deliberately assert the **old broken behaviour** alongside the
 fix (e.g. "with trailingNode ON a heading gains a trailing paragraph"), so a
 dependency upgrade that reintroduces it fails loudly. Do not delete those.
 
-When writing Yjs tests, note `Y.UndoManager` merges changes within its 500ms
-`captureTimeout` into one stack item — call `clear()` after setup to get a
-clean baseline, or assertions on stack depth will mislead.
+Notes for writing tests here:
+
+- `Y.UndoManager` merges changes within its 500ms `captureTimeout` into one
+  stack item — call `clear()` after setup, or stack-depth assertions mislead.
+- In Playwright, wait for the new block to be focused before typing
+  (`addBlock()` in `e2e/fixtures.ts` does this). The editor instance does not
+  exist on first render, so focus arrives a tick late and early keystrokes land
+  in the previous block.
+- `blockTexts()` strips collaborator caret labels, which otherwise count as
+  document text in multi-client specs.
+- HTML5 drag works via `dragTo`, but aim at an explicit `targetPosition`: the
+  drop edge depends on the pointer being above or below the target's midpoint,
+  and the element centre is exactly that boundary.
 
 ## Deployment
 

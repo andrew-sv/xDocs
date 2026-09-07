@@ -58,25 +58,31 @@ Open http://localhost:5173. To see collaboration, open it in two windows and
 type in the same block.
 
 ```bash
-pnpm test        # unit: reorder index math; undo survives editor teardown
-pnpm e2e         # server integration: 2-client sync, reorder, undo, persistence
+pnpm test          # unit: reorder index math; undo/keymap/trailing in jsdom
+pnpm integration   # server: 2-client CRDT sync, persistence (needs pnpm dev)
+pnpm e2e           # Playwright, real Chromium over the full stack
 pnpm typecheck
 ```
 
-### What the tests do and do not cover
+### What the tests cover
 
-`pnpm e2e` is a **server integration** test, not a browser test. It drives
-Hocuspocus and REST from Node and touches **no React component** — no
-rendering, no clicks, no keystrokes. It covers the REST contract, two-client
-CRDT convergence, CRDT-level undo, and persistence through a full disconnect.
+Three layers, deliberately:
 
-It does **not** cover the UI layer: toasts, buttons, drag-and-drop DOM events,
-focus, layout, or whether a keybinding actually reaches its handler. That gap
-is not theoretical — it is exactly why the undo bug shipped green: the CRDT was
-provably correct while the feature was dead in the app.
+- **`pnpm test`** — pure logic plus jsdom-mounted editors. Fast; catches
+  teardown and keybinding bugs.
+- **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
+  contract, two-client convergence and persistence. Touches no React component.
+- **`pnpm e2e`** — 21 Chromium specs over the real stack: real clicks, real
+  Cmd+Z, real HTML5 drag, two browser contexts editing one document.
 
-`undo.test.mjs` is the only test that mounts real editors (jsdom), which is why
-it can catch teardown bugs. Closing the rest of the gap needs Playwright.
+The browser suite exists because the first two layers cannot see layout, focus
+or event routing — the undo feature once shipped completely broken with both of
+them green. Each of its first four groups targets a defect that actually
+shipped, and each was verified by reintroducing that defect and confirming the
+matching spec fails.
+
+`npx playwright test --ui` to debug locally; failures record a trace, screenshot
+and video under `test-results/`.
 
 ### Deleting a document
 
