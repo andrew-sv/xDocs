@@ -139,6 +139,30 @@ transaction. If two people move the *same* block at the same instant it can
 duplicate or vanish — that is why upstream never shipped a move primitive, and
 it is an accepted tradeoff here. Ordinary concurrent editing is unaffected.
 
+## Staging
+
+| | |
+|---|---|
+| App | https://xdocs-andrew-svs-projects.vercel.app |
+| API + collab | https://xdocs-api-production.up.railway.app |
+| Database | Neon (`xdocs-db`) |
+
+Password protected. The password lives only in Railway — read it with
+`railway variables --service xdocs-api --kv`, and never commit it.
+
+`pnpm smoke <url> <password>` checks a deployment: health is public, the API
+401s without the password, and the websocket rejects a bad token but syncs with
+a good one. Run it after any backend deploy.
+
+Railway builds from the root `start` script (`pnpm -F @xdocs/api start`), which
+runs the API with `tsx` — `packages/shared` exports raw TypeScript, so the
+runtime has to compile it. Deliberately **not** using `.railway/railway.ts`:
+that config is declarative and would delete every variable it does not itself
+declare, which would mean committing `DATABASE_URL` and the password.
+
+CORS is pinned to `WEB_ORIGIN`, so Vercel preview deployments will not reach
+staging unless their URL is added.
+
 ## Notes for later
 
 - `drizzle-kit` uses `DATABASE_URL_UNPOOLED`; the app uses the pooled
