@@ -125,3 +125,63 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
           retention-days: 7
+
+  deploy:
+    name: Deploy to staging
+    # Only after every check passes, and only for a push to main — never a PR.
+    needs: [checks, integration, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Deliberately NOT cancel-in-progress: killing a half-finished deploy is
+    # worse than queueing behind one.
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    environment:
+      name: staging
+      url: https://xdocs-andrew-svs-projects.vercel.app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Backend first: if the API fails to deploy there is no point shipping a
+      # frontend that talks to it.
+      - name: Deploy backend to Railway
+        env:
+          # An account token is not project-scoped, so the target is explicit.
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          npm i -g @railway/cli
+          railway up \
+            --ci \
+            --project 87b04a3a-fc12-437c-af98-e93dff66a801 \
+            --service xdocs-api \
+            --environment production
+
+      - name: Wait for the API to come back healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf https://xdocs-api-production.up.railway.app/health >/dev/null; then
+              echo "API healthy after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not report healthy within 60s"; exit 1
+
+      - name: Deploy frontend to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # Identifiers, not secrets — they tell the CLI which project to target.
+          VERCEL_ORG_ID: team_x7WCOuF8utpn8hQ8qWokBh6M
+          VERCEL_PROJECT_ID: prj_AHtf4LX8vmhi1rMnckWo1QOelvAc
+        run: npx vercel@59.11.7 deploy --prod --yes --token "$VERCEL_TOKEN"
+
+      # The real gate: proves the deployment is up AND that the password still
+      # covers both the API and the websocket, not just the page.
+      - name: Smoke test staging
+        run: pnpm smoke https://xdocs-api-production.up.railway.app "${{ secrets.ACCESS_PASSWORD }}"
