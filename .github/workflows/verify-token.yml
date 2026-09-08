@@ -1,0 +1,35 @@
+name: Verify Vercel token
+
+# Temporary: proves the VERCEL_TOKEN secret authenticates AND is scoped to the
+# team that owns the xdocs project. Deploys nothing.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query the xdocs project with the stored token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PROJECT_ID: prj_AHtf4LX8vmhi1rMnckWo1QOelvAc
+          TEAM_ID: team_x7WCOuF8utpn8hQ8qWokBh6M
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then echo "secret is empty"; exit 1; fi
+          echo "secret is present (${#VERCEL_TOKEN} chars)"
+          case "$VERCEL_TOKEN" in
+            REPLACE_ME*) echo "still the placeholder value"; exit 1 ;;
+          esac
+
+          CODE=$(curl -s -o /tmp/resp.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v9/projects/$PROJECT_ID?teamId=$TEAM_ID")
+          echo "HTTP $CODE"
+          node -e "
+            const r=require('/tmp/resp.json');
+            if (r.name) console.log('project:', r.name, '| framework:', r.framework);
+            else console.log('error:', JSON.stringify(r).slice(0,200));
+          "
+          [ "$CODE" = "200" ] \
+            && echo 'TOKEN VALID — authenticated and scoped to the xdocs project' \
+            || { echo 'TOKEN INVALID or wrong scope'; exit 1; }
