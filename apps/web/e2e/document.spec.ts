@@ -8,9 +8,15 @@ test.describe('documents', () => {
      * race. Before the fix the empty Y.Text fell through to the input's
      * "Untitled" placeholder here.
      */
-    await page.routeWebSocket(/localhost:1234/, () => {
-      // Accept the socket and answer nothing: permanently unsynced.
-    });
+    // Matched by port, not a URL pattern: this previously pinned the old
+    // pre-merge collab port and so blocked nothing, leaving the test to pass
+    // only by racing the sync. A predicate keeps it honest if the mount moves.
+    await page.routeWebSocket(
+      (url) => url.port === '3001',
+      () => {
+        // Accept the socket and answer nothing: permanently unsynced.
+      },
+    );
 
     await page.goto('/');
     await page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-open"]`).click();
