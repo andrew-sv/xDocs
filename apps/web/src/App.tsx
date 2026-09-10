@@ -1,6 +1,7 @@
 import type { DocumentDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { DocumentList } from './components/DocumentList';
 import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
@@ -19,6 +20,8 @@ export function App() {
    * A client-side trail is enough — there is no router and nothing deep-links.
    */
   const [trail, setTrail] = useState<DocumentDTO[]>([]);
+  /** Delete is confirmed first — it cascades to the whole subtree. */
+  const [pendingDelete, setPendingDelete] = useState<DocumentDTO | null>(null);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const { data: session } = useSession();
 
@@ -94,9 +97,21 @@ export function App() {
   /** "+ Add document" inside a document: create a child and drill into it. */
   const addSubDocument = useCallback(async (parent: DocumentDTO) => {
     const child = await api.createDocument('Untitled', parent.id);
-    setTrail((prev) => (prev.some((d) => d.id === parent.id) ? prev : [...prev, parent]));
+    /*
+     * The parent now has a child, and both the trail and the list hold DTO
+     * snapshots — without this they keep reporting hasChildren: false, so the
+     * sidebar loses its ▸ marker and the delete dialog stops warning that
+     * sub-documents will go too.
+     */
+    const withChild = (d: DocumentDTO) => (d.id === parent.id ? { ...d, hasChildren: true } : d);
+    setTrail((prev) => {
+      const updated = prev.map(withChild);
+      return updated.some((d) => d.id === parent.id)
+        ? updated
+        : [...updated, { ...parent, hasChildren: true }];
+    });
     setSelected(child);
-    setDocuments((prev) => [child, ...prev]);
+    setDocuments((prev) => [child, ...prev.map(withChild)]);
   }, []);
 
   // The DB copy of the title is only written on Hocuspocus's debounce, so keep
@@ -116,6 +131,15 @@ export function App() {
     await api.deleteDocument(doc.id);
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     setSelected((prev) => (prev?.id === doc.id ? null : prev));
+    // If the deleted document is on the path, walk back above it — staying
+    // inside a document that no longer exists would show an empty sidebar.
+    setTrail((prev) => {
+      const index = prev.findIndex((d) => d.id === doc.id);
+      if (index === -1) return prev;
+      const next = prev.slice(0, index);
+      setSelected(next.length > 0 ? next[next.length - 1]! : null);
+      return next;
+    });
     setPendingRestore({ id: doc.id, title: doc.title });
   }
 
@@ -177,9 +201,10 @@ export function App() {
         selectedId={selected?.id ?? null}
         onSelect={openDocument}
         trail={trail}
+        current={trail.length > 0 ? trail[trail.length - 1]! : null}
         onNavigateCrumb={navigateToCrumb}
         onCreate={() => void createDocument()}
-        onDelete={(doc) => void deleteDocument(doc)}
+        onDelete={(doc) => setPendingDelete(doc)}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (
@@ -195,6 +220,24 @@ export function App() {
         <main className="editor empty-state">
           <p>Select a document, or create one to start writing.</p>
         </main>
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete document"
+          message={`“${pendingDelete.title || 'Untitled'}” will be moved to the bin. You can undo this straight afterwards.`}
+          warning={
+            pendingDelete.hasChildren
+              ? 'Its sub-documents will be deleted too, and restored together if you undo.'
+              : null
+          }
+          confirmLabel="Delete"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            const doc = pendingDelete;
+            setPendingDelete(null);
+            void deleteDocument(doc);
+          }}
+        />
       )}
       {pendingRestore && (
         <Toast

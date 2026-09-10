@@ -6,6 +6,8 @@ type Props = {
   user: SignedInUser | null;
   /** Breadcrumb path; empty means the top level. */
   trail: DocumentDTO[];
+  /** The document currently open — pinned above its sub-documents. */
+  current: DocumentDTO | null;
   onNavigateCrumb: (index: number) => void;
   onSignOut: () => void;
   documents: DocumentDTO[];
@@ -15,9 +17,63 @@ type Props = {
   onDelete: (doc: DocumentDTO) => void;
 };
 
+function DocumentRow({
+  doc,
+  selected,
+  onSelect,
+  onDelete,
+}: {
+  doc: DocumentDTO;
+  selected: boolean;
+  onSelect: (doc: DocumentDTO) => void;
+  onDelete: (doc: DocumentDTO) => void;
+}) {
+  return (
+    <li
+      className={selected ? 'doc selected' : 'doc'}
+      data-testid="doc-row"
+      data-doc-id={doc.id}
+    >
+      <button type="button" className="doc-open" data-testid="doc-open" onClick={() => onSelect(doc)}>
+        <span className="doc-title">
+          {doc.hasChildren && (
+            <span className="doc-haschildren" data-testid="doc-haschildren" title="Has sub-documents">
+              ▸
+            </span>
+          )}
+          {doc.title}
+        </span>
+        <span className="doc-meta">
+          <span
+            className={`doc-visibility doc-visibility-${doc.visibility}`}
+            data-testid="doc-visibility"
+            title={doc.visibility === 'public' ? 'Visible to everyone' : 'Only you'}
+          >
+            {doc.visibility === 'public' ? '🌐 Public' : '🔒 Private'}
+          </span>
+          <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
+        </span>
+      </button>
+      {/* Only the owner may delete; the API enforces this too. */}
+      {doc.isOwner && (
+        <button
+          type="button"
+          className="doc-delete"
+          data-testid="doc-delete"
+          title="Delete document"
+          onClick={() => onDelete(doc)}
+        >
+          ×
+        </button>
+      )}
+    </li>
+  );
+}
+
 export function DocumentList({
   user,
   trail,
+  current,
   onNavigateCrumb,
   onSignOut,
   documents,
@@ -54,52 +110,34 @@ export function DocumentList({
           ))}
         </nav>
       )}
-      <ul className="doc-list">
+      {current && (
+        /*
+         * The open document stays visible in the sidebar, not only in the
+         * breadcrumb — otherwise it vanishes the moment you open it, and its
+         * delete control goes with it.
+         */
+        <div className="current-doc" data-testid="current-doc">
+          <span className="section-label">Current</span>
+          <ul className="doc-list">
+            <DocumentRow
+              doc={current}
+              selected={current.id === selectedId}
+              onSelect={onSelect}
+              onDelete={onDelete}
+            />
+          </ul>
+          <span className="section-label">Sub-documents</span>
+        </div>
+      )}
+      <ul className="doc-list" data-testid="doc-list">
         {documents.map((doc) => (
-          <li
+          <DocumentRow
             key={doc.id}
-            className={doc.id === selectedId ? 'doc selected' : 'doc'}
-            data-testid="doc-row"
-            data-doc-id={doc.id}
-          >
-            <button
-              type="button"
-              className="doc-open"
-              data-testid="doc-open"
-              onClick={() => onSelect(doc)}
-            >
-              <span className="doc-title">
-                {doc.hasChildren && (
-                  <span className="doc-haschildren" data-testid="doc-haschildren" title="Has sub-documents">
-                    ▸
-                  </span>
-                )}
-                {doc.title}
-              </span>
-              <span className="doc-meta">
-                <span
-                  className={`doc-visibility doc-visibility-${doc.visibility}`}
-                  data-testid="doc-visibility"
-                  title={doc.visibility === 'public' ? 'Visible to everyone' : 'Only you'}
-                >
-                  {doc.visibility === 'public' ? '🌐 Public' : '🔒 Private'}
-                </span>
-                <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
-              </span>
-            </button>
-            {/* Only the owner may delete; the API enforces this too. */}
-            {doc.isOwner && (
-              <button
-                type="button"
-                className="doc-delete"
-                data-testid="doc-delete"
-                title="Delete document"
-                onClick={() => onDelete(doc)}
-              >
-                ×
-              </button>
-            )}
-          </li>
+            doc={doc}
+            selected={doc.id === selectedId}
+            onSelect={onSelect}
+            onDelete={onDelete}
+          />
         ))}
         {documents.length === 0 && (
           <li className="empty">{trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}</li>
