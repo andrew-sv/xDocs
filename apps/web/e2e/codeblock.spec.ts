@@ -42,6 +42,75 @@ test.describe('code block', () => {
     expect(box.height).toBeGreaterThan(40);
   });
 
+  test('long lines scroll rather than wrap, so indentation stays intact', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('``` ');
+
+    const pre = blockEditor(page, 0).locator('pre');
+    // prosemirror-view injects `.ProseMirror pre { white-space: pre-wrap }`;
+    // wrapping restarts continuation lines at column 0 and destroys indentation.
+    await expect(pre).toHaveCSS('white-space', 'pre');
+  });
+
+  test('Tab indents inside a code block instead of leaving the editor', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('``` ');
+    await page.keyboard.type('def f():');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('return 1');
+
+    const pre = blockEditor(page, 0).locator('pre');
+    await expect.poll(() => pre.evaluate((el) => el.textContent)).toBe('def f():\n  return 1');
+    // Focus must still be in the editor — by default Tab escapes it.
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  });
+
+  test('Shift+Tab removes one level of indentation', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('``` ');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.type('x');
+    await page.keyboard.press('Shift+Tab');
+
+    const pre = blockEditor(page, 0).locator('pre');
+    await expect.poll(() => pre.evaluate((el) => el.textContent)).toBe('  x');
+  });
+
+  test('Tab outside a code block still moves focus', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('plain paragraph');
+    await page.keyboard.press('Tab');
+
+    // Capturing Tab everywhere would trap keyboard users in the editor.
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(false);
+  });
+
+  test('typed leading spaces survive a round trip', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('``` ');
+    await page.keyboard.type('a');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('    indented');
+
+    const pre = blockEditor(page, 0).locator('pre');
+    await expect.poll(() => pre.evaluate((el) => el.textContent)).toBe('a\n    indented');
+
+    // And they must survive persistence, not just the live DOM.
+    await page.reload();
+    await page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-open"]`).click();
+    await expect(page.locator('.status')).toHaveText('Live');
+    await expect
+      .poll(() => blockEditor(page, 0).locator('pre').evaluate((el) => el.textContent))
+      .toBe('a\n    indented');
+  });
+
   test('inline code still has its own background', async ({ page, doc }) => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
