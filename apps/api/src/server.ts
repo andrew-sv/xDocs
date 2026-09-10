@@ -3,7 +3,14 @@ import { Server } from '@hocuspocus/server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { allowPasswordLogin, allowlistEnabled, auth, googleConfigured, isAllowedEmail } from './auth.js';
+import {
+  allowPasswordLogin,
+  allowlistEnabled,
+  auth,
+  disableSignUp,
+  googleConfigured,
+  isAllowedEmail,
+} from './auth.js';
 import { collabConfiguration } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
 
@@ -63,7 +70,7 @@ void server.listen().then(() => {
   console.log(`[api]    http://localhost:${port}`);
   console.log(`[collab] ws://localhost:${port}`);
   console.log(
-    `[auth]   google=${googleConfigured ? 'on' : 'OFF'} password=${allowPasswordLogin ? 'on' : 'off'} allowlist=${allowlistEnabled ? 'on' : 'off'}`,
+    `[auth]   google=${googleConfigured ? 'on' : 'OFF'} password=${allowPasswordLogin ? 'on' : 'off'} signup=${disableSignUp ? 'CLOSED' : 'open'} allowlist=${allowlistEnabled ? 'on' : 'off'}`,
   );
   if (!googleConfigured && !allowPasswordLogin) {
     console.warn('[auth]   no sign-in method configured — nobody can get in');

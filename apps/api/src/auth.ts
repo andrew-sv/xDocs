@@ -13,6 +13,16 @@ import { getDb, schema } from './db/index.js';
  */
 export const allowPasswordLogin = process.env.ALLOW_PASSWORD_LOGIN === 'true';
 
+/**
+ * Close public sign-up.
+ *
+ * An allowlist alone is not enough: while an allowlisted address has no account
+ * yet, anyone who knows it could sign up as it and walk straight in. Staging
+ * sets this and its accounts are created deliberately; dev and CI leave it open
+ * because the test users sign themselves up.
+ */
+export const disableSignUp = process.env.DISABLE_SIGNUP === 'true';
+
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 export const googleConfigured = Boolean(googleClientId && googleClientSecret);
@@ -43,7 +53,7 @@ export const auth = betterAuth({
     ? { google: { clientId: googleClientId!, clientSecret: googleClientSecret! } }
     : {},
 
-  emailAndPassword: { enabled: allowPasswordLogin },
+  emailAndPassword: { enabled: allowPasswordLogin, disableSignUp },
 });
 
 export type Session = typeof auth.$Infer.Session;
