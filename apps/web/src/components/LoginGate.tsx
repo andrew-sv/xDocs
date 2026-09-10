@@ -19,16 +19,35 @@ declare global {
   }
 }
 
+/*
+ * One shared load promise for the whole module.
+ *
+ * Keying off "is the <script> tag present?" is wrong: under StrictMode the
+ * second effect run finds the tag already appended while the script is still
+ * executing, resolves immediately, sees no window.google and bails — so the
+ * button silently never renders. Every caller must await the same real load.
+ */
+let gisLoad: Promise<void> | null = null;
+
 function loadGoogleScript(): Promise<void> {
-  if (document.querySelector(`script[src="${GSI_SRC}"]`)) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = GSI_SRC;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Could not load Google sign-in'));
-    document.head.appendChild(script);
+  gisLoad ??= new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GSI_SRC}"]`);
+    if (existing && window.google?.accounts?.id) {
+      resolve();
+      return;
+    }
+    const script = existing ?? document.createElement('script');
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error('Could not load Google sign-in')), {
+      once: true,
+    });
+    if (!existing) {
+      script.src = GSI_SRC;
+      script.async = true;
+      document.head.appendChild(script);
+    }
   });
+  return gisLoad;
 }
 
 type LoginGateProps = {
@@ -39,6 +58,8 @@ type LoginGateProps = {
 
 export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
   const googleButtonRef = useRef<HTMLDivElement>(null);
+  const onSignedInRef = useRef(onSignedIn);
+  onSignedInRef.current = onSignedIn;
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -57,7 +78,7 @@ export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
           callback: async ({ credential }) => {
             try {
               await signInWithGoogleIdToken(credential);
-              onSignedIn();
+              onSignedInRef.current();
             } catch (e) {
               setError(e instanceof Error ? e.message : String(e));
             }
@@ -74,7 +95,9 @@ export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
     return () => {
       cancelled = true;
     };
-  }, [onSignedIn]);
+    // Deliberately runs once: the handler is read through a ref so a new
+    // callback identity does not tear down and re-render Google's button.
+  }, []);
 
   async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
@@ -88,7 +111,7 @@ export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
   }
 
   return (
-    <div className="login">
+    <div className="login" data-testid="login-gate">
       <h1 className="login-brand">xDocs</h1>
       <p className="login-hint">Sign in to open your documents.</p>
 

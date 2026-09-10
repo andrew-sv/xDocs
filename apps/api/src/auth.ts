@@ -25,7 +25,12 @@ export const disableSignUp = process.env.DISABLE_SIGNUP === 'true';
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
-export const googleConfigured = Boolean(googleClientId && googleClientSecret);
+/*
+ * Only the client ID is required. We use ID-token sign-in, and verifying a
+ * Google ID token needs the audience (client ID) plus Google's public keys —
+ * not the client secret, which is only used by the redirect/code exchange.
+ */
+export const googleConfigured = Boolean(googleClientId);
 
 /** Where the SPA lives — also the origin Better Auth will accept redirects for. */
 const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
@@ -50,7 +55,13 @@ export const auth = betterAuth({
   plugins: [bearer()],
 
   socialProviders: googleConfigured
-    ? { google: { clientId: googleClientId!, clientSecret: googleClientSecret! } }
+    ? {
+        google: {
+          clientId: googleClientId!,
+          // Optional: present only if the code-exchange flow is ever needed.
+          ...(googleClientSecret ? { clientSecret: googleClientSecret } : {}),
+        },
+      }
     : {},
 
   emailAndPassword: { enabled: allowPasswordLogin, disableSignUp },

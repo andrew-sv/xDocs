@@ -7,7 +7,7 @@ test.describe('authentication', () => {
     const page = await context.newPage();
     try {
       await page.goto('/');
-      await expect(page.getByTestId('google-signin').or(page.getByTestId('login-email'))).toBeVisible();
+      await expect(page.getByTestId('login-gate')).toBeVisible();
       await expect(page.getByTestId('new-document')).toBeHidden();
       await expect(blocks(page)).toHaveCount(0);
     } finally {
@@ -24,7 +24,7 @@ test.describe('authentication', () => {
       );
       await page.goto('/');
       // A forged token must not be mistaken for being signed in.
-      await expect(page.getByTestId('google-signin').or(page.getByTestId('login-email'))).toBeVisible();
+      await expect(page.getByTestId('login-gate')).toBeVisible();
       await expect(page.getByTestId('new-document')).toBeHidden();
     } finally {
       await context.close();
@@ -44,7 +44,7 @@ test.describe('authentication', () => {
 
       await page.getByTestId('sign-out').click();
 
-      await expect(page.getByTestId('google-signin').or(page.getByTestId('login-email'))).toBeVisible();
+      await expect(page.getByTestId('login-gate')).toBeVisible();
       await expect(page.getByTestId('new-document')).toBeHidden();
     } finally {
       await context.close();
@@ -58,7 +58,7 @@ test.describe('authentication', () => {
       await seedDisposableSession(page);
       await openDocument(page, doc);
       await page.getByTestId('sign-out').click();
-      await expect(page.getByTestId('login-email').or(page.getByTestId('google-signin'))).toBeVisible();
+      await expect(page.getByTestId('login-gate')).toBeVisible();
 
       const stored = await page.evaluate(() => window.localStorage.getItem('xdocs.session-token'));
       expect(stored).toBeNull();
