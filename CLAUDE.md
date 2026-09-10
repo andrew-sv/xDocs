@@ -84,6 +84,16 @@ state with the row, so the document could never return under the same id.
 Deleted documents are hidden from the list, 404 over REST, and refused by
 `onConnect` in the collab server.
 
+Delete cascades to the subtree under **one shared `deleted_at`**, and that
+timestamp is the grouping key everywhere afterwards: restore brings back rows
+matching it, and `GET /documents/trash` treats a deleted document whose parent
+does *not* share it as a deletion root. Do not "tidy" the cascade into
+per-row timestamps — both would break.
+
+`DELETE /documents/:id/permanent` is the only hard delete in the codebase. Its
+`where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
+document can never be destroyed even if the UI asks; keep it that way.
+
 ## Non-obvious constraints
 
 Each of these caused a real bug. Changing them silently breaks things.

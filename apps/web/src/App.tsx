@@ -1,4 +1,4 @@
-import type { DocumentDTO } from '@xdocs/shared';
+import type { DocumentDTO, TrashEntryDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -32,6 +32,15 @@ export function App() {
   /** Delete is confirmed first — it cascades to the whole subtree. */
   const [pendingDelete, setPendingDelete] = useState<DocumentDTO | null>(null);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
+  /*
+   * Trash. Loaded eagerly so the sidebar can show a count without being opened;
+   * the request is one row per deletion root, not per deleted document.
+   */
+  const [trash, setTrash] = useState<TrashEntryDTO[]>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [trashLoading, setTrashLoading] = useState(false);
+  /** Permanent deletion is confirmed first — nothing restores it afterwards. */
+  const [pendingPurge, setPendingPurge] = useState<TrashEntryDTO | null>(null);
   const { data: session } = useSession();
 
   const handleVisibilityChange = useCallback(
@@ -49,7 +58,17 @@ export function App() {
     setDocuments([]);
     setSelected(null);
     setTrail([]);
+    setTrash([]);
+    setTrashOpen(false);
     setLocked(true);
+  }, []);
+
+  const refreshTrash = useCallback(async () => {
+    try {
+      setTrash(await api.listTrash());
+    } catch {
+      // The count is decoration; a failure here must not blank the sidebar.
+    }
   }, []);
 
   const currentParentId = trail.length > 0 ? trail[trail.length - 1]!.id : null;
@@ -94,6 +113,43 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (locked) return;
+    void refreshTrash();
+  }, [locked, refreshTrash]);
+
+  const openTrash = useCallback(async () => {
+    setTrashOpen(true);
+    setTrashLoading(true);
+    try {
+      setTrash(await api.listTrash());
+    } finally {
+      setTrashLoading(false);
+    }
+  }, []);
+
+  const restoreFromTrash = useCallback(
+    async (entry: TrashEntryDTO) => {
+      const restored = await api.restoreDocument(entry.id);
+      setTrash((prev) => prev.filter((t) => t.id !== entry.id));
+      /*
+       * Restore may have lifted the document to the top level (its parent is
+       * still deleted), so refresh the level rather than splicing the row in
+       * where it used to live.
+       */
+      await refresh();
+      setTrashOpen(false);
+      setSelected(restored);
+      setTrail([]);
+    },
+    [refresh],
+  );
+
+  const purgeDocument = useCallback(async (entry: TrashEntryDTO) => {
+    await api.permanentlyDelete(entry.id);
+    setTrash((prev) => prev.filter((t) => t.id !== entry.id));
+  }, []);
 
   async function createDocument() {
     // Created at whatever level the sidebar is showing.
@@ -165,12 +221,14 @@ export function App() {
       return next;
     });
     setPendingRestore({ id: doc.id, title: doc.title });
+    void refreshTrash();
   }
 
   const restoreDocument = useCallback(async () => {
     if (!pendingRestore) return;
     setPendingRestore(null);
     const restored = await api.restoreDocument(pendingRestore.id);
+    void refreshTrash();
     // Refetch rather than splice it back: the list is ordered by updatedAt and
     // restore leaves that untouched, so this returns it to its original place.
     await refresh();
@@ -230,6 +288,13 @@ export function App() {
         onNavigateCrumb={navigateToCrumb}
         onCreate={() => void createDocument()}
         onDelete={(doc) => setPendingDelete(doc)}
+        trash={trash}
+        trashOpen={trashOpen}
+        trashLoading={trashLoading}
+        onOpenTrash={() => void openTrash()}
+        onCloseTrash={() => setTrashOpen(false)}
+        onRestoreFromTrash={(entry) => void restoreFromTrash(entry)}
+        onPurge={(entry) => setPendingPurge(entry)}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (
@@ -261,6 +326,28 @@ export function App() {
             const doc = pendingDelete;
             setPendingDelete(null);
             void deleteDocument(doc);
+          }}
+        />
+      )}
+      {pendingPurge && (
+        <ConfirmDialog
+          title="Delete forever"
+          // Deliberately not softened: this is the one action in the app that
+          // destroys content, and there is no undo behind it.
+          message={`“${pendingPurge.title || 'Untitled'}” and everything written in it will be permanently deleted. This cannot be undone.`}
+          warning={
+            pendingPurge.descendantCount > 0
+              ? `${pendingPurge.descendantCount} sub-document${
+                  pendingPurge.descendantCount === 1 ? '' : 's'
+                } will be permanently deleted too.`
+              : null
+          }
+          confirmLabel="Delete forever"
+          onCancel={() => setPendingPurge(null)}
+          onConfirm={() => {
+            const entry = pendingPurge;
+            setPendingPurge(null);
+            void purgeDocument(entry);
           }}
         />
       )}

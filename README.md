@@ -71,7 +71,7 @@ Three layers, deliberately:
   teardown and keybinding bugs.
 - **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
-- **`pnpm e2e`** — 21 Chromium specs over the real stack: real clicks, real
+- **`pnpm e2e`** — 64 Chromium tests over the real stack: real clicks, real
   Cmd+Z, real HTML5 drag, two browser contexts editing one document.
 
 The browser suite exists because the first two layers cannot see layout, focus
@@ -89,6 +89,29 @@ Deletion is a soft delete (`documents.deleted_at`). A hard delete would drop
 the Yjs state with the row, so the document could never come back under the
 same id. Deleted documents are hidden from the list, 404 over REST, and are
 refused by the collab server until restored.
+
+Deleting a document cascades to its sub-documents under one shared timestamp,
+which is what makes the whole subtree restorable together.
+
+### Trash
+
+**Trash** at the foot of the sidebar lists what you deleted, newest first, with
+**Restore** and **Delete forever** on each row.
+
+It lists *deletion roots*, not every deleted row: a root is a deleted document
+whose parent is not deleted in the same operation. A cascaded five-document
+subtree is therefore one entry saying how many descendants travel with it —
+listing all five would offer restores that cannot happen independently.
+
+Restoring re-checks the ancestor chain. Access requires every ancestor to be
+visible, so a document restored under a parent that is still deleted would come
+back somewhere unreachable — restored and still gone. Restore therefore clears
+`parent_id` when the parent is not live, lifting the document to the top level.
+
+**Delete forever** is the only operation in the app that destroys data: the row
+and its `ystate`, which is the entire content. It is confirmation-gated, worded
+as irreversible because it is, and refused (403) on a document that is not
+already in the trash — so nothing live can be destroyed in one step.
 
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.
