@@ -31,9 +31,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listDocuments: () => request<DocumentDTO[]>('/documents'),
-  createDocument: (title = 'Untitled') =>
-    request<DocumentDTO>('/documents', { method: 'POST', body: JSON.stringify({ title }) }),
+  /** Children of `parentId`, or the top level when omitted. */
+  listDocuments: (parentId?: string | null) =>
+    request<DocumentDTO[]>(`/documents${parentId ? `?parent=${parentId}` : ''}`),
+  createDocument: (title = 'Untitled', parentId?: string | null) =>
+    request<DocumentDTO>('/documents', {
+      method: 'POST',
+      body: JSON.stringify({ title, ...(parentId ? { parentId } : {}) }),
+    }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
   restoreDocument: (id: string) =>
     request<DocumentDTO>(`/documents/${id}/restore`, { method: 'POST' }),

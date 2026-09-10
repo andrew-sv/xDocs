@@ -59,6 +59,21 @@ test.describe('editing', () => {
     await expect(blockEditor(page, 0).locator('strong')).toHaveText('make me bold');
   });
 
+  test('toolbar buttons show active state for the current formatting', async ({ page, doc }) => {
+    // useEditor does not re-render on transactions in TipTap v3, so isActive()
+    // read during render never updated and NO button ever lit up.
+    await openDocument(page, doc);
+    await typeInBlock(page, 0, 'formatted');
+    await page.keyboard.press('ControlOrMeta+a');
+
+    await expect(page.getByTestId('tb-bold')).not.toHaveClass(/active/);
+    await page.getByTestId('tb-bold').click();
+    await expect(page.getByTestId('tb-bold')).toHaveClass(/active/);
+
+    await page.getByTestId('tb-bold').click();
+    await expect(page.getByTestId('tb-bold')).not.toHaveClass(/active/);
+  });
+
   test('the last block cannot be deleted', async ({ page, doc }) => {
     await openDocument(page, doc);
     await expect(blocks(page)).toHaveCount(1);

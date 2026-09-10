@@ -35,14 +35,19 @@ test.describe('documents', () => {
     await title.click();
     await title.fill('Renamed in a test');
 
-    await expect(page.locator(`[data-doc-id="${doc.id}"] .doc-title`)).toHaveText('Renamed in a test');
+    // Opening a document drills into it, so it is the last breadcrumb rather
+    // than a sidebar row — that is where a live rename must show.
+    await expect(page.getByTestId('crumbs')).toContainText('Renamed in a test');
   });
 
   test('deleting a document is undoable and restores its content', async ({ page, doc }) => {
     await openDocument(page, doc);
     await typeInBlock(page, 0, 'precious content');
 
+    // The delete button is on the sidebar row, which means going back up.
+    await page.getByTestId('crumb-root').click();
     const row = page.locator(`[data-doc-id="${doc.id}"]`);
+    await expect(row).toHaveCount(1);
     await row.hover();
     await row.getByTestId('doc-delete').click();
 

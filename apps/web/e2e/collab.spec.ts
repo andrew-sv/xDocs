@@ -62,7 +62,8 @@ test.describe('collaboration', () => {
 
       await expect(pageB.getByTestId('title-input')).toHaveValue('Agreed title');
       // And it reaches B's sidebar, not just the header.
-      await expect(pageB.locator(`[data-doc-id="${doc.id}"] .doc-title`)).toHaveText('Agreed title');
+      // B has drilled into the document, so the crumb is where its title shows.
+      await expect(pageB.getByTestId('crumbs')).toContainText('Agreed title');
     } finally {
       await contextA.close();
       await contextB.close();

@@ -28,9 +28,16 @@ type Props = {
   document: DocumentDTO;
   onTitleChange: (id: string, title: string) => void;
   onVisibilityChange: (id: string, visibility: DocumentDTO['visibility']) => Promise<void>;
+  /** Create a sub-document of this one and open it. */
+  onAddSubDocument: () => void;
 };
 
-export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChange }: Props) {
+export function DocumentEditor({
+  document: doc,
+  onTitleChange,
+  onVisibilityChange,
+  onAddSubDocument,
+}: Props) {
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
@@ -299,6 +306,7 @@ export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChang
               />
             ))}
           </div>
+          <div className="block-actions">
           <button
             type="button"
             className="add-block"
@@ -312,6 +320,19 @@ export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChang
           >
             + Add paragraph
           </button>
+          <button
+            type="button"
+            className="add-block add-document"
+            data-testid="add-document"
+            // Same reason as the add-paragraph button: mousedown would blur the
+            // editor, unmount the toolbar and shift this out from under the
+            // pointer before mouseup.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onAddSubDocument}
+          >
+            + Add document
+          </button>
+          </div>
         </>
       )}
 
