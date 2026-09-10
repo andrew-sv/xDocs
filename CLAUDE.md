@@ -170,12 +170,36 @@ Server env: `PORT` (injected by the host), `DATABASE_URL`, `WEB_ORIGIN` (the COR
 origin — pinned to one, so Vercel preview URLs will not work unless added), and
 `ACCESS_PASSWORD`.
 
-`ACCESS_PASSWORD` gates both surfaces: a Hono middleware on `/api/*` and
-Hocuspocus's `onAuthenticate`. **Unset means the gate is off entirely**, which is
-what keeps local dev and the whole test suite running unauthenticated. `/health`
-is always public for the platform healthcheck. It is a shared secret every
-visitor holds — a gate for staging, not authentication.
+Authentication is **Better Auth**, mounted on Hono at `/api/auth/*` with a
+Drizzle adapter over the same Neon database. Google is the only sign-in method
+in staging. Access is a **shared workspace**: every signed-in user sees and
+edits every document. `documents.createdBy` records provenance and is
+deliberately **not** used to scope access.
 
-`pnpm smoke <url> <password>` checks a deployment: that health is public, the
-API 401s without the password, and the websocket rejects a bad token but syncs
-with a good one.
+Two choices that are load-bearing:
+
+- **Bearer tokens, not cookies.** The SPA and API sit on different registrable
+  domains (`vercel.app` / `railway.app`), so a session cookie would be
+  third-party — blocked in Safari, being phased out in Chrome. Bearer also gives
+  the collab websocket a credential; it authenticates via
+  `sessionFromToken()` in `src/auth.ts`, not cookies.
+- **Google ID-token sign-in, not the redirect flow.** The redirect completes on
+  the API's domain and leaves the session in exactly that cross-site cookie. The
+  SPA gets an ID token from Google Identity Services and Better Auth exchanges
+  it directly.
+
+`ALLOW_PASSWORD_LOGIN=true` enables email+password, used **only** by local dev
+and CI because Google OAuth cannot be automated. Staging leaves it unset.
+
+Better Auth requires an `Origin` header on state-changing requests (CSRF).
+Browsers always send one; Node's `fetch` does not — `test-auth.mjs` adds it.
+
+Any test that signs **out** must use `createDisposableUser` /
+`seedDisposableSession`: sign-out revokes the session server-side, so using the
+shared test session logs every other parallel worker out mid-run.
+
+`pnpm smoke <url>` checks a deployment. It covers the **negative path only** —
+health is public, REST 401s unauthenticated, a forged bearer is refused, the
+auth routes are mounted, and the websocket rejects a forged session. Staging has
+no non-Google way in, so the signed-in path cannot be scripted there; it is
+covered by the browser suite against a local stack.

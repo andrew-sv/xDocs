@@ -1,22 +1,68 @@
 import { test as base, expect, type Page } from '@playwright/test';
+import { authHeaders, createDisposableUser, signInForTests } from '../test-auth.mjs';
 
 const API = 'http://localhost:3001';
+const TOKEN_KEY = 'xdocs.session-token';
+
+/**
+ * One shared test session for the whole run.
+ *
+ * Google OAuth cannot be automated, so tests use the email+password provider
+ * the API only enables under ALLOW_PASSWORD_LOGIN. Cached so parallel workers
+ * do not each re-sign-in.
+ */
+let tokenPromise: Promise<string> | null = null;
+export function getTestToken(): Promise<string> {
+  tokenPromise ??= signInForTests(API);
+  return tokenPromise;
+}
+
+/**
+ * Put the session token in localStorage before any page script runs, so the app
+ * boots already signed in and never renders the login gate.
+ */
+export async function seedDisposableSession(page: Page): Promise<{ email: string; name: string }> {
+  const user = await createDisposableUser(API);
+  await page.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key, value),
+    [TOKEN_KEY, user.token] as const,
+  );
+  return { email: user.email, name: user.name };
+}
+
+export async function seedSession(page: Page): Promise<void> {
+  const token = await getTestToken();
+  await page.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key, value),
+    [TOKEN_KEY, token] as const,
+  );
+}
 
 export type TestDocument = { id: string; title: string };
 
 export const test = base.extend<{ doc: TestDocument }>({
+  // Every page starts signed in.
+  page: async ({ page }, use) => {
+    await seedSession(page);
+    await use(page);
+  },
+
   /**
    * Create the document over REST rather than through the UI: it is faster and
    * keeps each test independent, so specs can run fully parallel. Torn down
    * afterwards (a soft delete — the row survives by design).
    */
   doc: async ({ request }, use) => {
+    const token = await getTestToken();
     const created = await request.post(`${API}/api/documents`, {
+      headers: authHeaders(token),
       data: { title: `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
     });
     const doc = (await created.json()) as TestDocument;
     await use(doc);
-    await request.delete(`${API}/api/documents/${doc.id}`).catch(() => {});
+    await request
+      .delete(`${API}/api/documents/${doc.id}`, { headers: authHeaders(token) })
+      .catch(() => {});
   },
 });
 

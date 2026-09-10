@@ -2,6 +2,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { resolveMove, applyMove } from './src/lib/reorder.ts';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
+import { authHeaders, signInForTests } from './test-auth.mjs';
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -9,12 +10,21 @@ const BLOCKS_KEY = 'blocks';
 const TITLE_KEY = 'title';
 const frag = (id) => `block-${id}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const token = await signInForTests(API);
+const H = (extra) => authHeaders(token, extra);
+
 let failures = 0;
 const check = (label, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); if (!ok) failures++; };
 
 function connect(docId) {
   const doc = new Y.Doc();
-  const provider = new HocuspocusProvider({ url: WS, name: `doc:${docId}`, document: doc });
+  const provider = new HocuspocusProvider({
+    url: WS,
+    name: `doc:${docId}`,
+    document: doc,
+    token,
+    onAuthenticationFailed: () => {},
+  });
   const synced = new Promise((res) => provider.on('synced', () => res()));
   return { doc, provider, synced };
 }
@@ -41,7 +51,7 @@ function readText(doc, blockId) {
 
 // 1. Create document over REST
 const created = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Untitled' }),
+  method: 'POST', headers: H({ 'content-type': 'application/json' }), body: JSON.stringify({ title: 'Untitled' }),
 }).then((r) => r.json());
 check('REST creates document', typeof created.id === 'string');
 const id = created.id;
@@ -154,7 +164,7 @@ const C2Title = C.doc.getText(TITLE_KEY).toString();
 C.provider.destroy();
 
 // 7. Title persisted to the column and served over REST
-const list = await fetch(`${API}/api/documents`).then((r) => r.json());
+const list = await fetch(`${API}/api/documents`, { headers: H() }).then((r) => r.json());
 const row = list.find((d) => d.id === id);
 check('persisted: title restored in CRDT', C2Title === 'Quarterly notes 2026');
 check('title mirrored to the documents.title column', row?.title === 'Quarterly notes 2026');
@@ -172,12 +182,12 @@ check('unknown document rejected', rejected === true);
 bogus.provider.destroy();
 
 // 9. Document deletion is a soft delete, and is undoable.
-await fetch(`${API}/api/documents/${id}`, { method: 'DELETE' });
-const after = await fetch(`${API}/api/documents`).then((r) => r.json());
+await fetch(`${API}/api/documents/${id}`, { method: 'DELETE', headers: H() });
+const after = await fetch(`${API}/api/documents`, { headers: H() }).then((r) => r.json());
 check('delete removes document from the list', !after.some((d) => d.id === id));
 check(
   'deleted document 404s',
-  (await fetch(`${API}/api/documents/${id}`)).status === 404,
+  (await fetch(`${API}/api/documents/${id}`, { headers: H() })).status === 404,
 );
 
 // A deleted document must not be editable until it comes back.
@@ -193,12 +203,12 @@ const blocked = await Promise.race([
 check('collab refuses a deleted document', blocked === true);
 whileDeleted.provider.destroy();
 
-const restoredDoc = await fetch(`${API}/api/documents/${id}/restore`, { method: 'POST' })
+const restoredDoc = await fetch(`${API}/api/documents/${id}/restore`, { method: 'POST', headers: H() })
   .then((r) => r.json());
 check('restore returns the same document id', restoredDoc.id === id);
 check('restore keeps the title', restoredDoc.title === 'Quarterly notes 2026');
 
-const backInList = await fetch(`${API}/api/documents`).then((r) => r.json());
+const backInList = await fetch(`${API}/api/documents`, { headers: H() }).then((r) => r.json());
 check('restored document is listed again', backInList.some((d) => d.id === id));
 
 // The whole point of the soft delete: the Yjs state came back with it.
@@ -215,7 +225,7 @@ check('restored document keeps its title', D.doc.getText(TITLE_KEY).toString() =
 D.provider.destroy();
 
 // 10. Cleanup
-await fetch(`${API}/api/documents/${id}`, { method: 'DELETE' });
+await fetch(`${API}/api/documents/${id}`, { method: 'DELETE', headers: H() });
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

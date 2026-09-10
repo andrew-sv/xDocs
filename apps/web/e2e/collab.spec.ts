@@ -1,4 +1,14 @@
-import { addBlock, blockEditor, blocks, blockTexts, expect, openDocument, test, typeInBlock } from './fixtures';
+import {
+  addBlock,
+  blockEditor,
+  blocks,
+  blockTexts,
+  expect,
+  openDocument,
+  seedSession,
+  test,
+  typeInBlock,
+} from './fixtures';
 
 test.describe('collaboration', () => {
   test('edits sync live between two browsers', async ({ browser, doc }) => {
@@ -6,6 +16,9 @@ test.describe('collaboration', () => {
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    // These contexts are built by hand, so the page fixture never touched them.
+    await seedSession(pageA);
+    await seedSession(pageB);
 
     try {
       await openDocument(pageA, doc);
@@ -37,6 +50,9 @@ test.describe('collaboration', () => {
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    // These contexts are built by hand, so the page fixture never touched them.
+    await seedSession(pageA);
+    await seedSession(pageB);
 
     try {
       await openDocument(pageA, doc);
@@ -58,6 +74,9 @@ test.describe('collaboration', () => {
     const contextB = await browser.newContext();
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    // These contexts are built by hand, so the page fixture never touched them.
+    await seedSession(pageA);
+    await seedSession(pageB);
 
     try {
       await openDocument(pageA, doc);
