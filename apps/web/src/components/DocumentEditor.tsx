@@ -7,9 +7,12 @@ import {
   type BlockMeta,
   type DocumentDTO,
 } from '@xdocs/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
+import type { Editor } from '@tiptap/react';
 import { useYArray } from '../hooks/useYArray';
+import type { CommandId } from '../lib/commands';
+import { exportDocumentToPdf } from '../lib/exportPdf';
 import { getToken } from '../lib/auth';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
@@ -95,6 +98,32 @@ export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChang
   );
 
   const clearPendingFocus = useCallback(() => setPendingFocusId(null), []);
+
+  /*
+   * Every block is its own editor, so exporting the document needs all of them.
+   * Each BlockEditor registers here on mount and clears its entry on unmount.
+   */
+  const editorsRef = useRef(new Map<string, Editor>());
+  const registerEditor = useCallback((blockId: string, editor: Editor | null) => {
+    if (editor) editorsRef.current.set(blockId, editor);
+    else editorsRef.current.delete(blockId);
+  }, []);
+
+  const runCommand = useCallback(
+    async (id: CommandId) => {
+      if (id !== 'exportToPdf') return;
+      // Walk the CRDT's block order, not the Map's insertion order.
+      const html = blocksArray
+        ? blocksArray
+            .toArray()
+            .map((b) => editorsRef.current.get(b.id)?.getHTML() ?? '')
+            .filter(Boolean)
+        : [];
+      const title = titleText?.toString().trim() || doc.title;
+      await exportDocumentToPdf(title, html);
+    },
+    [blocksArray, titleText, doc.title],
+  );
   const dismissToast = useCallback(() => setToast(null), []);
 
   /*
@@ -265,6 +294,8 @@ export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChang
                 onNudge={handleNudge}
                 undoManager={undoManager}
                 onInsertBelow={handleInsertBelow}
+                onRunCommand={(id) => void runCommand(id)}
+                registerEditor={registerEditor}
               />
             ))}
           </div>
