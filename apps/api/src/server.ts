@@ -3,20 +3,43 @@ import { Server } from '@hocuspocus/server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { authEnabled, isValidToken } from './auth.js';
+import {
+  allowPasswordLogin,
+  allowlistEnabled,
+  auth,
+  disableSignUp,
+  googleConfigured,
+  isAllowedEmail,
+} from './auth.js';
 import { collabConfiguration } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
 
 const app = new Hono()
   .use('*', logger())
-  .use('/api/*', cors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173' }))
-  // Health stays public so a platform healthcheck works without the secret.
+  .use(
+    '/api/*',
+    cors({
+      origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+      // Explicit origin is required once credentials are allowed.
+      credentials: true,
+      allowHeaders: ['content-type', 'authorization'],
+      exposeHeaders: ['set-auth-token'],
+    }),
+  )
+  // Health stays public so a platform healthcheck works without a session.
   .get('/health', (c) => c.json({ ok: true }))
-  // After cors, so preflight is answered before anything can be rejected.
+  // Better Auth owns sign-in, callbacks and sign-out. Mounted BEFORE the guard,
+  // since signing in obviously cannot require already being signed in.
+  .all('/api/auth/*', (c) => auth.handler(c.req.raw))
+  // Everything else needs a session.
   .use('/api/*', async (c, next) => {
-    if (!authEnabled) return next();
-    const token = c.req.header('authorization')?.replace(/^Bearer /, '');
-    if (!isValidToken(token)) return c.json({ error: 'Unauthorized' }, 401);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) return c.json({ error: 'Unauthorized' }, 401);
+    // 403, not 401: the session is genuine, the account simply is not allowed.
+    // The client tells them apart to show a useful message.
+    if (!isAllowedEmail(session.user.email)) {
+      return c.json({ error: 'This account is not authorised for xDocs.' }, 403);
+    }
     return next();
   })
   .route('/api/documents', documentsRoute);
@@ -46,7 +69,12 @@ const server = new Server({
 void server.listen().then(() => {
   console.log(`[api]    http://localhost:${port}`);
   console.log(`[collab] ws://localhost:${port}`);
-  if (!authEnabled) console.warn('[auth]   ACCESS_PASSWORD unset — API and collab are OPEN');
+  console.log(
+    `[auth]   google=${googleConfigured ? 'on' : 'OFF'} password=${allowPasswordLogin ? 'on' : 'off'} signup=${disableSignUp ? 'CLOSED' : 'open'} allowlist=${allowlistEnabled ? 'on' : 'off'}`,
+  );
+  if (!googleConfigured && !allowPasswordLogin) {
+    console.warn('[auth]   no sign-in method configured — nobody can get in');
+  }
 });
 
 export type AppType = typeof app;

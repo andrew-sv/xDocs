@@ -5,7 +5,7 @@ import { DocumentList } from './components/DocumentList';
 import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
 import { api } from './lib/api';
-import { UnauthorizedError, setToken } from './lib/auth';
+import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
@@ -13,6 +13,16 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
   const [locked, setLocked] = useState(false);
+  const [deniedReason, setDeniedReason] = useState<string | null>(null);
+  const { data: session } = useSession();
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    clearToken();
+    setDocuments([]);
+    setSelected(null);
+    setLocked(true);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -23,6 +33,12 @@ export function App() {
       // A gated deployment answers 401 until a valid password is supplied;
       // that is a login prompt, not an error to render.
       if (e instanceof UnauthorizedError) {
+        setLocked(true);
+        return;
+      }
+      if (e instanceof ForbiddenError) {
+        // Signed in, but not on the allowlist — say so instead of looping.
+        setDeniedReason(e.message);
         setLocked(true);
         return;
       }
@@ -95,8 +111,9 @@ export function App() {
   if (locked) {
     return (
       <LoginGate
-        onSubmit={(password) => {
-          setToken(password);
+        deniedReason={deniedReason}
+        onSignedIn={() => {
+          setDeniedReason(null);
           void refresh();
         }}
       />
@@ -106,6 +123,8 @@ export function App() {
   return (
     <div className="app">
       <DocumentList
+        user={session?.user ?? null}
+        onSignOut={handleSignOut}
         documents={documents}
         selectedId={selected?.id ?? null}
         onSelect={setSelected}

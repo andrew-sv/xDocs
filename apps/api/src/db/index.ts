@@ -1,6 +1,11 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
-import * as schema from './schema.js';
+import * as authSchema from './auth-schema.js';
+import * as documentSchema from './schema.js';
+
+// One schema object: Drizzle relations and the Better Auth adapter both need
+// every table visible in the same place.
+const schema = { ...documentSchema, ...authSchema };
 
 // A long-lived Node process, so a TCP pool beats the neon-http driver:
 // real transactions and clean bytea round-trips for the Yjs payloads.

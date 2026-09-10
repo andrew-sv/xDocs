@@ -1,28 +1,110 @@
-import { timingSafeEqual } from 'node:crypto';
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { bearer } from 'better-auth/plugins';
+import { getDb, schema } from './db/index.js';
 
 /**
- * Shared-password gate for staging.
+ * Password login exists only for automation.
  *
- * When ACCESS_PASSWORD is unset the gate is disabled entirely, so local
- * development and the whole test suite run unauthenticated and unchanged.
- * Only a deployed environment sets it.
- *
- * This is a gate, not authentication: everyone who logs in holds the same
- * secret and can read it out of devtools. It keeps a staging URL from being
- * world-writable; it is not a substitute for real accounts.
+ * Google OAuth cannot be driven in CI and the runners hold no Google
+ * credentials, so tests sign in with a seeded email/password user. This is
+ * enabled in local dev and CI and deliberately absent in staging, where Google
+ * is the only way in.
  */
-const configured = process.env.ACCESS_PASSWORD?.trim();
+export const allowPasswordLogin = process.env.ALLOW_PASSWORD_LOGIN === 'true';
 
-export const accessPassword: string | null = configured ? configured : null;
-export const authEnabled = accessPassword !== null;
+/**
+ * Close public sign-up.
+ *
+ * An allowlist alone is not enough: while an allowlisted address has no account
+ * yet, anyone who knows it could sign up as it and walk straight in. Staging
+ * sets this and its accounts are created deliberately; dev and CI leave it open
+ * because the test users sign themselves up.
+ */
+export const disableSignUp = process.env.DISABLE_SIGNUP === 'true';
 
-/** Constant-time compare, so the endpoint does not leak the secret's prefix. */
-export function isValidToken(token: string | undefined | null): boolean {
-  if (!authEnabled) return true;
-  if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(accessPassword!);
-  // timingSafeEqual throws on length mismatch, so compare lengths first — the
-  // length of the secret is not the part worth protecting.
-  return a.length === b.length && timingSafeEqual(a, b);
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+/*
+ * Only the client ID is required. We use ID-token sign-in, and verifying a
+ * Google ID token needs the audience (client ID) plus Google's public keys —
+ * not the client secret, which is only used by the redirect/code exchange.
+ */
+export const googleConfigured = Boolean(googleClientId);
+
+/** Where the SPA lives — also the origin Better Auth will accept redirects for. */
+const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
+
+export const auth = betterAuth({
+  // Used to build the OAuth callback URL Google is told to return to, so it
+  // must match the redirect URI registered in the Google console exactly.
+  baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
+  secret: process.env.BETTER_AUTH_SECRET,
+  database: drizzleAdapter(getDb(), { provider: 'pg', schema }),
+  trustedOrigins: [webOrigin],
+
+  /*
+   * Bearer tokens rather than cookies.
+   *
+   * The SPA is on vercel.app and this API on railway.app — different
+   * registrable domains, so a session cookie would be third-party: blocked by
+   * default in Safari and being phased out in Chrome. A bearer token sidesteps
+   * that, and doubles as the credential for the collab websocket, which
+   * authenticates with a token rather than cookies.
+   */
+  plugins: [bearer()],
+
+  socialProviders: googleConfigured
+    ? {
+        google: {
+          clientId: googleClientId!,
+          // Optional: present only if the code-exchange flow is ever needed.
+          ...(googleClientSecret ? { clientSecret: googleClientSecret } : {}),
+        },
+      }
+    : {},
+
+  emailAndPassword: { enabled: allowPasswordLogin, disableSignUp },
+});
+
+export type Session = typeof auth.$Infer.Session;
+
+/**
+ * Allowlist of addresses permitted to sign in.
+ *
+ * Unset means no restriction, which is what local dev and CI rely on — their
+ * test users have made-up addresses. Staging sets it, so a Google account being
+ * valid is not the same as being allowed in.
+ */
+const allowedEmails = new Set(
+  (process.env.ALLOWED_EMAILS ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+export const allowlistEnabled = allowedEmails.size > 0;
+
+export function isAllowedEmail(email: string | undefined | null): boolean {
+  if (!allowlistEnabled) return true;
+  return Boolean(email && allowedEmails.has(email.toLowerCase()));
+}
+
+/**
+ * Enforced where it counts: at session resolution, so it applies to every
+ * provider and to sessions that already existed when the list changed. A
+ * blocked user may hold a valid Better Auth session and still reach nothing.
+ */
+
+/**
+ * Resolve a session from a raw bearer token — used by the collab server, which
+ * receives a token from the websocket handshake rather than an HTTP request.
+ */
+export async function sessionFromToken(token: string | undefined | null) {
+  if (!token) return null;
+  const session = await auth.api.getSession({
+    headers: new Headers({ authorization: `Bearer ${token}` }),
+  });
+  if (!session || !isAllowedEmail(session.user.email)) return null;
+  return session;
 }

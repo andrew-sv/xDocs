@@ -3,7 +3,7 @@ import { defineConfig } from 'drizzle-kit';
 // Migrations use the DIRECT (unpooled) Neon URL — the pooler does not support
 // the session-level statements drizzle-kit issues.
 export default defineConfig({
-  schema: './src/db/schema.ts',
+  schema: ['./src/db/schema.ts', './src/db/auth-schema.ts'],
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {

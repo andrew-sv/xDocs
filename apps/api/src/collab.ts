@@ -3,7 +3,7 @@ import type { ServerConfiguration } from '@hocuspocus/server';
 import { TITLE_KEY } from '@xdocs/shared';
 import { and, eq, isNull } from 'drizzle-orm';
 import * as Y from 'yjs';
-import { authEnabled, isValidToken } from './auth.js';
+import { sessionFromToken } from './auth.js';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
 
@@ -60,15 +60,18 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
     }),
   ],
 
-  // Defining onAuthenticate makes authentication REQUIRED, so it is only wired
-  // up when a password is actually configured.
-  ...(authEnabled
-    ? {
-        onAuthenticate: async ({ token }) => {
-          if (!isValidToken(token)) throw new Error('Invalid access token');
-        },
-      }
-    : {}),
+  /*
+   * Defining onAuthenticate makes authentication REQUIRED for every socket.
+   * The provider sends the same bearer token the REST API uses, which is why
+   * bearer beats cookies here: a websocket handshake carries no usable
+   * cross-site cookie.
+   */
+  onAuthenticate: async ({ token }) => {
+    const session = await sessionFromToken(token);
+    if (!session) throw new Error('Invalid or expired session');
+    // Handed to onConnect and every hook downstream as `context`.
+    return { userId: session.user.id, email: session.user.email };
+  },
 
   onConnect: async ({ documentName }) => {
     // Refuse connections for documents that were never created over REST,

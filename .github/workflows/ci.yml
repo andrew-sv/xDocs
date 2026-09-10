@@ -11,6 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Tests cannot drive Google OAuth, so the email+password provider is enabled
+  # for CI only. Staging leaves this unset — Google is the only way in there.
+  ALLOW_PASSWORD_LOGIN: 'true'
+  VITE_ALLOW_PASSWORD_LOGIN: 'true'
+  BETTER_AUTH_SECRET: ci-only-not-a-real-secret
+  BETTER_AUTH_URL: http://localhost:3001
   # Vanilla Postgres is enough: the schema only needs gen_random_uuid(), which
   # is built in since PG13. So CI needs no Neon access and no secrets at all.
   DATABASE_URL: postgres://postgres:postgres@localhost:5432/xdocs
@@ -60,7 +66,14 @@ jobs:
       # db:push runs through `dotenv -e ../../.env.local`, so the file has to
       # exist. Writing it also means every script works unchanged in CI.
       - name: Write .env.local
-        run: echo "DATABASE_URL=$DATABASE_URL" > .env.local
+        run: |
+          {
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "ALLOW_PASSWORD_LOGIN=$ALLOW_PASSWORD_LOGIN"
+            echo "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
+            echo "BETTER_AUTH_URL=$BETTER_AUTH_URL"
+          } > .env.local
+          echo "VITE_ALLOW_PASSWORD_LOGIN=true" > apps/web/.env.local
 
       - run: pnpm db:push
 
@@ -101,7 +114,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Write .env.local
-        run: echo "DATABASE_URL=$DATABASE_URL" > .env.local
+        run: |
+          {
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "ALLOW_PASSWORD_LOGIN=$ALLOW_PASSWORD_LOGIN"
+            echo "BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET"
+            echo "BETTER_AUTH_URL=$BETTER_AUTH_URL"
+          } > .env.local
+          echo "VITE_ALLOW_PASSWORD_LOGIN=true" > apps/web/.env.local
 
       - run: pnpm db:push
 
@@ -184,4 +204,4 @@ jobs:
       # The real gate: proves the deployment is up AND that the password still
       # covers both the API and the websocket, not just the page.
       - name: Smoke test staging
-        run: pnpm smoke https://xdocs-api-production.up.railway.app "${{ secrets.ACCESS_PASSWORD }}"
+        run: pnpm smoke https://xdocs-api-production.up.railway.app

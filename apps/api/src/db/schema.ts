@@ -1,4 +1,5 @@
 import { customType, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { user } from './auth-schema.js';
 
 /** Raw Yjs update payload. drizzle has no first-class bytea, so declare it. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
@@ -18,6 +19,12 @@ export const documents = pgTable('documents', {
    * same id, which is what any open link or restore would need.
    */
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  /*
+   * Who created it. Recorded for provenance only — access is NOT scoped by it,
+   * because every signed-in user shares one workspace. Nullable so the rows
+   * that predate authentication stay valid.
+   */
+  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
 });
 
 export type DocumentRow = typeof documents.$inferSelect;
