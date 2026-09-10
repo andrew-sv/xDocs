@@ -366,3 +366,5 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .dialog-cancel:hover { background: var(--panel); }
 .dialog-confirm { border: 0; background: #e5484d; color: #fff; font-weight: 600; }
 .dialog-confirm:hover { background: #cc3b40; }
+
+.doc-loading { display: flex; justify-content: center; padding: 16px 0; }

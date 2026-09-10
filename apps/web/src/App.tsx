@@ -1,5 +1,5 @@
 import type { DocumentDTO } from '@xdocs/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DocumentList } from './components/DocumentList';
@@ -10,6 +10,15 @@ import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } fr
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
+  /*
+   * Which level the loaded list belongs to.
+   *
+   * Without this the sidebar keeps rendering the previous level's rows until
+   * the new fetch returns — you see the old tree for a moment after clicking
+   * into a document. Comparing it against the current level tells us the list
+   * is stale, so we show a loading state instead of the wrong documents.
+   */
+  const [documentsParentId, setDocumentsParentId] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
@@ -45,9 +54,24 @@ export function App() {
 
   const currentParentId = trail.length > 0 ? trail[trail.length - 1]!.id : null;
 
+  /*
+   * The level a response must still be for to be applied.
+   *
+   * Two level fetches can be in flight at once (open a document while the root
+   * list is still loading). Without this guard a slower EARLIER response
+   * overwrites the newer one, leaving the list pinned to a level nobody is
+   * looking at — and the sidebar stuck on its loading state.
+   */
+  const latestLevel = useRef<string | null>(currentParentId);
+  latestLevel.current = currentParentId;
+
   const refresh = useCallback(async () => {
     try {
-      setDocuments(await api.listDocuments(currentParentId));
+      const rows = await api.listDocuments(currentParentId);
+      // A newer navigation has already happened; this response is obsolete.
+      if (latestLevel.current !== currentParentId) return;
+      setDocuments(rows);
+      setDocumentsParentId(currentParentId);
       setLocked(false);
       setError(null);
     } catch (e) {
@@ -202,6 +226,7 @@ export function App() {
         onSelect={openDocument}
         trail={trail}
         current={trail.length > 0 ? trail[trail.length - 1]! : null}
+        loading={documentsParentId !== currentParentId}
         onNavigateCrumb={navigateToCrumb}
         onCreate={() => void createDocument()}
         onDelete={(doc) => setPendingDelete(doc)}

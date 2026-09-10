@@ -8,6 +8,8 @@ type Props = {
   trail: DocumentDTO[];
   /** The document currently open — pinned above its sub-documents. */
   current: DocumentDTO | null;
+  /** The loaded list belongs to a different level; do not render it. */
+  loading: boolean;
   onNavigateCrumb: (index: number) => void;
   onSignOut: () => void;
   documents: DocumentDTO[];
@@ -74,6 +76,7 @@ export function DocumentList({
   user,
   trail,
   current,
+  loading,
   onNavigateCrumb,
   onSignOut,
   documents,
@@ -130,17 +133,29 @@ export function DocumentList({
         </div>
       )}
       <ul className="doc-list" data-testid="doc-list">
-        {documents.map((doc) => (
-          <DocumentRow
-            key={doc.id}
-            doc={doc}
-            selected={doc.id === selectedId}
-            onSelect={onSelect}
-            onDelete={onDelete}
-          />
-        ))}
-        {documents.length === 0 && (
-          <li className="empty">{trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}</li>
+        {loading ? (
+          // Never render the previous level's rows — showing the wrong tree for
+          // a moment reads as a glitch, and worse, invites a misdirected click.
+          <li className="doc-loading" data-testid="doc-list-loading">
+            <span className="spinner" role="status" aria-label="Loading documents" />
+          </li>
+        ) : (
+          <>
+            {documents.map((doc) => (
+              <DocumentRow
+                key={doc.id}
+                doc={doc}
+                selected={doc.id === selectedId}
+                onSelect={onSelect}
+                onDelete={onDelete}
+              />
+            ))}
+            {documents.length === 0 && (
+              <li className="empty">
+                {trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}
+              </li>
+            )}
+          </>
         )}
       </ul>
       {user && (
