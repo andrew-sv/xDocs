@@ -6,12 +6,14 @@
     "dev": "concurrently -n api,web -c cyan,green \"pnpm -F @xdocs/api dev\" \"pnpm -F @xdocs/web dev\"",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "db:push": "pnpm -F @xdocs/api db:push",
     "e2e": "pnpm -F @xdocs/web e2e",
     "test": "pnpm -F @xdocs/web test",
     "integration": "pnpm -F @xdocs/web integration",
     "smoke": "pnpm -F @xdocs/web smoke",
-    "start": "pnpm -F @xdocs/api start"
+    "start": "pnpm -F @xdocs/api start",
+    "db:generate": "pnpm -F @xdocs/api db:generate",
+    "db:migrate": "pnpm -F @xdocs/api db:migrate",
+    "db:check": "pnpm -F @xdocs/api db:check"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

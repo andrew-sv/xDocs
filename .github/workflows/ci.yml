@@ -75,7 +75,9 @@ jobs:
           } > .env.local
           echo "VITE_ALLOW_PASSWORD_LOGIN=true" > apps/web/.env.local
 
-      - run: pnpm db:push
+      # Migrations, not a schema push: this is what proves the committed
+      # migration chain builds the schema from empty on every PR.
+      - run: pnpm db:migrate
 
       - name: Start the API and wait for it
         run: |
@@ -123,7 +125,9 @@ jobs:
           } > .env.local
           echo "VITE_ALLOW_PASSWORD_LOGIN=true" > apps/web/.env.local
 
-      - run: pnpm db:push
+      # Migrations, not a schema push: this is what proves the committed
+      # migration chain builds the schema from empty on every PR.
+      - run: pnpm db:migrate
 
       - name: Cache Playwright browsers
         uses: actions/cache@v6
@@ -168,6 +172,18 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      # The schema must be ready BEFORE new code starts against it, and a
+      # destructive change must stop the pipeline rather than the database.
+      - name: Check pending migrations
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: node apps/api/scripts/check-migrations.mjs
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm -F @xdocs/api exec drizzle-kit migrate
 
       # Backend first: if the API fails to deploy there is no point shipping a
       # frontend that talks to it.

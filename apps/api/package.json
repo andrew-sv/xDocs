@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "dotenv -e ../../.env.local -- tsx watch src/server.ts",
-    "db:push": "dotenv -e ../../.env.local -- drizzle-kit push",
     "db:generate": "dotenv -e ../../.env.local -- drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "db:migrate": "dotenv -e ../../.env.local -- drizzle-kit migrate",
+    "db:check": "dotenv -e ../../.env.local -- drizzle-kit check",
+    "db:check-destructive": "dotenv -e ../../.env.local -- node scripts/check-migrations.mjs"
   },
   "dependencies": {
     "@hocuspocus/extension-database": "^4.6.0",
