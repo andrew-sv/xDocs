@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm install
 vercel env pull .env.local     # DATABASE_URL + DATABASE_URL_UNPOOLED (Neon)
-pnpm db:push                   # apply schema changes to Neon
+pnpm db:generate               # create a migration after editing schema.ts
+pnpm db:migrate                # apply pending migrations
 pnpm dev                       # api+collab :3001, web :5173
 pnpm typecheck                 # all three packages
 pnpm build
@@ -123,6 +124,16 @@ Each of these caused a real bug. Changing them silently breaks things.
   drizzle-kit needs the direct `DATABASE_URL_UNPOOLED`.
 - **`drizzle-kit` and `tsx` do not read `.env.local`**; every script wraps them
   in `dotenv-cli`.
+- **There is no `db:push`, deliberately.** Schema changes go through committed
+  migrations in `apps/api/drizzle/`: edit `schema.ts`, run `pnpm db:generate`,
+  commit the generated SQL. CI applies the chain to a throwaway Postgres on
+  every PR, so a broken migration fails there rather than in production. CD
+  applies it to staging before deploying.
+- **CD refuses destructive migrations.** `scripts/check-migrations.mjs` scans
+  *pending* migrations for DROP/TRUNCATE and fails the deploy. Dropping a column
+  from `documents` would take every document's `ystate` with it. To apply one
+  deliberately, run it against the target yourself and redeploy — CD then sees
+  it as applied.
 
 ## Test layers
 

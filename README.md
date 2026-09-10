@@ -49,7 +49,7 @@ an empty list and each seed a block.
 ```bash
 pnpm install
 vercel env pull .env.local     # DATABASE_URL + DATABASE_URL_UNPOOLED from Neon
-pnpm db:push                   # create the documents table
+pnpm db:migrate                # apply migrations
 pnpm dev                       # api + collab + web together
 ```
 
