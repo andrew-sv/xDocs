@@ -1,13 +1,16 @@
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
 import { BlockKeymap } from '../lib/blockKeymap';
+import { CommandPalette, type PaletteState } from '../lib/commandPalette';
+import type { CommandId } from '../lib/commands';
+import { CommandPaletteMenu } from './CommandPalette';
 import { DocumentUndo } from '../lib/documentUndo';
 import { BLOCK_DRAG_MIME, type DropEdge } from '../lib/reorder';
 import { Toolbar } from './Toolbar';
@@ -32,6 +35,10 @@ type Props = {
   onNudge: (id: string, direction: -1 | 1) => void;
   /** Shift+Enter: add a block right below this one and focus it. */
   onInsertBelow: (id: string) => void;
+  /** Palette commands act on the whole document, which only the parent sees. */
+  onRunCommand: (id: CommandId) => void;
+  /** Lets the parent read this block's HTML when exporting. */
+  registerEditor: (blockId: string, editor: Editor | null) => void;
   /** Document-wide undo stack, shared by every block. */
   undoManager: Y.UndoManager;
 };
@@ -63,8 +70,11 @@ export function BlockEditor({
   onDropBlock,
   onNudge,
   onInsertBelow,
+  onRunCommand,
+  registerEditor,
   undoManager,
 }: Props) {
+  const [palette, setPalette] = useState<PaletteState | null>(null);
   const [focused, setFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const fragment = useMemo(
@@ -78,6 +88,14 @@ export function BlockEditor({
   useEffect(() => {
     insertBelowRef.current = onInsertBelow;
   }, [onInsertBelow]);
+
+  const runCommandRef = useRef(onRunCommand);
+  useEffect(() => {
+    runCommandRef.current = onRunCommand;
+  }, [onRunCommand]);
+
+  // The palette owns selection, so it owns the keys; the plugin calls through.
+  const paletteKeyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
 
   // y-tiptap only auto-scopes an UndoManager it constructs itself, so a shared
   // one has to be told about each block's fragment or typing here is untracked.
@@ -102,6 +120,11 @@ export function BlockEditor({
         Collaboration.configure({ fragment }),
         DocumentUndo.configure({ undoManager }),
         BlockKeymap.configure({ onInsertBelow: () => insertBelowRef.current(block.id) }),
+        CommandPalette.configure({
+          onStateChange: setPalette,
+          onRun: (id) => runCommandRef.current(id),
+          getKeyHandler: () => paletteKeyHandler.current,
+        }),
         CollaborationCaret.configure({ provider, user: localUser }),
       ],
       onFocus: () => setFocused(true),
@@ -109,6 +132,12 @@ export function BlockEditor({
     },
     [block.id, ydoc, provider, fragment, undoManager],
   );
+
+  // Expose this block's editor so the parent can read its HTML when exporting.
+  useEffect(() => {
+    registerEditor(block.id, editor ?? null);
+    return () => registerEditor(block.id, null);
+  }, [registerEditor, block.id, editor]);
 
   // `useEditor` returns null on the first render, so focusing a freshly added
   // block has to wait until the editor instance actually exists.
@@ -200,6 +229,14 @@ export function BlockEditor({
       <div className="block-body">
         {editor && focused && <Toolbar editor={editor} />}
         <EditorContent editor={editor} />
+        {palette && (
+          <CommandPaletteMenu
+            state={palette}
+            bindKeyHandler={(handler) => {
+              paletteKeyHandler.current = handler;
+            }}
+          />
+        )}
       </div>
     </div>
   );
