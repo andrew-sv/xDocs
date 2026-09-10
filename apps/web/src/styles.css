@@ -132,8 +132,23 @@ body {
 .tiptap p { margin: 0.35em 0; }
 .tiptap h1 { font-size: 24px; margin: 0.5em 0 0.25em; }
 .tiptap h2 { font-size: 19px; margin: 0.5em 0 0.25em; }
-/* Inline code only — see the pre rule below for code blocks. */
-.tiptap code { background: var(--panel); border-radius: 4px; padding: 1px 5px; font-size: 0.9em; }
+/*
+ * Inline code — see the pre rule below for code blocks.
+ *
+ * A wrapped inline run paints one background box per line box, and the leading
+ * between them is left unpainted: white stripes through the middle of the code.
+ * The vertical padding grows each fragment to fill its line box so they meet,
+ * and box-decoration-break makes every fragment carry that padding rather than
+ * only the first and last.
+ */
+.tiptap code {
+  background: var(--panel);
+  border-radius: 4px;
+  padding: 0.3em 0.35em;
+  font-size: 0.9em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 /*
  * The background belongs on the block-level <pre>, not the <code> inside it.
  * <code> is inline, so a background on it paints one box per line fragment and

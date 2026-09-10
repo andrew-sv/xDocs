@@ -111,6 +111,56 @@ test.describe('code block', () => {
       .toBe('a\n    indented');
   });
 
+  test('the toolbar button creates a code block', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('some code');
+
+    await page.getByTestId('tb-code-block').click();
+
+    await expect(blockEditor(page, 0).locator('pre')).toContainText('some code');
+    await expect(blockEditor(page, 0).locator('pre')).toHaveCount(1);
+  });
+
+  test('converting several inline-code lines yields ONE block, not one per line', async ({ page, doc }) => {
+    // The shape people actually produce: a paragraph per line, each marked as
+    // inline code. TipTap's own toggleCodeBlock would make five separate
+    // blocks — with exactly the margins between them we are trying to remove.
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    const lines = ['function f() {', '  if (x) {', '    return 1;', '  }', '}'];
+    for (const [i, line] of lines.entries()) {
+      await page.keyboard.type(line);
+      if (i < lines.length - 1) await page.keyboard.press('Enter');
+    }
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.getByTestId('tb-code').click();
+    await expect(blockEditor(page, 0).locator('p code')).toHaveCount(5);
+
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.getByTestId('tb-code-block').click();
+
+    const pre = blockEditor(page, 0).locator('pre');
+    await expect(pre).toHaveCount(1);
+    await expect(blockEditor(page, 0).locator('p')).toHaveCount(0);
+    // Newlines and indentation both survive the conversion.
+    await expect
+      .poll(() => pre.evaluate((el) => el.textContent))
+      .toBe('function f() {\n  if (x) {\n    return 1;\n  }\n}');
+  });
+
+  test('the code block button reports active state and toggles back', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('x');
+
+    await page.getByTestId('tb-code-block').click();
+    await expect(page.getByTestId('tb-code-block')).toHaveClass(/active/);
+
+    await page.getByTestId('tb-code-block').click();
+    await expect(blockEditor(page, 0).locator('pre')).toHaveCount(0);
+  });
+
   test('inline code still has its own background', async ({ page, doc }) => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
