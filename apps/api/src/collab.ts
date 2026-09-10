@@ -1,7 +1,7 @@
 import { Database } from '@hocuspocus/extension-database';
 import type { ServerConfiguration } from '@hocuspocus/server';
 import { TITLE_KEY } from '@xdocs/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { sessionFromToken } from './auth.js';
 import { getDb } from './db/index.js';
@@ -61,28 +61,42 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
   ],
 
   /*
-   * Defining onAuthenticate makes authentication REQUIRED for every socket.
+   * Authentication AND authorisation happen here, together.
+   *
+   * They cannot be split across hooks: onConnect fires BEFORE onAuthenticate,
+   * so `context` is still empty there — an ownership check in onConnect sees no
+   * userId and locks owners out of their own private documents.
+   *
    * The provider sends the same bearer token the REST API uses, which is why
    * bearer beats cookies here: a websocket handshake carries no usable
    * cross-site cookie.
    */
-  onAuthenticate: async ({ token }) => {
+  onAuthenticate: async ({ token, documentName }) => {
     const session = await sessionFromToken(token);
     if (!session) throw new Error('Invalid or expired session');
-    // Handed to onConnect and every hook downstream as `context`.
-    return { userId: session.user.id, email: session.user.email };
-  },
 
-  onConnect: async ({ documentName }) => {
-    // Refuse connections for documents that were never created over REST,
-    // otherwise a typo'd id silently creates an orphan CRDT in memory.
     const id = documentIdFrom(documentName);
     if (!id) throw new Error(`Malformed document name: ${documentName}`);
+
+    /*
+     * The load-bearing access check. Block content never travels over HTTP — it
+     * all comes through this socket, so guarding only the REST routes would
+     * leave a private document fully readable AND writable to anyone with its id.
+     */
     const [row] = await getDb()
       .select({ id: documents.id })
       .from(documents)
-      .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
-    // A soft-deleted document is not editable until it is restored.
-    if (!row) throw new Error(`Unknown document: ${id}`);
+      .where(
+        and(
+          eq(documents.id, id),
+          // A soft-deleted document is not editable until it is restored.
+          isNull(documents.deletedAt),
+          or(eq(documents.visibility, 'public'), eq(documents.createdBy, session.user.id)),
+        ),
+      );
+    if (!row) throw new Error(`Document not found or not accessible: ${id}`);
+
+    // Handed to every hook downstream as `context`.
+    return { userId: session.user.id, email: session.user.email };
   },
 };

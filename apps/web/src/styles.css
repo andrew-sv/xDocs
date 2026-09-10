@@ -233,3 +233,14 @@ body {
 
 .login-password { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 280px; margin-top: 4px; }
 .login-error { color: #e5484d; font-size: 13px; margin: 4px 0 0; }
+
+/* Visibility: a badge in the sidebar, a toggle in the document header */
+.doc-meta { display: flex; align-items: center; gap: 6px; }
+.doc-visibility { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.doc-visibility-public { color: #12a594; }
+.visibility { font: inherit; font-size: 11px; border: 1px solid var(--border); background: #fff; color: var(--muted); border-radius: 20px; padding: 3px 10px; white-space: nowrap; }
+button.visibility { cursor: pointer; }
+button.visibility:hover:not(:disabled) { border-color: var(--muted); color: var(--text); }
+button.visibility:disabled { opacity: 0.5; cursor: progress; }
+.visibility-public { color: #12a594; border-color: #a8e0d4; }
+.visibility-static { background: none; }

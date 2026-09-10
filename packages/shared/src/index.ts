@@ -38,9 +38,15 @@ export const blockMetaSchema = z.object({
 });
 export type BlockMeta = z.infer<typeof blockMetaSchema>;
 
+export const visibilitySchema = z.enum(['private', 'public']);
+export type Visibility = z.infer<typeof visibilitySchema>;
+
 export const documentSchema = z.object({
   id: z.uuid(),
   title: z.string(),
+  visibility: visibilitySchema,
+  /** Derived per request from the caller's session — never stored. */
+  isOwner: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -48,5 +54,9 @@ export type DocumentDTO = z.infer<typeof documentSchema>;
 
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
+});
+
+export const updateVisibilitySchema = z.object({
+  visibility: visibilitySchema,
 });
 export type CreateDocumentInput = z.input<typeof createDocumentSchema>;

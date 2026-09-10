@@ -16,6 +16,15 @@ export function App() {
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const { data: session } = useSession();
 
+  const handleVisibilityChange = useCallback(
+    async (id: string, visibility: DocumentDTO['visibility']) => {
+      const updated = await api.setVisibility(id, visibility);
+      setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      setSelected((prev) => (prev?.id === id ? updated : prev));
+    },
+    [],
+  );
+
   const handleSignOut = useCallback(async () => {
     await signOut();
     clearToken();
@@ -133,7 +142,12 @@ export function App() {
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (
-        <DocumentEditor key={selected.id} document={selected} onTitleChange={handleTitleChange} />
+        <DocumentEditor
+          key={selected.id}
+          document={selected}
+          onTitleChange={handleTitleChange}
+          onVisibilityChange={handleVisibilityChange}
+        />
       )}
       {!error && !selected && (
         <main className="editor empty-state">

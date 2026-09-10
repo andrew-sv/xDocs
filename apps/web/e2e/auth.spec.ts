@@ -1,4 +1,4 @@
-import { blocks, expect, openDocument, seedDisposableSession, test } from './fixtures';
+import { blocks, expect, seedDisposableSession, test } from './fixtures';
 
 test.describe('authentication', () => {
   test('a signed-out visitor gets the login gate, not documents', async ({ browser }) => {
@@ -31,14 +31,15 @@ test.describe('authentication', () => {
     }
   });
 
-  test('a signed-in user sees their account and can sign out', async ({ browser, doc }) => {
+  test('a signed-in user sees their account and can sign out', async ({ browser }) => {
     // A disposable user: signing out revokes the session server-side, which
     // would log every other parallel worker out if it used the shared one.
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       const user = await seedDisposableSession(page);
-      await openDocument(page, doc);
+      await page.goto('/');
+      await expect(page.getByTestId('new-document')).toBeVisible();
       await expect(page.getByTestId('account')).toContainText(user.name);
       await expect(page.locator('.account-name')).toHaveAttribute('title', user.email);
 
@@ -51,12 +52,13 @@ test.describe('authentication', () => {
     }
   });
 
-  test('signing out clears the stored session token', async ({ browser, doc }) => {
+  test('signing out clears the stored session token', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       await seedDisposableSession(page);
-      await openDocument(page, doc);
+      await page.goto('/');
+      await expect(page.getByTestId('new-document')).toBeVisible();
       await page.getByTestId('sign-out').click();
       await expect(page.getByTestId('login-gate')).toBeVisible();
 

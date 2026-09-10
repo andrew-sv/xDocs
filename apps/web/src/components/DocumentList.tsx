@@ -44,17 +44,29 @@ export function DocumentList({
               onClick={() => onSelect(doc)}
             >
               <span className="doc-title">{doc.title}</span>
-              <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
+              <span className="doc-meta">
+                <span
+                  className={`doc-visibility doc-visibility-${doc.visibility}`}
+                  data-testid="doc-visibility"
+                  title={doc.visibility === 'public' ? 'Visible to everyone' : 'Only you'}
+                >
+                  {doc.visibility === 'public' ? '🌐 Public' : '🔒 Private'}
+                </span>
+                <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
+              </span>
             </button>
-            <button
-              type="button"
-              className="doc-delete"
-              data-testid="doc-delete"
-              title="Delete document"
-              onClick={() => onDelete(doc)}
-            >
-              ×
-            </button>
+            {/* Only the owner may delete; the API enforces this too. */}
+            {doc.isOwner && (
+              <button
+                type="button"
+                className="doc-delete"
+                data-testid="doc-delete"
+                title="Delete document"
+                onClick={() => onDelete(doc)}
+              >
+                ×
+              </button>
+            )}
           </li>
         ))}
         {documents.length === 0 && <li className="empty">No documents yet.</li>}
