@@ -1,6 +1,7 @@
 import type { DocumentDTO } from '@xdocs/shared';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { DocumentList } from './components/DocumentList';
 import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
@@ -9,6 +10,15 @@ import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } fr
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
+  /*
+   * Which level the loaded list belongs to.
+   *
+   * Without this the sidebar keeps rendering the previous level's rows until
+   * the new fetch returns — you see the old tree for a moment after clicking
+   * into a document. Comparing it against the current level tells us the list
+   * is stale, so we show a loading state instead of the wrong documents.
+   */
+  const [documentsParentId, setDocumentsParentId] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
@@ -19,6 +29,8 @@ export function App() {
    * A client-side trail is enough — there is no router and nothing deep-links.
    */
   const [trail, setTrail] = useState<DocumentDTO[]>([]);
+  /** Delete is confirmed first — it cascades to the whole subtree. */
+  const [pendingDelete, setPendingDelete] = useState<DocumentDTO | null>(null);
   const [deniedReason, setDeniedReason] = useState<string | null>(null);
   const { data: session } = useSession();
 
@@ -42,9 +54,24 @@ export function App() {
 
   const currentParentId = trail.length > 0 ? trail[trail.length - 1]!.id : null;
 
+  /*
+   * The level a response must still be for to be applied.
+   *
+   * Two level fetches can be in flight at once (open a document while the root
+   * list is still loading). Without this guard a slower EARLIER response
+   * overwrites the newer one, leaving the list pinned to a level nobody is
+   * looking at — and the sidebar stuck on its loading state.
+   */
+  const latestLevel = useRef<string | null>(currentParentId);
+  latestLevel.current = currentParentId;
+
   const refresh = useCallback(async () => {
     try {
-      setDocuments(await api.listDocuments(currentParentId));
+      const rows = await api.listDocuments(currentParentId);
+      // A newer navigation has already happened; this response is obsolete.
+      if (latestLevel.current !== currentParentId) return;
+      setDocuments(rows);
+      setDocumentsParentId(currentParentId);
       setLocked(false);
       setError(null);
     } catch (e) {
@@ -94,9 +121,21 @@ export function App() {
   /** "+ Add document" inside a document: create a child and drill into it. */
   const addSubDocument = useCallback(async (parent: DocumentDTO) => {
     const child = await api.createDocument('Untitled', parent.id);
-    setTrail((prev) => (prev.some((d) => d.id === parent.id) ? prev : [...prev, parent]));
+    /*
+     * The parent now has a child, and both the trail and the list hold DTO
+     * snapshots — without this they keep reporting hasChildren: false, so the
+     * sidebar loses its ▸ marker and the delete dialog stops warning that
+     * sub-documents will go too.
+     */
+    const withChild = (d: DocumentDTO) => (d.id === parent.id ? { ...d, hasChildren: true } : d);
+    setTrail((prev) => {
+      const updated = prev.map(withChild);
+      return updated.some((d) => d.id === parent.id)
+        ? updated
+        : [...updated, { ...parent, hasChildren: true }];
+    });
     setSelected(child);
-    setDocuments((prev) => [child, ...prev]);
+    setDocuments((prev) => [child, ...prev.map(withChild)]);
   }, []);
 
   // The DB copy of the title is only written on Hocuspocus's debounce, so keep
@@ -116,6 +155,15 @@ export function App() {
     await api.deleteDocument(doc.id);
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     setSelected((prev) => (prev?.id === doc.id ? null : prev));
+    // If the deleted document is on the path, walk back above it — staying
+    // inside a document that no longer exists would show an empty sidebar.
+    setTrail((prev) => {
+      const index = prev.findIndex((d) => d.id === doc.id);
+      if (index === -1) return prev;
+      const next = prev.slice(0, index);
+      setSelected(next.length > 0 ? next[next.length - 1]! : null);
+      return next;
+    });
     setPendingRestore({ id: doc.id, title: doc.title });
   }
 
@@ -177,9 +225,11 @@ export function App() {
         selectedId={selected?.id ?? null}
         onSelect={openDocument}
         trail={trail}
+        current={trail.length > 0 ? trail[trail.length - 1]! : null}
+        loading={documentsParentId !== currentParentId}
         onNavigateCrumb={navigateToCrumb}
         onCreate={() => void createDocument()}
-        onDelete={(doc) => void deleteDocument(doc)}
+        onDelete={(doc) => setPendingDelete(doc)}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (
@@ -195,6 +245,24 @@ export function App() {
         <main className="editor empty-state">
           <p>Select a document, or create one to start writing.</p>
         </main>
+      )}
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete document"
+          message={`“${pendingDelete.title || 'Untitled'}” will be moved to the bin. You can undo this straight afterwards.`}
+          warning={
+            pendingDelete.hasChildren
+              ? 'Its sub-documents will be deleted too, and restored together if you undo.'
+              : null
+          }
+          confirmLabel="Delete"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            const doc = pendingDelete;
+            setPendingDelete(null);
+            void deleteDocument(doc);
+          }}
+        />
       )}
       {pendingRestore && (
         <Toast

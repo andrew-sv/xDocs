@@ -14,7 +14,7 @@ test.describe('nested documents', () => {
     await page.getByTestId('add-document').click();
 
     // The new child opens in the editor and the trail follows it.
-    await expect(page.locator('.status')).toHaveText('Live');
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     await expect(page.getByTestId('crumbs')).toBeVisible();
     await expect(page.getByTestId('crumbs')).toContainText(doc.title);
   });
@@ -22,23 +22,30 @@ test.describe('nested documents', () => {
   test('clicking a document shows its sub-documents in the sidebar', async ({ page, doc }) => {
     await openDocument(page, doc);
     await page.getByTestId('add-document').click();
-    await expect(page.locator('.status')).toHaveText('Live');
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
 
     // Back to the parent: its child should now be listed.
     await page.getByTestId('crumb').first().click();
-    await expect(page.getByTestId('doc-row')).toHaveCount(1);
-    await expect(page.getByTestId('doc-row').first()).toContainText('Untitled');
+    const children = page.getByTestId('doc-list').getByTestId('doc-row');
+    await expect(children).toHaveCount(1);
+    await expect(children.first()).toContainText('Untitled');
   });
 
   test('a parent with children is marked in the list', async ({ page, doc }) => {
     await openDocument(page, doc);
     await page.getByTestId('add-document').click();
-    await expect(page.locator('.status')).toHaveText('Live');
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
 
     await page.getByTestId('crumb-root').click();
+    // At the top level nothing is "current", so there is no pinned row and the
+    // document appears exactly once.
+    await expect(page.getByTestId('current-doc')).toHaveCount(0);
+    await expect(page.locator(`[data-doc-id="${doc.id}"]`)).toHaveCount(1);
+    // Navigating up refetches the root list; under a full parallel run that
+    // round trip can outlast the default 5s expect timeout.
     await expect(
-      page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-haschildren"]`),
-    ).toBeVisible();
+      page.getByTestId('doc-list').locator(`[data-doc-id="${doc.id}"] [data-testid="doc-haschildren"]`),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test('the breadcrumb walks back up the tree', async ({ page, doc }) => {
@@ -70,7 +77,7 @@ test.describe('nested documents', () => {
     await expect(page.getByTestId('visibility-toggle')).toHaveText(/Public/);
 
     await page.getByTestId('add-document').click();
-    await expect(page.locator('.status')).toHaveText('Live');
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     // Copied from the parent at creation time.
     await expect(page.getByTestId('visibility-toggle')).toHaveText(/Public/);
   });

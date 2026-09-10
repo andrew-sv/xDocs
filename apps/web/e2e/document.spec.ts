@@ -50,6 +50,8 @@ test.describe('documents', () => {
     await expect(row).toHaveCount(1);
     await row.hover();
     await row.getByTestId('doc-delete').click();
+    // Deleting cascades to sub-documents, so it asks first.
+    await page.getByTestId('confirm-delete').click();
 
     await expect(row).toHaveCount(0);
     await expect(page.getByTestId('toast')).toContainText(doc.title);
