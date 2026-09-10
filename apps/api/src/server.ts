@@ -3,7 +3,7 @@ import { Server } from '@hocuspocus/server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
-import { allowPasswordLogin, auth, googleConfigured } from './auth.js';
+import { allowPasswordLogin, allowlistEnabled, auth, googleConfigured, isAllowedEmail } from './auth.js';
 import { collabConfiguration } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
 
@@ -28,6 +28,11 @@ const app = new Hono()
   .use('/api/*', async (c, next) => {
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Unauthorized' }, 401);
+    // 403, not 401: the session is genuine, the account simply is not allowed.
+    // The client tells them apart to show a useful message.
+    if (!isAllowedEmail(session.user.email)) {
+      return c.json({ error: 'This account is not authorised for xDocs.' }, 403);
+    }
     return next();
   })
   .route('/api/documents', documentsRoute);
@@ -57,7 +62,9 @@ const server = new Server({
 void server.listen().then(() => {
   console.log(`[api]    http://localhost:${port}`);
   console.log(`[collab] ws://localhost:${port}`);
-  console.log(`[auth]   google=${googleConfigured ? 'on' : 'OFF'} password=${allowPasswordLogin ? 'on' : 'off'}`);
+  console.log(
+    `[auth]   google=${googleConfigured ? 'on' : 'OFF'} password=${allowPasswordLogin ? 'on' : 'off'} allowlist=${allowlistEnabled ? 'on' : 'off'}`,
+  );
   if (!googleConfigured && !allowPasswordLogin) {
     console.warn('[auth]   no sign-in method configured — nobody can get in');
   }

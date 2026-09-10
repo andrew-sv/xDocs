@@ -1,5 +1,5 @@
 import type { DocumentDTO } from '@xdocs/shared';
-import { UnauthorizedError, clearToken, getToken } from './auth';
+import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth';
 
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
@@ -18,6 +18,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Stale or absent token: drop it so the gate reappears rather than looping.
     clearToken();
     throw new UnauthorizedError();
+  }
+  if (res.status === 403) {
+    // Signed in successfully, but this account is not allowed. Drop the token
+    // so they are not left in a half-signed-in state.
+    clearToken();
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ForbiddenError(body?.error);
   }
   if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path} failed: ${res.status}`);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);

@@ -49,12 +49,41 @@ export const auth = betterAuth({
 export type Session = typeof auth.$Infer.Session;
 
 /**
+ * Allowlist of addresses permitted to sign in.
+ *
+ * Unset means no restriction, which is what local dev and CI rely on — their
+ * test users have made-up addresses. Staging sets it, so a Google account being
+ * valid is not the same as being allowed in.
+ */
+const allowedEmails = new Set(
+  (process.env.ALLOWED_EMAILS ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+export const allowlistEnabled = allowedEmails.size > 0;
+
+export function isAllowedEmail(email: string | undefined | null): boolean {
+  if (!allowlistEnabled) return true;
+  return Boolean(email && allowedEmails.has(email.toLowerCase()));
+}
+
+/**
+ * Enforced where it counts: at session resolution, so it applies to every
+ * provider and to sessions that already existed when the list changed. A
+ * blocked user may hold a valid Better Auth session and still reach nothing.
+ */
+
+/**
  * Resolve a session from a raw bearer token — used by the collab server, which
  * receives a token from the websocket handshake rather than an HTTP request.
  */
 export async function sessionFromToken(token: string | undefined | null) {
   if (!token) return null;
-  return auth.api.getSession({
+  const session = await auth.api.getSession({
     headers: new Headers({ authorization: `Bearer ${token}` }),
   });
+  if (!session || !isAllowedEmail(session.user.email)) return null;
+  return session;
 }

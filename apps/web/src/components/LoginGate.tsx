@@ -31,7 +31,13 @@ function loadGoogleScript(): Promise<void> {
   });
 }
 
-export function LoginGate({ onSignedIn }: { onSignedIn: () => void }) {
+type LoginGateProps = {
+  onSignedIn: () => void;
+  /** Set when a real sign-in succeeded but the account is not allowed. */
+  deniedReason?: string | null;
+};
+
+export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -118,7 +124,11 @@ export function LoginGate({ onSignedIn }: { onSignedIn: () => void }) {
         </form>
       )}
 
-      {error && <p className="login-error" data-testid="login-error">{error}</p>}
+      {(error || deniedReason) && (
+        <p className="login-error" data-testid="login-error">
+          {error ?? deniedReason}
+        </p>
+      )}
     </div>
   );
 }

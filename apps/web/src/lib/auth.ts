@@ -46,6 +46,18 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/**
+ * The session is genuine but the account is not on the allowlist. Distinct
+ * from UnauthorizedError so the gate can explain why, rather than silently
+ * bouncing the user back to a sign-in button that will keep "failing".
+ */
+export class ForbiddenError extends Error {
+  constructor(message = 'This account is not authorised for xDocs.') {
+    super(message);
+    this.name = 'ForbiddenError';
+  }
+}
+
 export const authClient = createAuthClient({
   baseURL: API_BASE || window.location.origin,
   fetchOptions: {
