@@ -1,4 +1,4 @@
-import type { DocumentDTO } from '@xdocs/shared';
+import type { DocumentDTO, Visibility } from '@xdocs/shared';
 import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth';
 
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
@@ -37,4 +37,9 @@ export const api = {
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
   restoreDocument: (id: string) =>
     request<DocumentDTO>(`/documents/${id}/restore`, { method: 'POST' }),
+  setVisibility: (id: string, visibility: Visibility) =>
+    request<DocumentDTO>(`/documents/${id}/visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility }),
+    }),
 };

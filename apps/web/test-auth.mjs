@@ -23,13 +23,18 @@ export const TEST_USER = {
 export async function signInForTests(apiBase) {
   const headers = { 'content-type': 'application/json', origin: TEST_ORIGIN };
 
-  const signIn = await fetch(`${apiBase}/api/auth/sign-in/email`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
-  });
-  const existing = signIn.headers.get('set-auth-token');
-  if (signIn.ok && existing) return existing;
+  const signIn = async () => {
+    const res = await fetch(`${apiBase}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
+    });
+    const token = res.headers.get('set-auth-token');
+    return res.ok && token ? token : null;
+  };
+
+  const existing = await signIn();
+  if (existing) return existing;
 
   const signUp = await fetch(`${apiBase}/api/auth/sign-up/email`, {
     method: 'POST',
@@ -37,10 +42,20 @@ export async function signInForTests(apiBase) {
     body: JSON.stringify(TEST_USER),
   });
   const created = signUp.headers.get('set-auth-token');
-  if (!signUp.ok || !created) {
-    throw new Error(`could not sign in test user: ${signUp.status} ${await signUp.text()}`);
-  }
-  return created;
+  if (signUp.ok && created) return created;
+
+  /*
+   * Sign-up lost a race.
+   *
+   * Playwright runs several worker PROCESSES, each with its own cached token,
+   * so against an empty database they all try to create this user at once.
+   * Exactly one wins and the rest get a duplicate-email error — so retry the
+   * sign-in, which now succeeds because the winner created the account.
+   */
+  const afterRace = await signIn();
+  if (afterRace) return afterRace;
+
+  throw new Error(`could not sign in test user: ${signUp.status} ${await signUp.text()}`);
 }
 
 /** Headers for an authenticated REST call. */

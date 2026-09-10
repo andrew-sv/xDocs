@@ -14,7 +14,10 @@ import {
 import { collabConfiguration } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
 
-const app = new Hono()
+/** Set by the session guard so routes know who is asking. */
+type Variables = { userId: string; email: string };
+
+const app = new Hono<{ Variables: Variables }>()
   .use('*', logger())
   .use(
     '/api/*',
@@ -40,6 +43,8 @@ const app = new Hono()
     if (!isAllowedEmail(session.user.email)) {
       return c.json({ error: 'This account is not authorised for xDocs.' }, 403);
     }
+    c.set('userId', session.user.id);
+    c.set('email', session.user.email);
     return next();
   })
   .route('/api/documents', documentsRoute);

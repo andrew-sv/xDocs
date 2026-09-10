@@ -20,11 +20,21 @@ export const documents = pgTable('documents', {
    */
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   /*
-   * Who created it. Recorded for provenance only — access is NOT scoped by it,
-   * because every signed-in user shares one workspace. Nullable so the rows
-   * that predate authentication stay valid.
+   * The owner. Only the owner may change visibility, delete or restore.
+   *
+   * Nullable because rows predating authentication have none; combined with the
+   * private default that makes them unreachable, which is correct — they are
+   * soft-deleted test artefacts.
    */
   createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+  /*
+   * private: owner only. public: any signed-in user, with full edit rights, so
+   * live collaboration keeps working. Private by default — a new document is
+   * yours until you deliberately share it.
+   */
+  visibility: text('visibility', { enum: ['private', 'public'] })
+    .notNull()
+    .default('private'),
 });
 
 export type DocumentRow = typeof documents.$inferSelect;

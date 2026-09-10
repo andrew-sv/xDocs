@@ -14,6 +14,7 @@ import { getToken } from '../lib/auth';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { TitleEditor } from './TitleEditor';
+import { VisibilityToggle } from './VisibilityToggle';
 import { Toast } from './Toast';
 
 const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:3001';
@@ -23,9 +24,10 @@ type Status = 'connecting' | 'connected' | 'disconnected';
 type Props = {
   document: DocumentDTO;
   onTitleChange: (id: string, title: string) => void;
+  onVisibilityChange: (id: string, visibility: DocumentDTO['visibility']) => Promise<void>;
 };
 
-export function DocumentEditor({ document: doc, onTitleChange }: Props) {
+export function DocumentEditor({ document: doc, onTitleChange, onVisibilityChange }: Props) {
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
@@ -230,6 +232,11 @@ export function DocumentEditor({ document: doc, onTitleChange }: Props) {
             <span className="spinner" role="status" aria-label="Loading document" />
           </span>
         )}
+        <VisibilityToggle
+          visibility={doc.visibility}
+          isOwner={doc.isOwner}
+          onChange={(next) => onVisibilityChange(doc.id, next)}
+        />
         <span className={`status status-${status}`}>
           {status === 'connected' && synced ? 'Live' : status === 'connected' ? 'Syncing…' : status}
         </span>

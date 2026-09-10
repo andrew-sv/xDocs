@@ -1,4 +1,5 @@
-import { blocks, expect, openDocument, seedDisposableSession, test } from './fixtures';
+import { TEST_USER } from '../test-auth.mjs';
+import { blocks, expect, getTestToken, seedDisposableSession, test } from './fixtures';
 
 test.describe('authentication', () => {
   test('a signed-out visitor gets the login gate, not documents', async ({ browser }) => {
@@ -31,14 +32,15 @@ test.describe('authentication', () => {
     }
   });
 
-  test('a signed-in user sees their account and can sign out', async ({ browser, doc }) => {
+  test('a signed-in user sees their account and can sign out', async ({ browser }) => {
     // A disposable user: signing out revokes the session server-side, which
     // would log every other parallel worker out if it used the shared one.
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       const user = await seedDisposableSession(page);
-      await openDocument(page, doc);
+      await page.goto('/');
+      await expect(page.getByTestId('new-document')).toBeVisible();
       await expect(page.getByTestId('account')).toContainText(user.name);
       await expect(page.locator('.account-name')).toHaveAttribute('title', user.email);
 
@@ -51,12 +53,13 @@ test.describe('authentication', () => {
     }
   });
 
-  test('signing out clears the stored session token', async ({ browser, doc }) => {
+  test('signing out clears the stored session token', async ({ browser }) => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       await seedDisposableSession(page);
-      await openDocument(page, doc);
+      await page.goto('/');
+      await expect(page.getByTestId('new-document')).toBeVisible();
       await page.getByTestId('sign-out').click();
       await expect(page.getByTestId('login-gate')).toBeVisible();
 
@@ -68,17 +71,24 @@ test.describe('authentication', () => {
   });
 
   test('a fresh context can sign in with the password provider', async ({ browser }) => {
+    // This spec takes no page/doc fixture, so nothing else here creates the
+    // shared account. CI starts from an empty database, so without this the
+    // test signs in to a user that does not exist — and only passed locally
+    // because an earlier run had already created it.
+    await getTestToken();
+
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       await page.goto('/');
-      await page.getByTestId('login-email').fill('e2e@xdocs.test');
-      await page.getByTestId('login-password').fill('e2e-password-not-a-secret');
+      // Credentials come from the helper so they cannot drift out of sync.
+      await page.getByTestId('login-email').fill(TEST_USER.email);
+      await page.getByTestId('login-password').fill(TEST_USER.password);
       await page.getByTestId('login-submit').click();
 
       await expect(page.getByTestId('new-document')).toBeVisible();
-      await expect(page.getByTestId('account')).toContainText('E2E User');
-    await expect(page.locator('.account-name')).toHaveAttribute('title', 'e2e@xdocs.test');
+      await expect(page.getByTestId('account')).toContainText(TEST_USER.name);
+      await expect(page.locator('.account-name')).toHaveAttribute('title', TEST_USER.email);
     } finally {
       await context.close();
     }
