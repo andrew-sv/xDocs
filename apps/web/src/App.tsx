@@ -5,7 +5,7 @@ import { DocumentList } from './components/DocumentList';
 import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
 import { api } from './lib/api';
-import { UnauthorizedError, setToken } from './lib/auth';
+import { UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
 
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
@@ -13,6 +13,15 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
   const [locked, setLocked] = useState(false);
+  const { data: session } = useSession();
+
+  const handleSignOut = useCallback(async () => {
+    await signOut();
+    clearToken();
+    setDocuments([]);
+    setSelected(null);
+    setLocked(true);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -93,19 +102,14 @@ export function App() {
   }, [pendingRestore]);
 
   if (locked) {
-    return (
-      <LoginGate
-        onSubmit={(password) => {
-          setToken(password);
-          void refresh();
-        }}
-      />
-    );
+    return <LoginGate onSignedIn={() => void refresh()} />;
   }
 
   return (
     <div className="app">
       <DocumentList
+        user={session?.user ?? null}
+        onSignOut={handleSignOut}
         documents={documents}
         selectedId={selected?.id ?? null}
         onSelect={setSelected}

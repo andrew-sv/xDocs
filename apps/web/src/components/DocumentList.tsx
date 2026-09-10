@@ -1,6 +1,10 @@
 import type { DocumentDTO } from '@xdocs/shared';
 
+type SignedInUser = { name?: string | null; email: string; image?: string | null };
+
 type Props = {
+  user: SignedInUser | null;
+  onSignOut: () => void;
   documents: DocumentDTO[];
   selectedId: string | null;
   onSelect: (doc: DocumentDTO) => void;
@@ -8,7 +12,15 @@ type Props = {
   onDelete: (doc: DocumentDTO) => void;
 };
 
-export function DocumentList({ documents, selectedId, onSelect, onCreate, onDelete }: Props) {
+export function DocumentList({
+  user,
+  onSignOut,
+  documents,
+  selectedId,
+  onSelect,
+  onCreate,
+  onDelete,
+}: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -47,6 +59,17 @@ export function DocumentList({ documents, selectedId, onSelect, onCreate, onDele
         ))}
         {documents.length === 0 && <li className="empty">No documents yet.</li>}
       </ul>
+      {user && (
+        <div className="account" data-testid="account">
+          {user.image && <img className="account-avatar" src={user.image} alt="" />}
+          <span className="account-name" title={user.email}>
+            {user.name || user.email}
+          </span>
+          <button type="button" className="account-signout" data-testid="sign-out" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

@@ -1,28 +1,60 @@
-import { timingSafeEqual } from 'node:crypto';
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { bearer } from 'better-auth/plugins';
+import { getDb, schema } from './db/index.js';
 
 /**
- * Shared-password gate for staging.
+ * Password login exists only for automation.
  *
- * When ACCESS_PASSWORD is unset the gate is disabled entirely, so local
- * development and the whole test suite run unauthenticated and unchanged.
- * Only a deployed environment sets it.
- *
- * This is a gate, not authentication: everyone who logs in holds the same
- * secret and can read it out of devtools. It keeps a staging URL from being
- * world-writable; it is not a substitute for real accounts.
+ * Google OAuth cannot be driven in CI and the runners hold no Google
+ * credentials, so tests sign in with a seeded email/password user. This is
+ * enabled in local dev and CI and deliberately absent in staging, where Google
+ * is the only way in.
  */
-const configured = process.env.ACCESS_PASSWORD?.trim();
+export const allowPasswordLogin = process.env.ALLOW_PASSWORD_LOGIN === 'true';
 
-export const accessPassword: string | null = configured ? configured : null;
-export const authEnabled = accessPassword !== null;
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+export const googleConfigured = Boolean(googleClientId && googleClientSecret);
 
-/** Constant-time compare, so the endpoint does not leak the secret's prefix. */
-export function isValidToken(token: string | undefined | null): boolean {
-  if (!authEnabled) return true;
-  if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(accessPassword!);
-  // timingSafeEqual throws on length mismatch, so compare lengths first — the
-  // length of the secret is not the part worth protecting.
-  return a.length === b.length && timingSafeEqual(a, b);
+/** Where the SPA lives — also the origin Better Auth will accept redirects for. */
+const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
+
+export const auth = betterAuth({
+  // Used to build the OAuth callback URL Google is told to return to, so it
+  // must match the redirect URI registered in the Google console exactly.
+  baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
+  secret: process.env.BETTER_AUTH_SECRET,
+  database: drizzleAdapter(getDb(), { provider: 'pg', schema }),
+  trustedOrigins: [webOrigin],
+
+  /*
+   * Bearer tokens rather than cookies.
+   *
+   * The SPA is on vercel.app and this API on railway.app — different
+   * registrable domains, so a session cookie would be third-party: blocked by
+   * default in Safari and being phased out in Chrome. A bearer token sidesteps
+   * that, and doubles as the credential for the collab websocket, which
+   * authenticates with a token rather than cookies.
+   */
+  plugins: [bearer()],
+
+  socialProviders: googleConfigured
+    ? { google: { clientId: googleClientId!, clientSecret: googleClientSecret! } }
+    : {},
+
+  emailAndPassword: { enabled: allowPasswordLogin },
+});
+
+export type Session = typeof auth.$Infer.Session;
+
+/**
+ * Resolve a session from a raw bearer token — used by the collab server, which
+ * receives a token from the websocket handshake rather than an HTTP request.
+ */
+export async function sessionFromToken(token: string | undefined | null) {
+  if (!token) return null;
+  return auth.api.getSession({
+    headers: new Headers({ authorization: `Bearer ${token}` }),
+  });
 }
