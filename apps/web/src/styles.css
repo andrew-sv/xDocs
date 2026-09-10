@@ -132,7 +132,33 @@ body {
 .tiptap p { margin: 0.35em 0; }
 .tiptap h1 { font-size: 24px; margin: 0.5em 0 0.25em; }
 .tiptap h2 { font-size: 19px; margin: 0.5em 0 0.25em; }
+/* Inline code only — see the pre rule below for code blocks. */
 .tiptap code { background: var(--panel); border-radius: 4px; padding: 1px 5px; font-size: 0.9em; }
+/*
+ * The background belongs on the block-level <pre>, not the <code> inside it.
+ * <code> is inline, so a background on it paints one box per line fragment and
+ * leaves unpainted gaps between wrapped lines.
+ */
+.tiptap pre {
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+.tiptap pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+  white-space: inherit;
+}
 .tiptap blockquote { border-left: 3px solid var(--border); margin: 0.4em 0; padding-left: 12px; color: var(--muted); }
 .tiptap ul, .tiptap ol { margin: 0.35em 0; padding-left: 1.3em; }
 
