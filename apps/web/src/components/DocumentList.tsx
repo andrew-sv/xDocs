@@ -4,6 +4,9 @@ type SignedInUser = { name?: string | null; email: string; image?: string | null
 
 type Props = {
   user: SignedInUser | null;
+  /** Breadcrumb path; empty means the top level. */
+  trail: DocumentDTO[];
+  onNavigateCrumb: (index: number) => void;
   onSignOut: () => void;
   documents: DocumentDTO[];
   selectedId: string | null;
@@ -14,6 +17,8 @@ type Props = {
 
 export function DocumentList({
   user,
+  trail,
+  onNavigateCrumb,
   onSignOut,
   documents,
   selectedId,
@@ -29,6 +34,26 @@ export function DocumentList({
           + New
         </button>
       </div>
+      {trail.length > 0 && (
+        <nav className="crumbs" data-testid="crumbs" aria-label="Document path">
+          <button type="button" className="crumb" data-testid="crumb-root" onClick={() => onNavigateCrumb(-1)}>
+            All
+          </button>
+          {trail.map((doc, index) => (
+            <span key={doc.id} className="crumb-part">
+              <span className="crumb-sep">/</span>
+              <button
+                type="button"
+                className="crumb"
+                data-testid="crumb"
+                onClick={() => onNavigateCrumb(index)}
+              >
+                {doc.title || 'Untitled'}
+              </button>
+            </span>
+          ))}
+        </nav>
+      )}
       <ul className="doc-list">
         {documents.map((doc) => (
           <li
@@ -43,7 +68,14 @@ export function DocumentList({
               data-testid="doc-open"
               onClick={() => onSelect(doc)}
             >
-              <span className="doc-title">{doc.title}</span>
+              <span className="doc-title">
+                {doc.hasChildren && (
+                  <span className="doc-haschildren" data-testid="doc-haschildren" title="Has sub-documents">
+                    ▸
+                  </span>
+                )}
+                {doc.title}
+              </span>
               <span className="doc-meta">
                 <span
                   className={`doc-visibility doc-visibility-${doc.visibility}`}
@@ -69,7 +101,9 @@ export function DocumentList({
             )}
           </li>
         ))}
-        {documents.length === 0 && <li className="empty">No documents yet.</li>}
+        {documents.length === 0 && (
+          <li className="empty">{trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}</li>
+        )}
       </ul>
       {user && (
         <div className="account" data-testid="account">

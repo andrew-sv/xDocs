@@ -1,4 +1,4 @@
-import { customType, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 /** Raw Yjs update payload. drizzle has no first-class bytea, so declare it. */
@@ -6,7 +6,9 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
 });
 
-export const documents = pgTable('documents', {
+export const documents = pgTable(
+  'documents',
+  {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull().default('Untitled'),
   // Authoritative content: the encoded Yjs state written by Hocuspocus.
@@ -35,6 +37,17 @@ export const documents = pgTable('documents', {
   visibility: text('visibility', { enum: ['private', 'public'] })
     .notNull()
     .default('private'),
-});
+    /*
+     * Parent document; null means top level.
+     *
+     * Deliberately NOT onDelete: 'cascade'. Deletion here is a soft delete, and
+     * a real FK cascade would hard-delete rows and destroy the Yjs state that
+     * the soft delete exists to preserve.
+     */
+    parentId: uuid('parent_id'),
+  },
+  // Every sidebar query filters on this.
+  (table) => [index('documents_parent_idx').on(table.parentId)],
+);
 
 export type DocumentRow = typeof documents.$inferSelect;

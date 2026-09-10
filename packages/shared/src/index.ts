@@ -45,6 +45,10 @@ export const documentSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   visibility: visibilitySchema,
+  /** Parent document; null means top level. */
+  parentId: z.uuid().nullable(),
+  /** Lets the sidebar mark rows that lead somewhere, without a second request. */
+  hasChildren: z.boolean(),
   /** Derived per request from the caller's session — never stored. */
   isOwner: z.boolean(),
   createdAt: z.iso.datetime(),
@@ -54,6 +58,8 @@ export type DocumentDTO = z.infer<typeof documentSchema>;
 
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
+  /** When set, the new document becomes a child and copies its visibility. */
+  parentId: z.uuid().nullish(),
 });
 
 export const updateVisibilitySchema = z.object({
