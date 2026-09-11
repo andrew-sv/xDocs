@@ -40,8 +40,8 @@ npx playwright test --ui        # interactive debugging
 ## Architecture
 
 pnpm workspace: `apps/api` (Hono REST + Hocuspocus on ONE port), `apps/web`
-(Vite + React + TipTap v3), `packages/shared` (zod schemas and the Yjs key
-names both sides must agree on).
+(Vite + React + TipTap v3), `apps/mcp` (an MCP server over the REST API),
+`packages/shared` (zod schemas and the Yjs key names both sides must agree on).
 
 **Hocuspocus owns the HTTP server; Hono is delegated to from its `onRequest`
 hook** — not the other way round. Hocuspocus 4 handles upgrades through crossws
@@ -164,6 +164,15 @@ Each of these caused a real bug. Changing them silently breaks things.
   request**, and resolve to a plain userId — so ownership and visibility rules
   need no notion of "a key did this". `/api/keys` is session-only for the same
   reason: a key that could mint keys would survive revoking the original.
+- **`apps/mcp` talks to the REST API over HTTP, never to the database.** That
+  is what keeps it from being a second access path: an MCP client reaches
+  exactly what its `xdk_` key could reach with curl, and there is one permission
+  model rather than two that drift. Keep tool handlers as thin translations of
+  routes; if a tool needs something the API cannot do, add the route.
+- **In `apps/mcp`, log to stderr.** stdout carries JSON-RPC. This SDK's stdio
+  transport happens to skip lines it cannot parse — verified — but other clients
+  are stricter, so do not rely on it. Its tests spawn the real binary rather
+  than using an in-memory transport, which is what covers the entry point.
 - **Yjs has no atomic move.** Reordering is delete+insert in one transaction, so
   two people moving the same block at once can duplicate or lose it. Accepted
   tradeoff; do not "fix" it by inventing a move op.

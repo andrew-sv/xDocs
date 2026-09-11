@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "xdocs": {
+      "command": "pnpm",
+      "args": ["--filter", "@xdocs/mcp", "start"],
+      "env": {
+        "XDOCS_API_URL": "${XDOCS_API_URL:-http://localhost:3001}",
+        "XDOCS_API_KEY": "${XDOCS_API_KEY}"
+      }
+    }
+  }
+}

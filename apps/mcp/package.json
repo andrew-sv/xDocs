@@ -1,0 +1,24 @@
+{
+  "name": "@xdocs/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "test": "node mcp.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "@xdocs/shared": "workspace:*",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3"
+  },
+  "engines": { "node": ">=24" }
+}
