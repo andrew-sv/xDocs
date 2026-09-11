@@ -128,6 +128,35 @@ export const createDocumentSchema = z.object({
   parentId: z.uuid().nullish(),
 });
 
+/**
+ * A block as the REST API exposes it.
+ *
+ * Text only, deliberately: the editor's rich text lives in ProseMirror nodes
+ * inside the CRDT, and round-tripping that through HTTP would need the TipTap
+ * schema on the server. Reading returns the words; writing sets them.
+ */
+export const contentBlockSchema = z.object({
+  id: z.string(),
+  type: blockTypeSchema,
+  text: z.string(),
+});
+export type ContentBlockDTO = z.infer<typeof contentBlockSchema>;
+
+export const documentContentSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  blocks: z.array(contentBlockSchema),
+});
+export type DocumentContentDTO = z.infer<typeof documentContentSchema>;
+
+/** Body for writing content: replace everything, or append to it. */
+export const writeContentSchema = z.object({
+  /** Omitted leaves the title alone; only a replace may set it. */
+  title: z.string().trim().max(200).optional(),
+  blocks: z.array(z.string()).max(500),
+});
+export type WriteContentInput = z.infer<typeof writeContentSchema>;
+
 /** Reparenting. null means "make it top level". */
 export const moveDocumentSchema = z.object({
   parentId: z.uuid().nullable(),

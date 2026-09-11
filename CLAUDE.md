@@ -97,6 +97,10 @@ and `content_text` (weight B) with a GIN index — generated so it cannot drift.
 Neither mirror is authoritative; `ystate` is. Documents saved before the column
 existed are filled by `pnpm --filter @xdocs/api backfill:search`.
 
+`api_keys` stores only a SHA-256 of each key, so the plaintext exists exactly
+once — in the creation response. Revocation is soft (`revoked_at`), and the
+lookup filters on it, so a revoked key stops working on the next request.
+
 `DELETE /documents/:id/permanent` is the only hard delete in the codebase. Its
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
@@ -146,6 +150,20 @@ Each of these caused a real bug. Changing them silently breaks things.
   list fetch is in flight lets that response land afterwards and wipe the new
   row — the document is open but absent from the sidebar. See the spec in
   `e2e/stale.spec.ts`, which has to fetch early and deliver late to reproduce it.
+- **REST content writes go through `withDocument()` in `src/collab.ts`, never
+  the `ystate` column.** It opens a Hocuspocus direct connection, so the edit is
+  a real CRDT operation: it merges with what people are typing and appears in
+  open editors. Writing `ystate` passes every server-side test and fails exactly
+  one browser spec — `e2e/content-api.spec.ts`, verified by doing it. Always
+  `disconnect()`, or the document stays loaded for the life of the process.
+- **The Hocuspocus server reaches routes through `setCollabServer()`, and the
+  direct connection hangs off `server.hocuspocus`, not `server`.** `Server` is
+  the transport; `Hocuspocus` is the document layer. It is set at startup rather
+  than imported because the server is built from `collab.ts`'s own config.
+- **API keys are recognised by their `xdk_` prefix before Better Auth sees the
+  request**, and resolve to a plain userId — so ownership and visibility rules
+  need no notion of "a key did this". `/api/keys` is session-only for the same
+  reason: a key that could mint keys would survive revoking the original.
 - **Yjs has no atomic move.** Reordering is delete+insert in one transaction, so
   two people moving the same block at once can duplicate or lose it. Accepted
   tradeoff; do not "fix" it by inventing a move op.

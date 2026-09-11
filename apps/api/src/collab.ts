@@ -1,6 +1,6 @@
 import { Database } from '@hocuspocus/extension-database';
-import type { ServerConfiguration } from '@hocuspocus/server';
-import { TITLE_KEY } from '@xdocs/shared';
+import type { Server, ServerConfiguration } from '@hocuspocus/server';
+import { collabDocName, TITLE_KEY } from '@xdocs/shared';
 
 import * as Y from 'yjs';
 import { sessionFromToken } from './auth.js';
@@ -9,6 +9,50 @@ import { eq } from 'drizzle-orm';
 import { canAccessDocument } from './db/access.js';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
+
+/*
+ * The running Hocuspocus server, for editing a document from the REST side.
+ *
+ * Writing `ystate` directly would be wrong twice over: any connected editor
+ * would overwrite it on its next save, and open editors would never see the
+ * change. A direct connection joins the document as a participant instead, so
+ * an API edit merges like any other and appears live in everyone's editor.
+ *
+ * Set once at startup rather than imported, because the server is constructed
+ * from this module's own configuration — importing it would be circular.
+ */
+let collabServer: Server | null = null;
+
+export function setCollabServer(server: Server): void {
+  collabServer = server;
+}
+
+/**
+ * Run a transaction against the live document.
+ *
+ * The connection is always closed, including on failure: a leaked direct
+ * connection keeps the document loaded in memory for the life of the process.
+ */
+export async function withDocument<T>(
+  documentId: string,
+  transaction: (doc: Y.Doc) => T,
+): Promise<T> {
+  if (!collabServer) throw new Error('Collaboration server is not running');
+  // `Server` is the transport; `hocuspocus` is the document layer that can open
+  // a direct connection.
+  const connection = await collabServer.hocuspocus.openDirectConnection(
+    collabDocName(documentId),
+  );
+  let result!: T;
+  try {
+    await connection.transact((doc: { getArray: Y.Doc['getArray'] }) => {
+      result = transaction(doc as unknown as Y.Doc);
+    });
+  } finally {
+    await connection.disconnect();
+  }
+  return result;
+}
 
 /** `doc:<uuid>` -> `<uuid>`; null for anything we don't recognise. */
 function documentIdFrom(documentName: string): string | null {

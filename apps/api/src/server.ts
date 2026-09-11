@@ -12,7 +12,7 @@ import {
   isAllowedEmail,
 } from './auth.js';
 import { identityFromApiKey, isApiKey } from './apiKeys.js';
-import { collabConfiguration } from './collab.js';
+import { collabConfiguration, setCollabServer } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
 import { keysRoute } from './routes/keys.js';
 
@@ -97,6 +97,13 @@ const server = new Server({
     return Promise.reject(null);
   },
 });
+
+/*
+ * Hand the running server to the collab module so REST routes can edit a
+ * document through a direct connection rather than writing `ystate` behind the
+ * editors' backs.
+ */
+setCollabServer(server);
 
 void server.listen().then(() => {
   console.log(`[api]    http://localhost:${port}`);

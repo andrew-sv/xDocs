@@ -1,11 +1,15 @@
 import {
   BLOCKS_KEY,
   TITLE_KEY,
+  blockFragmentName,
   createDocumentSchema,
   moveDocumentSchema,
+  writeContentSchema,
   updateVisibilitySchema,
   type BlockMeta,
   toTsQuery,
+  type ContentBlockDTO,
+  type DocumentContentDTO,
   type DocumentDTO,
   type SearchResultDTO,
   type TrashEntryDTO,
@@ -21,6 +25,8 @@ import {
   visibleTreeSql,
   wouldCreateCycle,
 } from '../db/access.js';
+import { withDocument } from '../collab.js';
+import { textOf as textOfFragment } from '../contentText.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
@@ -79,6 +85,47 @@ async function childBearing(ids: string[]): Promise<Set<string>> {
     .from(documents)
     .where(and(isNull(documents.deletedAt), isNotNull(documents.parentId), inArray(documents.parentId, ids)));
   return new Set(rows.map((row) => row.parentId!).filter(Boolean));
+}
+
+/**
+ * Append one paragraph block per string.
+ *
+ * A block is a single node in this editor, so an embedded newline cannot live
+ * inside one — each line becomes its own block, which is what typing the same
+ * text would have produced.
+ */
+function writeBlocks(doc: Y.Doc, texts: string[]): void {
+  const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
+  for (const text of texts) {
+    for (const line of text.split('\n')) {
+      const meta: BlockMeta = { id: randomUUID(), type: 'paragraph' };
+      blocks.push([meta]);
+      const paragraph = new Y.XmlElement('paragraph');
+      // An empty paragraph must stay empty: inserting a zero-length XmlText
+      // would still render, but it also confuses ProseMirror's mapping.
+      if (line.length > 0) {
+        const node = new Y.XmlText();
+        node.insert(0, line);
+        paragraph.insert(0, [node]);
+      }
+      const fragment = doc.getXmlFragment(blockFragmentName(meta.id));
+      fragment.insert(fragment.length, [paragraph]);
+    }
+  }
+}
+
+/** The document as text: the same view `content_text` is built from. */
+function readContent(id: string, doc: Y.Doc): DocumentContentDTO {
+  const blocks: ContentBlockDTO[] = doc
+    .getArray<BlockMeta>(BLOCKS_KEY)
+    .toArray()
+    .filter((block) => Boolean(block?.id))
+    .map((block) => ({
+      id: block.id,
+      type: block.type,
+      text: textOfFragment(doc.getXmlFragment(blockFragmentName(block.id))),
+    }));
+  return { id, title: doc.getText(TITLE_KEY).toString(), blocks };
 }
 
 /** A row as it comes back from a raw SQL query: snake_case, dates as strings. */
@@ -382,6 +429,75 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
    * through ancestor gating, which is the honest outcome — silently flipping
    * the document public to "fix" that would leak it.
    */
+  /*
+   * Read the document's text.
+   *
+   * Served from the LIVE document through a direct connection, not from the
+   * `ystate` column: that column lags by the store debounce, so a read straight
+   * after a write would return the previous version.
+   */
+  .get('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => readContent(id, doc));
+    return c.json(content);
+  })
+
+  /*
+   * Replace the document's blocks, and optionally its title.
+   *
+   * This is the one place REST touches content, and it does it by joining the
+   * document as a participant rather than writing `ystate`. Writing the column
+   * directly would be wrong twice over: a connected editor would overwrite it
+   * on its next save, and open editors would never see the change at all.
+   *
+   * Anyone who can reach the document may write to it — the same rule the
+   * collaboration socket applies, since that is exactly what this is.
+   */
+  .put('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => {
+      // One transaction, so collaborators see the new version appear at once
+      // rather than watching it be rebuilt block by block.
+      doc.transact(() => {
+        const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
+        blocks.delete(0, blocks.length);
+        // Old fragments are left behind deliberately: Yjs cannot drop a root
+        // type, and keeping them is what makes undo able to bring text back.
+        writeBlocks(doc, body.data.blocks);
+        if (body.data.title !== undefined) {
+          const title = doc.getText(TITLE_KEY);
+          title.delete(0, title.length);
+          title.insert(0, body.data.title);
+        }
+      });
+      return readContent(id, doc);
+    });
+    return c.json(content);
+  })
+
+  /** Append blocks, leaving what is already there alone. */
+  .post('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => {
+      doc.transact(() => writeBlocks(doc, body.data.blocks));
+      return readContent(id, doc);
+    });
+    return c.json(content);
+  })
+
   .patch('/:id/parent', async (c) => {
     const userId = c.get('userId');
     const id = c.req.param('id');
