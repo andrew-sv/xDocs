@@ -9,6 +9,7 @@ import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
 import { api } from './lib/api';
 import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
+import { documentIdFromLocation, documentPath } from './lib/route';
 
 /**
  * The trail ending at `doc`, reached from `trail`.
@@ -207,6 +208,68 @@ export function App() {
     if (locked) return;
     void refreshTrash();
   }, [locked, refreshTrash]);
+
+  /*
+   * The open document lives in the URL, /doc/<id> (see lib/route.ts).
+   *
+   * `selected` stays the source of truth inside the app; the URL follows it,
+   * and is read back only at load and on Back/Forward. `routeReady` holds the
+   * sync off until a document named at load has been resolved — otherwise the
+   * empty first render would rewrite /doc/<id> to / before it could open.
+   * `missingId` is a URL naming a document that cannot be opened (deleted, not
+   * shared with you, or never existed); it stays in the address bar, so a
+   * reload after the owner shares it still works.
+   */
+  const [routeReady, setRouteReady] = useState(() => documentIdFromLocation() === null);
+  const [missingId, setMissingId] = useState<string | null>(null);
+  const routeSeq = useRef(0);
+
+  const openFromLocation = useCallback(async () => {
+    const seq = ++routeSeq.current;
+    const id = documentIdFromLocation();
+    if (!id) {
+      setSelected(null);
+      setTrail([]);
+      setMissingId(null);
+      setRouteReady(true);
+      return;
+    }
+    try {
+      const [doc, path] = await Promise.all([api.getDocument(id), api.getDocumentPath(id)]);
+      // Back pressed twice quickly: only the latest location may land.
+      if (seq !== routeSeq.current) return;
+      // Drilled in, as a search result opens: breadcrumbs are the real path,
+      // and the sidebar shows this document's sub-documents.
+      setTrail([...path, doc]);
+      setSelected(doc);
+      setMissingId(null);
+    } catch (e) {
+      if (seq !== routeSeq.current) return;
+      // Not signed in yet: the gate shows, and this runs again after sign-in.
+      if (e instanceof UnauthorizedError || e instanceof ForbiddenError) return;
+      setSelected(null);
+      setTrail([]);
+      setMissingId(id);
+    }
+    setRouteReady(true);
+  }, []);
+
+  useEffect(() => {
+    void openFromLocation();
+    const onPopState = () => void openFromLocation();
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [openFromLocation]);
+
+  const selectedDocId = selected?.id ?? null;
+  useEffect(() => {
+    if (!routeReady) return;
+    // Opening a real document leaves a not-found URL behind.
+    if (selectedDocId) setMissingId(null);
+    const target = documentPath(selectedDocId ?? missingId);
+    // Equal when the change came from the URL itself (load, Back, Forward).
+    if (window.location.pathname !== target) window.history.pushState(null, '', target);
+  }, [routeReady, selectedDocId, missingId]);
 
   const openTrash = useCallback(async () => {
     setTrashOpen(true);
@@ -458,6 +521,8 @@ export function App() {
         onSignedIn={() => {
           setDeniedReason(null);
           void refresh();
+          // A link opened while signed out is resolved now.
+          void openFromLocation();
         }}
       />
     );
@@ -509,7 +574,19 @@ export function App() {
           onOpenSubDocument={(child) => openSubDocument(selected, child)}
         />
       )}
-      {!error && !selected && (
+      {!error && !selected && !routeReady && (
+        // A link is being opened: not the "select a document" prompt, which
+        // would flash up before the document it names.
+        <main className="editor empty-state" data-testid="doc-opening">
+          <span className="spinner" role="status" aria-label="Opening document" />
+        </main>
+      )}
+      {!error && !selected && routeReady && missingId && (
+        <main className="editor empty-state" data-testid="doc-not-found">
+          <p>This document doesn’t exist, has been deleted, or isn’t shared with you.</p>
+        </main>
+      )}
+      {!error && !selected && routeReady && !missingId && (
         <main className="editor empty-state">
           <p>Select a document, or create one to start writing.</p>
         </main>
