@@ -14,13 +14,13 @@ import { useYArray } from '../hooks/useYArray';
 import type { CommandId } from '../lib/commands';
 import { exportDocumentToPdf } from '../lib/exportPdf';
 import { getToken } from '../lib/auth';
+import { COLLAB_URL } from '../lib/collab';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { TitleEditor } from './TitleEditor';
 import { VisibilityToggle } from './VisibilityToggle';
 import { Toast } from './Toast';
 
-const COLLAB_URL = import.meta.env.VITE_COLLAB_URL ?? 'ws://localhost:3001';
 
 type Status = 'connecting' | 'connected' | 'disconnected';
 

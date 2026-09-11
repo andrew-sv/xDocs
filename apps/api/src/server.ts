@@ -36,7 +36,8 @@ const app = new Hono<{ Variables: Variables }>()
       allowHeaders: ['content-type', 'authorization'],
       // content-disposition carries an attachment's filename, which the SPA
       // reads when it saves a download it fetched itself.
-      exposeHeaders: ['set-auth-token', 'content-disposition'],
+      // x-list-as-of lets the sidebar order list responses (routes/documents.ts).
+      exposeHeaders: ['set-auth-token', 'content-disposition', 'x-list-as-of'],
     }),
   )
   // Health stays public so a platform healthcheck works without a session.

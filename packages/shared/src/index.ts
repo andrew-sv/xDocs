@@ -226,3 +226,14 @@ export const attachmentSchema = z.object({
   href: z.string(),
 });
 export type AttachmentDTO = z.infer<typeof attachmentSchema>;
+
+/**
+ * A collab channel that carries no content, only a signal.
+ *
+ * The server sends DOCUMENTS_CHANGED on it whenever the document list may have
+ * changed — a document created, moved, renamed, deleted or restored, by anyone
+ * or anything — and open apps refetch their sidebar over REST. The ping holds
+ * no data, so REST's access rules still decide what each person gets to see.
+ */
+export const WORKSPACE_DOC_NAME = 'workspace';
+export const DOCUMENTS_CHANGED = 'documents-changed';

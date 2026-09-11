@@ -9,6 +9,7 @@ import { LoginGate } from './components/LoginGate';
 import { Toast } from './components/Toast';
 import { api } from './lib/api';
 import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
+import { useDocumentsChanged } from './lib/collab';
 import { documentIdFromLocation, documentPath } from './lib/route';
 
 /**
@@ -160,26 +161,61 @@ export function App() {
   latestLevel.current = currentParentId;
 
   /*
-   * Sequence number for list responses, bumped by every local change.
+   * Titles typed in this tab that the server has not stored yet.
    *
-   * The level guard above is not enough on its own: creating a document while
-   * the FIRST list fetch is still in flight is the same level, so the response
-   * lands afterwards and overwrites the row that was just added — the new
-   * document disappears from the sidebar even though it exists and is open.
-   * Any local mutation invalidates whatever is in flight.
+   * The title column is written on the collab server's debounced save, so a
+   * list fetched in the meantime still carries the old title — and since any
+   * change anywhere now triggers a refetch (#22), one can land at any moment.
+   * Applied as-is, it flipped a title being typed back to "Untitled". An entry
+   * goes once a fetched row agrees with it, or after 30s as a backstop (the
+   * save itself pings, so agreement normally comes within seconds).
    */
-  const listSeq = useRef(0);
+  const unsavedTitles = useRef(new Map<string, { title: string; at: number }>());
+  const withUnsavedTitles = useCallback((rows: DocumentDTO[]): DocumentDTO[] => {
+    const pending = unsavedTitles.current;
+    return rows.map((row) => {
+      const typed = pending.get(row.id);
+      if (!typed) return row;
+      if (row.title === typed.title || Date.now() - typed.at > 30_000) {
+        pending.delete(row.id);
+        return row;
+      }
+      return { ...row, title: typed.title };
+    });
+  }, []);
+
+  /*
+   * Which list responses may still be applied, beyond the level guard above.
+   *
+   * - A local change (`invalidateList`) retires every fetch already in flight:
+   *   creating a document while the FIRST list fetch is outstanding is the
+   *   same level, so that response would land afterwards and wipe the row just
+   *   added — the new document open but missing from the sidebar.
+   * - Otherwise a list older than the one on screen is dropped. "Older" is the
+   *   server's read time (x-list-as-of), not the order fetches were sent:
+   *   under load the server answers out of order, and a list sent later but
+   *   read earlier used to land last and hide a document just restored.
+   *
+   * Fetches deliberately do not cancel each other. Every ping from the server
+   * starts one (#22), and when each new fetch retired the last, a steady
+   * stream of pings meant no response ever landed and the sidebar froze.
+   */
+  const changeSeq = useRef(0);
+  const shownList = useRef<{ level: string | null; asOf: number } | null>(null);
   const invalidateList = () => {
-    listSeq.current += 1;
+    changeSeq.current += 1;
   };
 
   const refresh = useCallback(async () => {
-    const seq = ++listSeq.current;
+    const changesAtStart = changeSeq.current;
     try {
-      const rows = await api.listDocuments(currentParentId);
-      // A newer navigation, or a local change, has overtaken this response.
-      if (latestLevel.current !== currentParentId || listSeq.current !== seq) return;
-      setDocuments(rows);
+      const { rows, asOf } = await api.listLevel(currentParentId);
+      if (latestLevel.current !== currentParentId) return; // navigated elsewhere
+      if (changeSeq.current !== changesAtStart) return; // fetched before a local change
+      const shown = shownList.current;
+      if (shown?.level === currentParentId && asOf < shown.asOf) return; // older than what is shown
+      shownList.current = { level: currentParentId, asOf };
+      setDocuments(withUnsavedTitles(rows));
       setDocumentsParentId(currentParentId);
       setLocked(false);
       setError(null);
@@ -198,7 +234,7 @@ export function App() {
       }
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [currentParentId]);
+  }, [currentParentId, withUnsavedTitles]);
 
   useEffect(() => {
     void refresh();
@@ -270,6 +306,40 @@ export function App() {
     // Equal when the change came from the URL itself (load, Back, Forward).
     if (window.location.pathname !== target) window.history.pushState(null, '', target);
   }, [routeReady, selectedDocId, missingId]);
+
+  /*
+   * Documents change elsewhere too — other people, other tabs, scripts, the
+   * MCP server — and the sidebar used to show them only after a reload (#22).
+   * Both refetches are safe to fire at any time: refresh() drops a list that a
+   * local change has overtaken, or that is older than the one on screen.
+   */
+  const refreshFromElsewhere = useCallback(() => {
+    void refresh();
+    void refreshTrash();
+  }, [refresh, refreshTrash]);
+
+  /*
+   * Live: the server pings when the list may have changed. Only the list is
+   * refetched — pings mostly come from other people, whose changes never touch
+   * this user's trash, and every ping reaches every open app.
+   */
+  const refreshList = useCallback(() => void refresh(), [refresh]);
+  useDocumentsChanged(!locked, refreshList);
+
+  // Backstop for anything the pings missed, e.g. while the laptop slept, and
+  // for the trash, which pings leave alone.
+  useEffect(() => {
+    if (locked) return;
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') refreshFromElsewhere();
+    };
+    window.addEventListener('focus', onReturn);
+    document.addEventListener('visibilitychange', onReturn);
+    return () => {
+      window.removeEventListener('focus', onReturn);
+      document.removeEventListener('visibilitychange', onReturn);
+    };
+  }, [locked, refreshFromElsewhere]);
 
   const openTrash = useCallback(async () => {
     setTrashOpen(true);
@@ -365,7 +435,7 @@ export function App() {
     let current = true;
     api.listDocuments(selectedId).then(
       (docs) => {
-        if (current) setFetchedChildren({ parentId: selectedId, docs });
+        if (current) setFetchedChildren({ parentId: selectedId, docs: withUnsavedTitles(docs) });
       },
       // Links are a convenience; the sidebar still reaches every child.
       () => {},
@@ -416,6 +486,7 @@ export function App() {
   // The DB copy of the title is only written on Hocuspocus's debounce, so keep
   // the sidebar in step with what the author is typing right now.
   const handleTitleChange = useCallback((id: string, title: string) => {
+    unsavedTitles.current.set(id, { title, at: Date.now() });
     setDocuments((prev) =>
       prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
     );

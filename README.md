@@ -244,6 +244,20 @@ document can be read and written back unchanged.
 { "blocks": ["A paragraph", { "type": "code", "text": "if (x) {\n  y();\n}" }] }
 ```
 
+### A live sidebar
+
+A document created, moved, renamed or deleted anywhere — by another person,
+another tab, a script or the MCP server — shows up in every open sidebar without
+a reload. After each successful change through the documents API, and whenever
+a save changes a title, the server broadcasts a `documents-changed` ping on a
+read-only `workspace` collab channel, and open apps refetch their level over
+REST. The ping carries no ids or titles, since everyone signed in hears it, so
+what each person sees is still decided by the REST access rules.
+
+Pings sent while a socket is down are lost, so a reconnect, and returning to the
+tab, also refetch. List responses carry `x-list-as-of`, the server time they
+were read, and the sidebar never replaces a list with an older one.
+
 ### Search
 
 The search box at the top of the sidebar searches titles and block text
