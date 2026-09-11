@@ -300,6 +300,7 @@ export function DocumentEditor({
                 onDropBlock={handleDrop}
                 onNudge={handleNudge}
                 undoManager={undoManager}
+                documentId={doc.id}
                 onInsertBelow={handleInsertBelow}
                 onRunCommand={(id) => void runCommand(id)}
                 registerEditor={registerEditor}

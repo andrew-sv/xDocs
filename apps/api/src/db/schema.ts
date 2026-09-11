@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { customType, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 /** Raw Yjs update payload. drizzle has no first-class bytea, so declare it. */
@@ -114,3 +114,36 @@ export const apiKeys = pgTable(
 );
 
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
+
+/**
+ * Files attached to a document, stored in Postgres itself.
+ *
+ * Kept in the database rather than an object store so there is no second
+ * system, credential or access model: a file is reachable exactly when its
+ * document is. The size cap (MAX_ATTACHMENT_BYTES) is what keeps that sane.
+ *
+ * The document holds only a link to `/api/attachments/<id>`; the bytes never
+ * enter the CRDT.
+ */
+export const attachments = pgTable(
+  'attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /*
+     * ON DELETE CASCADE, unlike documents.parent_id: a document row is only
+     * ever hard-deleted by the permanent-delete route, and its files should go
+     * with it. A soft delete leaves them in place, so a restore brings them
+     * back along with the links to them.
+     */
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    contentType: text('content_type').notNull(),
+    size: integer('size').notNull(),
+    data: bytea('data').notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('attachments_document_idx').on(table.documentId)],
+);
