@@ -3,6 +3,7 @@ import type {
   DocumentDTO,
   SearchResultDTO,
   Visibility,
+  WriteBlockInput,
 } from '@xdocs/shared';
 
 export type XdocsClientOptions = { baseUrl: string; token: string };
@@ -70,14 +71,14 @@ export class XdocsClient {
     });
   }
 
-  replaceContent(id: string, blocks: string[], title?: string): Promise<DocumentContentDTO> {
+  replaceContent(id: string, blocks: WriteBlockInput[], title?: string): Promise<DocumentContentDTO> {
     return this.request<DocumentContentDTO>(`/documents/${id}/content`, {
       method: 'PUT',
       body: JSON.stringify({ blocks, ...(title === undefined ? {} : { title }) }),
     });
   }
 
-  appendContent(id: string, blocks: string[]): Promise<DocumentContentDTO> {
+  appendContent(id: string, blocks: WriteBlockInput[]): Promise<DocumentContentDTO> {
     return this.request<DocumentContentDTO>(`/documents/${id}/content`, {
       method: 'POST',
       body: JSON.stringify({ blocks }),

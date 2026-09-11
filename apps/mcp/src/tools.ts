@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/server';
-import type { DocumentContentDTO, DocumentDTO } from '@xdocs/shared';
+import type { ContentBlockDTO, DocumentContentDTO, DocumentDTO } from '@xdocs/shared';
 import * as z from 'zod';
 import { XdocsClient, XdocsError, type XdocsClientOptions } from './client.js';
 
@@ -14,9 +14,16 @@ import { XdocsClient, XdocsError, type XdocsClientOptions } from './client.js';
 
 const documentIdSchema = z.string().describe('The document id (a uuid).');
 const blocksSchema = z
-  .array(z.string())
+  .array(
+    z.union([
+      z.string(),
+      z.object({ type: z.literal('code'), text: z.string() }),
+    ]),
+  )
   .describe(
-    'Paragraphs, in order. A block is a single node, so a newline inside one becomes a separate block.',
+    'Blocks, in order. A string is a paragraph; a newline inside one starts another paragraph block. ' +
+      '{"type": "code", "text": "..."} is ONE code block that keeps its newlines and indentation and ' +
+      'renders in a monospace font — use it for code, commands, config and ASCII diagrams.',
   );
 
 /** Documents are summarised as text so the model can read a result directly. */
@@ -25,8 +32,14 @@ function describeDocument(doc: DocumentDTO): string {
   return `${doc.title || 'Untitled'} — ${doc.id} (${doc.visibility}, ${where})`;
 }
 
+function describeBlock(block: ContentBlockDTO, index: number): string {
+  // Fenced, so code reads as code and its layout survives the numbering.
+  const text = block.type === 'code' ? `\`\`\`\n${block.text}\n\`\`\`` : block.text;
+  return `${index + 1}. ${text}`;
+}
+
 function describeContent(content: DocumentContentDTO): string {
-  const body = content.blocks.map((block, i) => `${i + 1}. ${block.text}`).join('\n');
+  const body = content.blocks.map(describeBlock).join('\n');
   return `# ${content.title || 'Untitled'}\n(${content.id})\n\n${body || '(empty)'}`;
 }
 
@@ -90,7 +103,8 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
     'read_document',
     {
       title: 'Read a document',
-      description: 'Read a document’s title and the text of every block, in order.',
+      description:
+        'Read a document’s title and the text of every block, in order. Code blocks are shown fenced with ```.',
       inputSchema: z.object({ id: documentIdSchema }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -99,7 +113,10 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
       return ok(describeContent(content), {
         id: content.id,
         title: content.title,
-        blocks: content.blocks.map((block) => block.text),
+        // The same shape the write tools take, so a read can be written back.
+        blocks: content.blocks.map((block) =>
+          block.type === 'code' ? { type: 'code', text: block.text } : block.text,
+        ),
       });
     },
   );

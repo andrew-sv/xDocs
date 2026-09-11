@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApiKeyDTO, CreatedApiKeyDTO } from '@xdocs/shared';
 import { api } from '../lib/api';
 
@@ -16,6 +16,30 @@ export function ApiKeysDialog({ onClose }: Props) {
    */
   const [created, setCreated] = useState<CreatedApiKeyDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const keyValueRef = useRef<HTMLElement>(null);
+
+  // "Copied" is confirmation, not state: it reverts so a second copy reads as one.
+  useEffect(() => {
+    if (copy !== 'copied') return;
+    const timer = setTimeout(() => setCopy('idle'), 2000);
+    return () => clearTimeout(timer);
+  }, [copy]);
+
+  async function copyKey(key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopy('copied');
+    } catch {
+      /*
+       * The Clipboard API can be refused (permissions, an insecure origin), and
+       * this is the only chance to take the key. Selecting it leaves a manual
+       * copy one keystroke away rather than a drag across a long string.
+       */
+      if (keyValueRef.current) window.getSelection()?.selectAllChildren(keyValueRef.current);
+      setCopy('failed');
+    }
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -45,6 +69,7 @@ export function ApiKeysDialog({ onClose }: Props) {
     try {
       const key = await api.createApiKey(trimmed);
       setCreated(key);
+      setCopy('idle');
       setName('');
       await refresh();
     } catch (e) {
@@ -100,9 +125,24 @@ export function ApiKeysDialog({ onClose }: Props) {
             <p className="dialog-warning">
               Copy this now — it is stored hashed and cannot be shown again.
             </p>
-            <code className="key-value" data-testid="key-value">
-              {created.key}
-            </code>
+            <div className="key-value-row">
+              <code className="key-value" data-testid="key-value" ref={keyValueRef}>
+                {created.key}
+              </code>
+              <button
+                type="button"
+                className="key-copy"
+                data-testid="key-copy"
+                onClick={() => void copyKey(created.key)}
+              >
+                {copy === 'copied' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            {copy === 'failed' && (
+              <p className="dialog-warning" role="alert" data-testid="key-copy-failed">
+                The browser blocked copying. The key is selected — copy it with your keyboard.
+              </p>
+            )}
           </div>
         )}
 

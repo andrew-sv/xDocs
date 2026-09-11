@@ -71,6 +71,32 @@ test.describe('nested documents', () => {
     await expect(page.locator(`[data-doc-id="${doc.id}"]`)).toHaveCount(1);
   });
 
+  test('clicking the open document again does not add another crumb', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await expect(page.getByTestId('crumb')).toHaveCount(1);
+
+    // The "Current" row opens documents like any other row, but it is already
+    // the last crumb — drilling into it again stacked a duplicate each click.
+    const current = page.getByTestId('current-doc').getByTestId('doc-open');
+    await current.click();
+    await current.click();
+    await expect(page.getByTestId('crumb')).toHaveCount(1);
+    await expect(page.getByTestId('crumbs')).toContainText(doc.title);
+  });
+
+  test('the Current row reopens the parent after adding a sub-document', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await page.getByTestId('add-document').click();
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
+
+    // The child is open but the sidebar is still at the parent's level, so the
+    // parent is the Current row: clicking it opens it without going deeper.
+    await page.getByTestId('current-doc').getByTestId('doc-open').click();
+    await expect(page.getByTestId('title-input')).toHaveValue(doc.title);
+    await expect(page.getByTestId('crumb')).toHaveCount(1);
+    await expect(page.getByTestId('doc-list').getByTestId('doc-row')).toHaveCount(1);
+  });
+
   test('a sub-document inherits the parent visibility', async ({ page, doc }) => {
     await openDocument(page, doc);
     await page.getByTestId('visibility-toggle').click();

@@ -39,6 +39,37 @@ test.describe('API keys', () => {
     await expect(page.getByTestId('keys-dialog')).not.toContainText(key!);
   });
 
+  test('the Copy button puts the key on the clipboard', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.getByTestId('key-name').fill('copied');
+    await page.getByTestId('key-create').click();
+    const key = (await page.getByTestId('key-value').textContent())!;
+
+    await page.getByTestId('key-copy').click();
+    await expect(page.getByTestId('key-copy')).toHaveText('Copied');
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(key);
+    // The confirmation reverts, so a second copy is visibly a second copy.
+    await expect(page.getByTestId('key-copy')).toHaveText('Copy', { timeout: 5_000 });
+  });
+
+  test('when the browser refuses the clipboard, the key is selected instead', async ({ page }) => {
+    await page.getByTestId('key-name').fill('refused');
+    await page.getByTestId('key-create').click();
+    const key = (await page.getByTestId('key-value').textContent())!;
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'writeText', {
+        value: () => Promise.reject(new DOMException('Denied', 'NotAllowedError')),
+      });
+    });
+    await page.getByTestId('key-copy').click();
+
+    await expect(page.getByTestId('key-copy-failed')).toBeVisible();
+    await expect(page.getByTestId('key-copy')).toHaveText('Copy');
+    // This is the only chance to take the key, so leave it one keystroke away.
+    expect(await page.evaluate(() => window.getSelection()?.toString().trim())).toBe(key);
+  });
+
   test('a key can be revoked and leaves the list', async ({ page }) => {
     await page.getByTestId('key-name').fill('temporary');
     await page.getByTestId('key-create').click();

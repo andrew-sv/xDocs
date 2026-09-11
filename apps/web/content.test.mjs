@@ -133,5 +133,76 @@ ck('an over-long title is a 400', (await putContent(owner, doc.id, { title: 'x'.
 ck('an empty block list is allowed (it empties the document)', (await putContent(owner, doc.id, { blocks: [] })).status === 200);
 ck('and the document is then empty', (await getContent(owner, doc.id).then((r) => r.json())).blocks.length === 0);
 
+// --- code blocks --------------------------------------------------------------
+const codeDoc = await create(owner, 'Code block test');
+const diagram = '+-----+\n|  a  |  indented\n+-----+';
+const withCode = await putContent(owner, codeDoc.id, {
+  blocks: ['Before', { type: 'code', text: diagram }, 'After'],
+}).then((r) => r.json());
+ck('a code block is written as ONE block, newlines and all', withCode.blocks.length === 3);
+ck('it reads back as code', withCode.blocks[1].type === 'code');
+ck('with its newlines and indentation intact', withCode.blocks[1].text === diagram);
+ck(
+  'the strings around it are still paragraphs',
+  withCode.blocks[0].type === 'paragraph' && withCode.blocks[2].type === 'paragraph',
+);
+
+const codeClient = connect(codeDoc.id, owner);
+await codeClient.synced;
+await sleep(300);
+const codeFragment = (index) =>
+  codeClient.doc.getXmlFragment(`block-${codeClient.doc.getArray('blocks').get(index).id}`);
+// y-tiptap discards an element whose name the editor's schema does not know,
+// so the node name is the contract, not an implementation detail.
+ck('a client receives it as a TipTap codeBlock node', codeFragment(1).get(0)?.nodeName === 'codeBlock');
+ck('holding the text verbatim', textOf(codeClient.doc)[1] === diagram);
+
+// A code block made in the editor has the same shape, and "paragraph" meta.
+const typed = codeFragment(0);
+const typedCode = new Y.XmlElement('codeBlock');
+const typedText = new Y.XmlText();
+typedText.insert(0, 'made\n  in the editor');
+typedCode.insert(0, [typedText]);
+typed.delete(0, typed.length);
+typed.insert(0, [typedCode]);
+// And a block holding prose AND code is not "code" — its text is not verbatim.
+const mixed = codeFragment(2);
+const mixedCode = new Y.XmlElement('codeBlock');
+const mixedText = new Y.XmlText();
+mixedText.insert(0, 'x = 1');
+mixedCode.insert(0, [mixedText]);
+mixed.insert(mixed.length, [mixedCode]);
+await sleep(600);
+
+const reread2 = await getContent(owner, codeDoc.id).then((r) => r.json());
+ck('an editor-made code block reads as code', reread2.blocks[0].type === 'code');
+ck('with its text', reread2.blocks[0].text === 'made\n  in the editor');
+ck('a block mixing a paragraph and code reads as a paragraph', reread2.blocks[2].type === 'paragraph');
+codeClient.provider.destroy();
+
+const codeAppended = await postContent(owner, codeDoc.id, { blocks: [{ type: 'code', text: 'appended()' }] })
+  .then((r) => r.json());
+ck('a code block can be appended', codeAppended.blocks.at(-1).type === 'code' && codeAppended.blocks.at(-1).text === 'appended()');
+
+const emptyCode = await putContent(owner, codeDoc.id, { blocks: [{ type: 'code', text: '' }] }).then((r) => r.json());
+ck('an empty code block is still a code block', emptyCode.blocks.length === 1 && emptyCode.blocks[0].type === 'code');
+
+const objectParagraph = await putContent(owner, codeDoc.id, { blocks: [{ type: 'paragraph', text: 'a\nb' }] })
+  .then((r) => r.json());
+ck('the object form of a paragraph splits on newlines like a string', objectParagraph.blocks.map((b) => b.text).join('|') === 'a|b');
+
+// What a read returns can be written straight back.
+await putContent(owner, codeDoc.id, { blocks: ['prose', { type: 'code', text: 'a\n  b' }] });
+const roundTrip = await getContent(owner, codeDoc.id).then((r) => r.json());
+const rewritten = await putContent(owner, codeDoc.id, { blocks: roundTrip.blocks }).then((r) => r.json());
+ck(
+  'a read round-trips through a write unchanged',
+  JSON.stringify(rewritten.blocks.map(({ type, text }) => [type, text])) ===
+    JSON.stringify(roundTrip.blocks.map(({ type, text }) => [type, text])),
+);
+
+ck('an unknown block type is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status === 400);
+ck('a code block without text is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400);
+
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);
