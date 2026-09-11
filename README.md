@@ -190,6 +190,7 @@ turn one leaked credential into access that revoking the original does not undo.
 | `GET /api/documents/search?q=` | full-text, with ancestor paths and snippets |
 | `GET /api/documents/trash` | deletion roots, with descendant counts |
 | `GET /api/documents/:id` | metadata |
+| `GET /api/documents/:id/path` | its ancestors, root first; empty at the top level |
 | `GET /api/documents/:id/content` | title and block text |
 | `PUT /api/documents/:id/content` | replace blocks, optionally the title |
 | `POST /api/documents/:id/content` | append blocks |
