@@ -1,11 +1,49 @@
 import { useEditorState, type Editor } from '@tiptap/react';
+import { useEffect, useState } from 'react';
 
 type Action = {
   label: string;
   title: string;
   isActive: boolean;
+  disabled?: boolean;
   run: () => void;
 };
+
+/**
+ * What a typed link should point at. People type "example.com", not
+ * "https://example.com", and without a scheme the browser would resolve it as
+ * a path on the app itself.
+ */
+export function normalizeLink(input: string): string {
+  const url = input.trim();
+  if (!url) return '';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('/') || url.startsWith('#')) return url;
+  if (/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(url)) return `mailto:${url}`;
+  return `https://${url}`;
+}
+
+/**
+ * Set, change or remove the link at the selection. Returns false for an
+ * address Link refuses (javascript: and the like), leaving the text untouched.
+ */
+function applyLink(editor: Editor, draft: string): boolean {
+  const href = normalizeLink(draft);
+  if (!href) return editor.chain().focus().extendMarkRange('link').unsetLink().run();
+  // Link's own check, so what is accepted here is exactly what it will render.
+  if (!editor.can().setLink({ href })) return false;
+  if (editor.state.selection.empty && !editor.isActive('link')) {
+    // Nothing selected to wrap: the address itself becomes the text.
+    return editor
+      .chain()
+      .focus()
+      .insertContent([
+        { type: 'text', text: draft.trim(), marks: [{ type: 'link', attrs: { href } }] },
+        { type: 'text', text: ' ' },
+      ])
+      .run();
+  }
+  return editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+}
 
 /**
  * Turn the selection into ONE code block.
@@ -35,8 +73,26 @@ function toggleCodeBlock(editor: Editor): boolean {
     .run();
 }
 
-export function Toolbar({ editor }: { editor: Editor }) {
+type Props = {
+  editor: Editor;
+  /** Opens the file picker; the upload itself lives in BlockEditor, which outlives this. */
+  onAttachFile: () => void;
+};
+
+export function Toolbar({ editor, onAttachFile }: Props) {
   const chain = () => editor.chain().focus();
+  // The address being typed; null while the link field is closed.
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const [linkRefused, setLinkRefused] = useState(false);
+
+  // Going back to the text abandons an unsubmitted link.
+  useEffect(() => {
+    const close = () => setLinkDraft(null);
+    editor.on('focus', close);
+    return () => {
+      editor.off('focus', close);
+    };
+  }, [editor]);
 
   /*
    * useEditor does NOT re-render on every transaction in TipTap v3, so calling
@@ -57,10 +113,11 @@ export function Toolbar({ editor }: { editor: Editor }) {
       bulletList: e.isActive('bulletList'),
       orderedList: e.isActive('orderedList'),
       blockquote: e.isActive('blockquote'),
+      link: e.isActive('link'),
     }),
   });
 
-  const actions: Action[] = [
+  const format: Action[] = [
     { label: 'B', title: 'Bold', isActive: active.bold, run: () => chain().toggleBold().run() },
     { label: 'I', title: 'Italic', isActive: active.italic, run: () => chain().toggleItalic().run() },
     { label: 'S', title: 'Strike', isActive: active.strike, run: () => chain().toggleStrike().run() },
@@ -78,22 +135,98 @@ export function Toolbar({ editor }: { editor: Editor }) {
     { label: '”', title: 'Blockquote', isActive: active.blockquote, run: () => chain().toggleBlockquote().run() },
   ];
 
+  // A code block's text cannot carry marks, so neither a link nor an
+  // attachment (which is a link) can go inside one.
+  const insert: Action[] = [
+    {
+      label: '🔗',
+      title: 'Link',
+      isActive: active.link,
+      disabled: active.codeBlock,
+      run: () => {
+        setLinkRefused(false);
+        setLinkDraft((editor.getAttributes('link').href as string | undefined) ?? '');
+      },
+    },
+    { label: '📎', title: 'Attach file', isActive: false, disabled: active.codeBlock, run: onAttachFile },
+  ];
+
+  const submitLink = () => {
+    if (linkDraft === null) return;
+    if (applyLink(editor, linkDraft)) setLinkDraft(null);
+    else setLinkRefused(true);
+  };
+
+  /*
+   * Two floating groups: formatting at the left edge, inserting at the right.
+   * The toolbar floats over the block above, and one row of every button
+   * reached past that block's middle, so clicking into it there hit a button
+   * instead. Split, the middle stays clear however the groups grow.
+   */
   return (
-    <div className="toolbar">
-      {actions.map((a) => (
-        <button
-          key={a.title}
-          type="button"
-          title={a.title}
-          data-testid={`tb-${a.title.toLowerCase().replace(/\s+/g, '-')}`}
-          className={a.isActive ? 'tb active' : 'tb'}
-          // Keep focus in the editor so the command applies to the live selection.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={a.run}
-        >
-          {a.label}
-        </button>
-      ))}
-    </div>
+    <>
+      <div className="toolbar">{format.map(renderButton)}</div>
+      {linkDraft === null ? (
+        <div className="toolbar toolbar-insert">{insert.map(renderButton)}</div>
+      ) : (
+        <div className="toolbar toolbar-insert toolbar-link">
+          <input
+            className="link-input"
+            data-testid="link-input"
+            aria-label="Link address"
+            aria-invalid={linkRefused}
+            placeholder="Paste or type a link"
+            autoFocus
+            value={linkDraft}
+            onChange={(event) => {
+              setLinkDraft(event.target.value);
+              setLinkRefused(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                submitLink();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                editor.commands.focus();
+              }
+            }}
+          />
+          <button type="button" className="tb" data-testid="tb-link-apply" onClick={submitLink}>
+            Apply
+          </button>
+          {active.link && (
+            <button
+              type="button"
+              className="tb"
+              data-testid="tb-link-remove"
+              onClick={() => {
+                editor.chain().focus().extendMarkRange('link').unsetLink().run();
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function renderButton(a: Action) {
+  return (
+    <button
+      key={a.title}
+      type="button"
+      title={a.title}
+      data-testid={`tb-${a.title.toLowerCase().replace(/\s+/g, '-')}`}
+      className={a.isActive ? 'tb active' : 'tb'}
+      disabled={a.disabled}
+      // Keep focus in the editor so the command applies to the live selection.
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={a.run}
+    >
+      {a.label}
+    </button>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from './auth.js';
 import { identityFromApiKey, isApiKey } from './apiKeys.js';
 import { collabConfiguration, setCollabServer } from './collab.js';
+import { attachmentsRoute } from './routes/attachments.js';
 import { documentsRoute } from './routes/documents.js';
 import { keysRoute } from './routes/keys.js';
 
@@ -33,7 +34,9 @@ const app = new Hono<{ Variables: Variables }>()
       // Explicit origin is required once credentials are allowed.
       credentials: true,
       allowHeaders: ['content-type', 'authorization'],
-      exposeHeaders: ['set-auth-token'],
+      // content-disposition carries an attachment's filename, which the SPA
+      // reads when it saves a download it fetched itself.
+      exposeHeaders: ['set-auth-token', 'content-disposition'],
     }),
   )
   // Health stays public so a platform healthcheck works without a session.
@@ -74,7 +77,9 @@ const app = new Hono<{ Variables: Variables }>()
     return next();
   })
   .route('/api/documents', documentsRoute)
-  .route('/api/keys', keysRoute);
+  .route('/api/keys', keysRoute)
+  // Spans two prefixes: uploads under /documents/:id, downloads by their own id.
+  .route('/api', attachmentsRoute);
 
 const handleHttp = getRequestListener(app.fetch);
 

@@ -105,6 +105,11 @@ lookup filters on it, so a revoked key stops working on the next request.
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
 
+`attachments` holds uploaded files as bytea, capped at `MAX_ATTACHMENT_BYTES`.
+Its `document_id` FK is `ON DELETE CASCADE` — the opposite of `parent_id` — so
+files go with a permanent delete and survive a soft one. Access is exactly the
+document's (`canAccessDocument`); there is no separate file permission.
+
 ## Non-obvious constraints
 
 Each of these caused a real bug. Changing them silently breaks things.
@@ -160,6 +165,21 @@ Each of these caused a real bug. Changing them silently breaks things.
   direct connection hangs off `server.hocuspocus`, not `server`.** `Server` is
   the transport; `Hocuspocus` is the document layer. It is set at startup rather
   than imported because the server is built from `collab.ts`'s own config.
+- **Never answer 403 for "you cannot reach this document".** The web client's
+  `send()` treats any 403 as "this account is not allowed in", drops the token
+  and shows the login gate. Refusals on a document or file are 404, which also
+  keeps ids unprobeable.
+- **An attachment is a Link mark whose href is `/api/attachments/<id>`, not a
+  node.** The name stays searchable text, and an older client renders a link
+  instead of dropping an unknown node. The href is origin-relative and needs a
+  bearer token, so `AttachmentLinks` (priority 1000, above StarterKit's Link)
+  claims the click and downloads through `fetch`; without it Link would
+  `window.open()` the href onto the SPA. `e2e/links.spec.ts` fails if it goes.
+- **The formatting toolbar floats over the block above, so keep its left group
+  short of that block's middle.** Link and attach sit in a separate right-hand
+  group for this reason: one row of every button covered the middle, and a click
+  into the block above landed on a button — `e2e/editor.spec.ts` "Shift+Enter
+  inserts a block below" caught it.
 - **API keys are recognised by their `xdk_` prefix before Better Auth sees the
   request**, and resolve to a plain userId — so ownership and visibility rules
   need no notion of "a key did this". `/api/keys` is session-only for the same

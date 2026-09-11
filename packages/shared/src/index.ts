@@ -192,3 +192,37 @@ export const updateVisibilitySchema = z.object({
   visibility: visibilitySchema,
 });
 export type CreateDocumentInput = z.input<typeof createDocumentSchema>;
+
+/**
+ * Upload cap for attachments. Files are stored in Postgres (see the
+ * `attachments` table), which is only reasonable while they stay small.
+ */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Where a document links to one of its attachments.
+ *
+ * Origin-relative on purpose: the SPA and the API sit on different hosts, and
+ * which ones differs per environment, so an absolute URL written into a
+ * document would break on the next move. The editor intercepts clicks on these
+ * and downloads through the API with the caller's token — a bearer credential
+ * cannot ride along on a plain link.
+ */
+export function attachmentHref(id: string): string {
+  return `/api/attachments/${id}`;
+}
+
+/** Matches an `attachmentHref`, capturing the id. */
+export const ATTACHMENT_HREF = /^\/api\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+export const attachmentSchema = z.object({
+  id: z.uuid(),
+  documentId: z.uuid(),
+  filename: z.string(),
+  contentType: z.string(),
+  size: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+  /** What to link to from the document; see `attachmentHref`. */
+  href: z.string(),
+});
+export type AttachmentDTO = z.infer<typeof attachmentSchema>;

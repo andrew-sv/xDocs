@@ -7,6 +7,7 @@ import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
+import { AttachmentLinks, attachFile } from '../lib/attachments';
 import { BlockKeymap } from '../lib/blockKeymap';
 import { CommandPalette, type PaletteState } from '../lib/commandPalette';
 import type { CommandId } from '../lib/commands';
@@ -41,6 +42,8 @@ type Props = {
   registerEditor: (blockId: string, editor: Editor | null) => void;
   /** Document-wide undo stack, shared by every block. */
   undoManager: Y.UndoManager;
+  /** The document files are attached to. */
+  documentId: string;
 };
 
 function DragDots() {
@@ -73,10 +76,23 @@ export function BlockEditor({
   onRunCommand,
   registerEditor,
   undoManager,
+  documentId,
 }: Props) {
   const [palette, setPalette] = useState<PaletteState | null>(null);
   const [focused, setFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  /*
+   * Upload progress and attachment errors. Shown under the block, not in the
+   * toolbar: the toolbar unmounts whenever focus leaves the block, which the
+   * file picker alone is enough to do.
+   */
+  const [note, setNote] = useState<{ kind: 'progress' | 'error'; text: string } | null>(null);
+  useEffect(() => {
+    if (note?.kind !== 'error') return;
+    const timer = setTimeout(() => setNote(null), 6000);
+    return () => clearTimeout(timer);
+  }, [note]);
   const fragment = useMemo(
     () => ydoc.getXmlFragment(blockFragmentName(block.id)),
     [ydoc, block.id],
@@ -126,12 +142,22 @@ export function BlockEditor({
           getKeyHandler: () => paletteKeyHandler.current,
         }),
         CollaborationCaret.configure({ provider, user: localUser }),
+        AttachmentLinks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
       ],
-      onFocus: () => setFocused(true),
-      onBlur: () => setFocused(false),
     },
     [block.id, ydoc, provider, fragment, undoManager],
   );
+
+  async function handleFile(file: File) {
+    if (!editor) return;
+    setNote({ kind: 'progress', text: `Uploading “${file.name}”…` });
+    try {
+      await attachFile(editor, documentId, file);
+      setNote(null);
+    } catch (e) {
+      setNote({ kind: 'error', text: e instanceof Error ? e.message : 'Upload failed.' });
+    }
+  }
 
   // Expose this block's editor so the parent can read its HTML when exporting.
   useEffect(() => {
@@ -226,9 +252,43 @@ export function BlockEditor({
           </button>
         )}
       </div>
-      <div className="block-body">
-        {editor && focused && <Toolbar editor={editor} />}
+      <div
+        className="block-body"
+        /*
+         * Focus is tracked for the whole body, not just the editor, so the
+         * toolbar survives focus moving into its own link field — tracking the
+         * editor alone unmounted the toolbar the moment that field was focused.
+         */
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+        }}
+      >
+        {editor && focused && (
+          <Toolbar editor={editor} onAttachFile={() => fileInputRef.current?.click()} />
+        )}
         <EditorContent editor={editor} />
+        <input
+          ref={fileInputRef}
+          type="file"
+          hidden
+          data-testid="attach-input"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // Cleared so picking the same file again still fires a change.
+            event.target.value = '';
+            if (file) void handleFile(file);
+          }}
+        />
+        {note && (
+          <p
+            className={`block-note block-note-${note.kind}`}
+            role={note.kind === 'error' ? 'alert' : 'status'}
+            data-testid="block-note"
+          >
+            {note.text}
+          </p>
+        )}
         {palette && (
           <CommandPaletteMenu
             state={palette}

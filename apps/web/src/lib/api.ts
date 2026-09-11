@@ -1,5 +1,6 @@
 import type {
   ApiKeyDTO,
+  AttachmentDTO,
   CreatedApiKeyDTO,
   DocumentDTO,
   SearchResultDTO,
@@ -11,12 +12,12 @@ import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth'
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** An authenticated fetch, with auth failures handled the same way everywhere. */
+async function send(path: string, init?: RequestInit): Promise<Response> {
   const token = getToken();
   const res = await fetch(`${API_BASE}/api${path}`, {
     ...init,
     headers: {
-      'content-type': 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -33,8 +34,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ForbiddenError(body?.error);
   }
+  return res;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await send(path, {
+    ...init,
+    headers: { 'content-type': 'application/json', ...init?.headers },
+  });
   if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path} failed: ${res.status}`);
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+/** The server's own explanation where there is one — "Files are limited to 10 MB." */
+async function failure(res: Response, fallback: string): Promise<Error> {
+  const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+  return new Error(typeof body?.error === 'string' ? body.error : `${fallback} (${res.status})`);
+}
+
+/** RFC 6266 filename*, then plain filename. */
+function filenameFrom(disposition: string | null): string | null {
+  if (!disposition) return null;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1]!);
+    } catch {
+      // Fall through to the ASCII form.
+    }
+  }
+  return /filename="([^"]*)"/i.exec(disposition)?.[1] ?? null;
 }
 
 export const api = {
@@ -71,4 +100,17 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ visibility }),
     }),
+  /** Multipart, so no JSON content type: fetch writes the boundary itself. */
+  uploadAttachment: async (documentId: string, file: File): Promise<AttachmentDTO> => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const res = await send(`/documents/${documentId}/attachments`, { method: 'POST', body: form });
+    if (!res.ok) throw await failure(res, 'Upload failed');
+    return (await res.json()) as AttachmentDTO;
+  },
+  downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null }> => {
+    const res = await send(`/attachments/${id}`);
+    if (!res.ok) throw await failure(res, 'Download failed');
+    return { blob: await res.blob(), filename: filenameFrom(res.headers.get('content-disposition')) };
+  },
 };

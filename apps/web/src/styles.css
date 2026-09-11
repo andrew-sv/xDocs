@@ -123,6 +123,19 @@ body {
 .tb { min-width: 26px; height: 26px; border: 1px solid transparent; background: none; border-radius: 5px; cursor: pointer; font-size: 12px; color: var(--muted); }
 .tb:hover { background: var(--panel); }
 .tb.active { background: #fff; border-color: var(--border); color: var(--accent); }
+.tb:disabled { opacity: 0.35; cursor: default; background: none; }
+/* Insert actions sit at the block's right edge; see Toolbar for why. */
+.toolbar-insert { left: auto; right: 10px; }
+/* The link field replaces the insert buttons in place. */
+.toolbar-link { flex-wrap: nowrap; align-items: center; }
+.link-input { width: 260px; height: 26px; border: 1px solid var(--border); border-radius: 5px; padding: 0 8px; font: inherit; font-size: 13px; outline: none; }
+.link-input:focus { border-color: var(--accent); }
+.link-input[aria-invalid='true'] { border-color: #e5484d; }
+.toolbar-link .tb { padding: 0 8px; color: var(--text); }
+
+/* Upload progress and attachment errors, under the block they belong to. */
+.block-note { margin: 2px 0 4px; font-size: 12px; color: var(--muted); }
+.block-note-error { color: #e5484d; }
 
 .add-block { margin-top: 12px; border: 1px dashed var(--border); background: none; border-radius: 6px; padding: 8px 14px; cursor: pointer; color: var(--muted); font: inherit; font-size: 13px; }
 .add-block:hover { color: var(--text); border-color: var(--muted); }
@@ -132,6 +145,9 @@ body {
 .tiptap p { margin: 0.35em 0; }
 .tiptap h1 { font-size: 24px; margin: 0.5em 0 0.25em; }
 .tiptap h2 { font-size: 19px; margin: 0.5em 0 0.25em; }
+.tiptap a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* An attachment is a link to one of the document's files; mark it as a file. */
+.tiptap a[href^='/api/attachments/']::before { content: '📎'; margin-right: 2px; font-size: 0.9em; }
 /*
  * Inline code — see the pre rule below for code blocks.
  *
