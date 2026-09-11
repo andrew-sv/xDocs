@@ -1,4 +1,4 @@
-import type { DocumentDTO, TrashEntryDTO } from '@xdocs/shared';
+import type { DocumentDTO, SearchResultDTO, TrashEntryDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentEditor } from './components/DocumentEditor';
 import { ConfirmDialog } from './components/ConfirmDialog';
@@ -39,6 +39,14 @@ export function App() {
   const [trash, setTrash] = useState<TrashEntryDTO[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashLoading, setTrashLoading] = useState(false);
+  /*
+   * Search. `query` is what is typed; `results` lags it by a debounce, so the
+   * sidebar shows results for a query that may already be a keystroke old —
+   * which is why an in-flight response is discarded unless it is still current.
+   */
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResultDTO[]>([]);
+  const [searching, setSearching] = useState(false);
   /** Permanent deletion is confirmed first — nothing restores it afterwards. */
   const [pendingPurge, setPendingPurge] = useState<TrashEntryDTO | null>(null);
   const { data: session } = useSession();
@@ -60,7 +68,48 @@ export function App() {
     setTrail([]);
     setTrash([]);
     setTrashOpen(false);
+    setQuery('');
+    setResults([]);
     setLocked(true);
+  }, []);
+
+  /*
+   * Debounced search.
+   *
+   * The guard is the same shape as the level guard above and exists for the
+   * same reason: responses can arrive out of order, and an older one landing
+   * last would show results for a query the user has already moved past.
+   */
+  const latestQuery = useRef('');
+  useEffect(() => {
+    const trimmed = query.trim();
+    latestQuery.current = trimmed;
+    if (trimmed.length === 0) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const hits = await api.search(trimmed);
+        if (latestQuery.current !== trimmed) return;
+        setResults(hits);
+      } catch {
+        if (latestQuery.current === trimmed) setResults([]);
+      } finally {
+        if (latestQuery.current === trimmed) setSearching(false);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  /** Open a hit where it actually lives, so the breadcrumb is its real path. */
+  const openSearchResult = useCallback((result: SearchResultDTO) => {
+    setQuery('');
+    setResults([]);
+    setTrail([...result.path, result.document]);
+    setSelected(result.document);
   }, []);
 
   const refreshTrash = useCallback(async () => {
@@ -84,11 +133,26 @@ export function App() {
   const latestLevel = useRef<string | null>(currentParentId);
   latestLevel.current = currentParentId;
 
+  /*
+   * Sequence number for list responses, bumped by every local change.
+   *
+   * The level guard above is not enough on its own: creating a document while
+   * the FIRST list fetch is still in flight is the same level, so the response
+   * lands afterwards and overwrites the row that was just added — the new
+   * document disappears from the sidebar even though it exists and is open.
+   * Any local mutation invalidates whatever is in flight.
+   */
+  const listSeq = useRef(0);
+  const invalidateList = () => {
+    listSeq.current += 1;
+  };
+
   const refresh = useCallback(async () => {
+    const seq = ++listSeq.current;
     try {
       const rows = await api.listDocuments(currentParentId);
-      // A newer navigation has already happened; this response is obsolete.
-      if (latestLevel.current !== currentParentId) return;
+      // A newer navigation, or a local change, has overtaken this response.
+      if (latestLevel.current !== currentParentId || listSeq.current !== seq) return;
       setDocuments(rows);
       setDocumentsParentId(currentParentId);
       setLocked(false);
@@ -154,6 +218,7 @@ export function App() {
   async function createDocument() {
     // Created at whatever level the sidebar is showing.
     const doc = await api.createDocument('Untitled', currentParentId);
+    invalidateList();
     setDocuments((prev) => [doc, ...prev]);
     setSelected(doc);
   }
@@ -177,6 +242,7 @@ export function App() {
   /** "+ Add document" inside a document: create a child and drill into it. */
   const addSubDocument = useCallback(async (parent: DocumentDTO) => {
     const child = await api.createDocument('Untitled', parent.id);
+    invalidateList();
     /*
      * The parent now has a child, and both the trail and the list hold DTO
      * snapshots — without this they keep reporting hasChildren: false, so the
@@ -209,6 +275,7 @@ export function App() {
 
   async function deleteDocument(doc: DocumentDTO) {
     await api.deleteDocument(doc.id);
+    invalidateList();
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     setSelected((prev) => (prev?.id === doc.id ? null : prev));
     // If the deleted document is on the path, walk back above it — staying
@@ -295,6 +362,16 @@ export function App() {
         onCloseTrash={() => setTrashOpen(false)}
         onRestoreFromTrash={(entry) => void restoreFromTrash(entry)}
         onPurge={(entry) => setPendingPurge(entry)}
+        query={query}
+        results={results}
+        searching={searching}
+        onQueryChange={(next) => {
+          setQuery(next);
+          // Searching spans the whole tree, so staying in trash mode while
+          // results render underneath would be showing two lists at once.
+          if (next.trim().length > 0) setTrashOpen(false);
+        }}
+        onOpenSearchResult={openSearchResult}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (

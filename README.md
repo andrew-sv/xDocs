@@ -71,7 +71,7 @@ Three layers, deliberately:
   teardown and keybinding bugs.
 - **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
-- **`pnpm e2e`** — 64 Chromium tests over the real stack: real clicks, real
+- **`pnpm e2e`** — 71 Chromium tests over the real stack: real clicks, real
   Cmd+Z, real HTML5 drag, two browser contexts editing one document.
 
 The browser suite exists because the first two layers cannot see layout, focus
@@ -92,6 +92,39 @@ refused by the collab server until restored.
 
 Deleting a document cascades to its sub-documents under one shared timestamp,
 which is what makes the whole subtree restorable together.
+
+### Search
+
+The search box at the top of the sidebar searches titles and block text
+together, ranked with titles weighted above body text, and shows each hit with
+the path it lives under and a snippet of the matching line.
+
+Block content is a Yjs update in `ystate` — opaque to Postgres, so it cannot be
+indexed and answering a query would mean decoding every document. So the collab
+store hook mirrors the plain text into `documents.content_text` on each save,
+exactly as it already did for `title`, and a generated `tsvector` column indexes
+both. Both mirrors are derived; `ystate` stays authoritative.
+
+Results are restricted to the caller's visible tree by the same recursive rule
+the listing and the collab handshake use — a search that checked only the
+document itself would be a read hole straight through visibility.
+
+Two smaller things worth knowing:
+
+- Results update as you type because the last word is matched as a prefix. That
+  query is OR'd with `plainto_tsquery` over the raw input, which lexes it the
+  way the index was built — Postgres reads `invoice-2026-draft` as `invoice`,
+  `-2026`, `draft`, hyphen as minus sign, so a hand-split query for `2026`
+  would otherwise never match it.
+- Anything typed becomes searchable a second or two later, when Hocuspocus
+  flushes the document to Postgres, not on the keystroke.
+
+Documents saved before search existed have no mirror until someone edits them,
+so there is a one-off backfill that decodes `ystate` and fills the column:
+
+```bash
+pnpm --filter @xdocs/api backfill:search    # safe to re-run
+```
 
 ### Trash
 

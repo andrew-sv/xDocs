@@ -1,4 +1,5 @@
-import type { DocumentDTO, TrashEntryDTO } from '@xdocs/shared';
+import type { DocumentDTO, SearchResultDTO, TrashEntryDTO } from '@xdocs/shared';
+import { SearchResults } from './SearchResults';
 import { TrashList } from './TrashList';
 
 type SignedInUser = { name?: string | null; email: string; image?: string | null };
@@ -25,6 +26,11 @@ type Props = {
   onCloseTrash: () => void;
   onRestoreFromTrash: (entry: TrashEntryDTO) => void;
   onPurge: (entry: TrashEntryDTO) => void;
+  query: string;
+  results: SearchResultDTO[];
+  searching: boolean;
+  onQueryChange: (query: string) => void;
+  onOpenSearchResult: (result: SearchResultDTO) => void;
 };
 
 function DocumentRow({
@@ -99,7 +105,13 @@ export function DocumentList({
   onCloseTrash,
   onRestoreFromTrash,
   onPurge,
+  query,
+  results,
+  searching,
+  onQueryChange,
+  onOpenSearchResult,
 }: Props) {
+  const searchActive = query.trim().length > 0;
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -108,7 +120,33 @@ export function DocumentList({
           + New
         </button>
       </div>
-      {trashOpen ? (
+      <div className="search-box">
+        <input
+          type="search"
+          className="search-input"
+          data-testid="search-input"
+          placeholder="Search documents"
+          aria-label="Search documents"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          onKeyDown={(event) => {
+            // Escape clears rather than blurs: with a search open, backing out
+            // of it is what you want the key for.
+            if (event.key === 'Escape' && query.length > 0) {
+              event.preventDefault();
+              onQueryChange('');
+            }
+          }}
+        />
+      </div>
+      {searchActive ? (
+        <SearchResults
+          query={query.trim()}
+          results={results}
+          loading={searching}
+          onOpen={onOpenSearchResult}
+        />
+      ) : trashOpen ? (
         <TrashList
           entries={trash}
           loading={trashLoading}

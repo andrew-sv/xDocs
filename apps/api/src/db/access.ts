@@ -16,7 +16,7 @@ import { getDb } from './index.js';
  * collaboration handshake all go through here, so there is one rule rather
  * than three that can drift apart.
  */
-const visibleTreeSql = (userId: string) => sql`
+export const visibleTreeSql = (userId: string) => sql`
   WITH RECURSIVE visible AS (
     SELECT id, parent_id
       FROM documents

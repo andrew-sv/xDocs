@@ -90,6 +90,13 @@ matching it, and `GET /documents/trash` treats a deleted document whose parent
 does *not* share it as a deletion root. Do not "tidy" the cascade into
 per-row timestamps — both would break.
 
+`content_text` is a second denormalised mirror, written by the same store hook
+as `title`, holding the plain text of every block so search has something
+Postgres can index. `search` is a **generated** tsvector over `title` (weight A)
+and `content_text` (weight B) with a GIN index — generated so it cannot drift.
+Neither mirror is authoritative; `ystate` is. Documents saved before the column
+existed are filled by `pnpm --filter @xdocs/api backfill:search`.
+
 `DELETE /documents/:id/permanent` is the only hard delete in the codebase. Its
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
@@ -126,6 +133,19 @@ Each of these caused a real bug. Changing them silently breaks things.
   .block-body` drops editors out of hit-testing so ProseMirror cannot intercept
   the drop. The handle is a `span[role=button]`, since draggable `<button>` is
   unreliable across browsers.
+- **Build the search query with Postgres's own lexer, not by splitting words.**
+  `to_tsvector` reads `invoice-2026-draft` as `invoice`, `-2026`, `draft` — the
+  hyphen becomes a minus sign — so a hand-split query for `2026` never matches
+  it, and every hyphenated or numeric title silently fails to be findable.
+  `GET /documents/search` ORs `plainto_tsquery` (same lexer as the index) with a
+  hand-built prefix query (search-as-you-type, which plainto cannot do). Each
+  side ANDs its own terms, so the OR does not loosen matching.
+- **Every list response must be discardable.** `refresh()` in `App.tsx` takes a
+  sequence number that any local mutation bumps, on top of the level guard. The
+  level guard alone misses same-level races: creating a document while the first
+  list fetch is in flight lets that response land afterwards and wipe the new
+  row — the document is open but absent from the sidebar. See the spec in
+  `e2e/stale.spec.ts`, which has to fetch early and deliver late to reproduce it.
 - **Yjs has no atomic move.** Reordering is delete+insert in one transaction, so
   two people moving the same block at once can duplicate or lose it. Accepted
   tradeoff; do not "fix" it by inventing a move op.
