@@ -333,6 +333,17 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .block-actions { display: flex; gap: 8px; }
 .add-document { border-style: solid; }
 
+/* Sub-document links at the foot of a document */
+.sub-docs { max-width: 720px; margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sub-docs-title { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.sub-docs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.sub-doc-link { display: flex; align-items: center; gap: 8px; max-width: 100%; border: 0; background: none; padding: 5px 8px; margin-left: -8px; border-radius: 6px; font: inherit; color: var(--text); text-align: left; cursor: pointer; }
+.sub-doc-link svg { flex: none; color: var(--muted); }
+.sub-doc-link:hover { background: var(--panel); }
+.sub-doc-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sub-doc-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.sub-doc-link:hover .sub-doc-title { text-decoration-color: var(--muted); }
+
 /* Sidebar section labels and the pinned current document */
 .section-label { display: block; padding: 8px 12px 2px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: #a9a59e; }
 .current-doc { border-bottom: 1px solid var(--border); }
