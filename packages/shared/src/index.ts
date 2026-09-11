@@ -128,6 +128,11 @@ export const createDocumentSchema = z.object({
   parentId: z.uuid().nullish(),
 });
 
+/** Reparenting. null means "make it top level". */
+export const moveDocumentSchema = z.object({
+  parentId: z.uuid().nullable(),
+});
+
 export const updateVisibilitySchema = z.object({
   visibility: visibilitySchema,
 });

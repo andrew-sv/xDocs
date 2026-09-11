@@ -49,6 +49,13 @@ export const api = {
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
   search: (q: string) =>
     request<SearchResultDTO[]>(`/documents/search?q=${encodeURIComponent(q)}`),
+  /** Every visible document at once — used by the move picker. */
+  listAllDocuments: () => request<DocumentDTO[]>('/documents?flat=1'),
+  moveDocument: (id: string, parentId: string | null) =>
+    request<DocumentDTO>(`/documents/${id}/parent`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parentId }),
+    }),
   listApiKeys: () => request<ApiKeyDTO[]>('/keys'),
   createApiKey: (name: string) =>
     request<CreatedApiKeyDTO>('/keys', { method: 'POST', body: JSON.stringify({ name }) }),

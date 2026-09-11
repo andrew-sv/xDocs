@@ -19,6 +19,7 @@ type Props = {
   onSelect: (doc: DocumentDTO) => void;
   onCreate: () => void;
   onDelete: (doc: DocumentDTO) => void;
+  onMove: (doc: DocumentDTO) => void;
   trash: TrashEntryDTO[];
   trashOpen: boolean;
   trashLoading: boolean;
@@ -39,11 +40,13 @@ function DocumentRow({
   selected,
   onSelect,
   onDelete,
+  onMove,
 }: {
   doc: DocumentDTO;
   selected: boolean;
   onSelect: (doc: DocumentDTO) => void;
   onDelete: (doc: DocumentDTO) => void;
+  onMove: (doc: DocumentDTO) => void;
 }) {
   return (
     <li
@@ -71,7 +74,18 @@ function DocumentRow({
           <span className="doc-date">{new Date(doc.updatedAt).toLocaleString()}</span>
         </span>
       </button>
-      {/* Only the owner may delete; the API enforces this too. */}
+      {/* Only the owner may move or delete; the API enforces this too. */}
+      {doc.isOwner && (
+        <button
+          type="button"
+          className="doc-move"
+          data-testid="doc-move"
+          title="Move document"
+          onClick={() => onMove(doc)}
+        >
+          ⇄
+        </button>
+      )}
       {doc.isOwner && (
         <button
           type="button"
@@ -99,6 +113,7 @@ export function DocumentList({
   onSelect,
   onCreate,
   onDelete,
+  onMove,
   trash,
   trashOpen,
   trashLoading,
@@ -192,6 +207,7 @@ export function DocumentList({
               selected={current.id === selectedId}
               onSelect={onSelect}
               onDelete={onDelete}
+              onMove={onMove}
             />
           </ul>
           <span className="section-label">Sub-documents</span>
@@ -213,6 +229,7 @@ export function DocumentList({
                 selected={doc.id === selectedId}
                 onSelect={onSelect}
                 onDelete={onDelete}
+                onMove={onMove}
               />
             ))}
             {documents.length === 0 && (

@@ -2,6 +2,7 @@ import type { DocumentDTO, SearchResultDTO, TrashEntryDTO } from '@xdocs/shared'
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiKeysDialog } from './components/ApiKeysDialog';
 import { DocumentEditor } from './components/DocumentEditor';
+import { MoveDialog } from './components/MoveDialog';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DocumentList } from './components/DocumentList';
 import { LoginGate } from './components/LoginGate';
@@ -51,6 +52,10 @@ export function App() {
   /** Permanent deletion is confirmed first — nothing restores it afterwards. */
   const [pendingPurge, setPendingPurge] = useState<TrashEntryDTO | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  /** The document being moved, plus every visible document to move it into. */
+  const [pendingMove, setPendingMove] = useState<DocumentDTO | null>(null);
+  const [moveCandidates, setMoveCandidates] = useState<DocumentDTO[]>([]);
+  const [moveLoading, setMoveLoading] = useState(false);
   const { data: session } = useSession();
 
   const handleVisibilityChange = useCallback(
@@ -275,6 +280,39 @@ export function App() {
     );
   }, []);
 
+  const startMove = useCallback(async (doc: DocumentDTO) => {
+    setPendingMove(doc);
+    setMoveLoading(true);
+    try {
+      setMoveCandidates(await api.listAllDocuments());
+    } finally {
+      setMoveLoading(false);
+    }
+  }, []);
+
+  const moveDocument = useCallback(
+    async (doc: DocumentDTO, parentId: string | null) => {
+      const moved = await api.moveDocument(doc.id, parentId);
+      invalidateList();
+      /*
+       * The document has left the level being shown, so drop it from the list
+       * and walk the trail back above it — staying "inside" a document that is
+       * no longer on this path would show a level nobody navigated to.
+       */
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
+      setTrail((prev) => {
+        const index = prev.findIndex((d) => d.id === doc.id);
+        if (index === -1) return prev;
+        const next = prev.slice(0, index);
+        setSelected(next.length > 0 ? next[next.length - 1]! : null);
+        return next;
+      });
+      setSelected((prev) => (prev?.id === doc.id ? moved : prev));
+      await refresh();
+    },
+    [refresh],
+  );
+
   async function deleteDocument(doc: DocumentDTO) {
     await api.deleteDocument(doc.id);
     invalidateList();
@@ -357,6 +395,7 @@ export function App() {
         onNavigateCrumb={navigateToCrumb}
         onCreate={() => void createDocument()}
         onDelete={(doc) => setPendingDelete(doc)}
+        onMove={(doc) => void startMove(doc)}
         trash={trash}
         trashOpen={trashOpen}
         trashLoading={trashLoading}
@@ -410,6 +449,19 @@ export function App() {
         />
       )}
       {keysOpen && <ApiKeysDialog onClose={() => setKeysOpen(false)} />}
+      {pendingMove && (
+        <MoveDialog
+          document={pendingMove}
+          candidates={moveCandidates}
+          loading={moveLoading}
+          onCancel={() => setPendingMove(null)}
+          onMove={(parentId) => {
+            const doc = pendingMove;
+            setPendingMove(null);
+            void moveDocument(doc, parentId);
+          }}
+        />
+      )}
       {pendingPurge && (
         <ConfirmDialog
           title="Delete forever"

@@ -2,6 +2,7 @@ import {
   BLOCKS_KEY,
   TITLE_KEY,
   createDocumentSchema,
+  moveDocumentSchema,
   updateVisibilitySchema,
   type BlockMeta,
   toTsQuery,
@@ -13,7 +14,13 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
-import { canAccessDocument, subtreeIds, visibleDocumentIds, visibleTreeSql } from '../db/access.js';
+import {
+  canAccessDocument,
+  subtreeIds,
+  visibleDocumentIds,
+  visibleTreeSql,
+  wouldCreateCycle,
+} from '../db/access.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
@@ -361,6 +368,60 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (!row) return c.json({ error: 'Not found' }, 404);
     const withChildren = await childBearing([row.id]);
     return c.json(toDTO(row, userId, withChildren.has(row.id)));
+  })
+
+  /*
+   * Reparent a document, or move it to the top level with parentId: null.
+   *
+   * Owner-only, like delete and visibility: this is structural, not editorial.
+   * Anyone who can see a public document may edit its text, but rearranging
+   * someone else's tree is a different thing.
+   *
+   * Note what this deliberately does NOT do: it leaves visibility alone. Moving
+   * a public document under a private parent makes it unreachable to others
+   * through ancestor gating, which is the honest outcome — silently flipping
+   * the document public to "fix" that would leak it.
+   */
+  .patch('/:id/parent', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = moveDocumentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    const parentId = body.data.parentId;
+
+    const [row] = await getDb()
+      .select({ createdBy: documents.createdBy })
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
+    if (!row) return c.json({ error: 'Document not found' }, 404);
+    // 404 for a document you cannot see, 403 for one you can but do not own —
+    // the same split the other owner-only routes use.
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+    if (row.createdBy !== userId) return c.json({ error: 'Only the owner can move a document' }, 403);
+
+    if (parentId) {
+      if (!(await canAccessDocument(userId, parentId))) {
+        return c.json({ error: 'Destination not found' }, 404);
+      }
+      /*
+       * A cycle is unreachable through the UI but trivial over the API, and it
+       * would be permanent: every recursive query here walks parent links, so a
+       * loop would spin rather than return, taking the listing and the access
+       * check down with it.
+       */
+      if (await wouldCreateCycle(id, parentId)) {
+        return c.json({ error: 'A document cannot be moved inside itself' }, 400);
+      }
+    }
+
+    const [moved] = await getDb()
+      .update(documents)
+      .set({ parentId, updatedAt: new Date() })
+      .where(eq(documents.id, id))
+      .returning(columns);
+
+    const withChildren = await childBearing([id]);
+    return c.json(toDTO(moved!, userId, withChildren.has(id)));
   })
 
   .patch('/:id/visibility', async (c) => {
