@@ -8,6 +8,10 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -106,5 +110,6 @@ ck('stranger loses it from their list', !(await listIds(stranger)).includes(doc.
 ck('stranger is refused the websocket again', !(await canConnect(stranger, doc.id)));
 
 await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(owner) });
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

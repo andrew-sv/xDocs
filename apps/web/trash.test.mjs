@@ -6,6 +6,10 @@
  * refused for everyone else.
  */
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 let fail = 0;
@@ -83,5 +87,6 @@ await del(owner, liveDoc.id);
 
 // cleanup
 await fetch(`${API}/api/documents/${parent.id}/permanent`, { method: 'DELETE', headers: H(owner) });
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

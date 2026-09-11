@@ -215,6 +215,14 @@ dependency upgrade that reintroduces it fails loudly. Do not delete those.
 
 Notes for writing tests here:
 
+- **Tests purge what they create.** Both server suites run against the dev
+  database, and leftovers showed up in real sidebars. An integration suite
+  calls `trackCreatedDocuments()` from `test-cleanup.mjs` before its first
+  request and `await tracker.purge()` before exiting; documents made in another
+  process (the MCP server) are registered with `tracker.add()`. In the browser
+  suite the `doc` and `page` fixtures do it. Do not sweep "everything the test
+  account owns" instead: e2e and integration share that account and can run at
+  once.
 - `Y.UndoManager` merges changes within its 500ms `captureTimeout` into one
   stack item — call `clear()` after setup, or stack-depth assertions mislead.
 - In Playwright, wait for the new block to be focused before typing

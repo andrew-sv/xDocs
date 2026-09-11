@@ -10,6 +10,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { authHeaders, createDisposableUser, signInForTests } from '../web/test-auth.mjs';
+import { trackCreatedDocuments } from '../web/test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +79,9 @@ const created = await call(client, 'create_document', {
   blocks: ['First paragraph from MCP.', `It mentions ${NEEDLE}.`],
 });
 const id = text(created).match(/([0-9a-f-]{36})/)?.[1];
+// Created by the server process, so the fetch wrapper never saw it. The key
+// acts as the session's user, so the session can purge it.
+if (id) tracker.add(id, session);
 ck('a document can be created', Boolean(id));
 
 const read = await call(client, 'read_document', { id });
@@ -124,6 +131,7 @@ ck('the document appears in a listing', text(listed).includes(id));
 
 const child = await call(client, 'create_document', { title: `Child of ${NEEDLE}`, parentId: id });
 const childId = text(child).match(/([0-9a-f-]{36})/)?.[1];
+if (childId) tracker.add(childId, session);
 const children = await call(client, 'list_documents', { parentId: id });
 ck('children can be listed by parent', text(children).includes(childId));
 const flat = await call(client, 'list_documents', { flat: true });
@@ -189,5 +197,6 @@ await client.close();
 await revokeKey(session, ownerKey.id);
 await revokeKey(stranger.token, strangerKey.id);
 
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);
