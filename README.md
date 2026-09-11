@@ -71,7 +71,7 @@ Three layers, deliberately:
   teardown and keybinding bugs.
 - **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
-- **`pnpm e2e`** — 71 Chromium tests over the real stack: real clicks, real
+- **`pnpm e2e`** — 82 Chromium tests over the real stack: real clicks, real
   Cmd+Z, real HTML5 drag, two browser contexts editing one document.
 
 The browser suite exists because the first two layers cannot see layout, focus
@@ -92,6 +92,53 @@ refused by the collab server until restored.
 
 Deleting a document cascades to its sub-documents under one shared timestamp,
 which is what makes the whole subtree restorable together.
+
+### The HTTP API
+
+Everything the app does over REST can be driven by a script. Create a key under
+**API keys** in the sidebar and send it as a bearer token:
+
+```bash
+curl -H "Authorization: Bearer xdk_…" http://localhost:3001/api/documents?flat=1
+```
+
+A key acts entirely as its owner — same allowlist, same visibility rules, same
+ownership checks — rather than being a separate principal with its own grants.
+Only the SHA-256 is stored, so the key is shown once at creation and cannot be
+recovered; revoking one takes effect on the next request. Keys cannot manage
+keys: `/api/keys` answers 403 to a key, because a key that could mint keys would
+turn one leaked credential into access that revoking the original does not undo.
+
+| Route | Does |
+|---|---|
+| `GET /api/documents` | one level (`?parent=<id>`), or the whole visible tree with `?flat=1` |
+| `POST /api/documents` | create; `parentId` nests it and copies that parent's visibility |
+| `GET /api/documents/search?q=` | full-text, with ancestor paths and snippets |
+| `GET /api/documents/trash` | deletion roots, with descendant counts |
+| `GET /api/documents/:id` | metadata |
+| `GET /api/documents/:id/content` | title and block text |
+| `PUT /api/documents/:id/content` | replace blocks, optionally the title |
+| `POST /api/documents/:id/content` | append blocks |
+| `PATCH /api/documents/:id/parent` | move it, `null` for the top level |
+| `PATCH /api/documents/:id/visibility` | owner only |
+| `DELETE /api/documents/:id` | soft delete, cascading |
+| `POST /api/documents/:id/restore` | undo that |
+| `DELETE /api/documents/:id/permanent` | destroy it, trash only |
+| `GET`/`POST`/`DELETE /api/keys` | manage keys; session only |
+
+#### Content goes through the CRDT, not around it
+
+The content routes are the only place REST touches text, and they do it by
+**joining the document as a participant** through Hocuspocus's direct
+connection. Writing the `ystate` column would be wrong twice over: a connected
+editor would overwrite it on its next save, and open editors would never see the
+change. Because the write is a real CRDT edit, text written by a script appears
+in someone's open editor as it lands, and merges with what they are typing.
+
+Blocks are plain text, deliberately. Rich text lives in ProseMirror nodes inside
+the CRDT, and round-tripping that over HTTP would need the TipTap schema on the
+server. A block is a single node here, so a newline inside one becomes another
+block — the same shape typing it would have produced.
 
 ### Search
 
@@ -145,6 +192,18 @@ back somewhere unreachable — restored and still gone. Restore therefore clears
 and its `ystate`, which is the entire content. It is confirmation-gated, worded
 as irreversible because it is, and refused (403) on a document that is not
 already in the trash — so nothing live can be destroyed in one step.
+
+### Moving documents
+
+`⇄` on a sidebar row reparents a document; its sub-documents go with it.
+Owner-only, like delete and visibility — anyone who can see a public document
+may edit its text, but rearranging someone else's tree is different.
+
+Visibility is deliberately left alone by a move. A public document under a
+private parent stops being visible to others through ancestor gating, which is
+the honest outcome; flipping the document public to "fix" it would leak it. The
+dialog says so before you move anything, and hides the document's own subtree
+rather than offering destinations the server would refuse.
 
 Blocks reorder by dragging the handle in the left gutter, or by focusing that
 handle and pressing arrow up/down.

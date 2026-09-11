@@ -103,10 +103,63 @@ export function toTsQuery(raw: string): string | null {
   return words.map((word, i) => (i === words.length - 1 ? `${word}:*` : word)).join(' & ');
 }
 
+/** An API key as listed. The key itself is returned once, at creation. */
+export const apiKeySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  /** First characters of the key, so a row is identifiable without the secret. */
+  prefix: z.string(),
+  createdAt: z.iso.datetime(),
+  lastUsedAt: z.iso.datetime().nullable(),
+});
+export type ApiKeyDTO = z.infer<typeof apiKeySchema>;
+
+/** Creation is the only response that ever contains the key itself. */
+export const createdApiKeySchema = apiKeySchema.extend({ key: z.string() });
+export type CreatedApiKeyDTO = z.infer<typeof createdApiKeySchema>;
+
+export const createApiKeySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
   /** When set, the new document becomes a child and copies its visibility. */
   parentId: z.uuid().nullish(),
+});
+
+/**
+ * A block as the REST API exposes it.
+ *
+ * Text only, deliberately: the editor's rich text lives in ProseMirror nodes
+ * inside the CRDT, and round-tripping that through HTTP would need the TipTap
+ * schema on the server. Reading returns the words; writing sets them.
+ */
+export const contentBlockSchema = z.object({
+  id: z.string(),
+  type: blockTypeSchema,
+  text: z.string(),
+});
+export type ContentBlockDTO = z.infer<typeof contentBlockSchema>;
+
+export const documentContentSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  blocks: z.array(contentBlockSchema),
+});
+export type DocumentContentDTO = z.infer<typeof documentContentSchema>;
+
+/** Body for writing content: replace everything, or append to it. */
+export const writeContentSchema = z.object({
+  /** Omitted leaves the title alone; only a replace may set it. */
+  title: z.string().trim().max(200).optional(),
+  blocks: z.array(z.string()).max(500),
+});
+export type WriteContentInput = z.infer<typeof writeContentSchema>;
+
+/** Reparenting. null means "make it top level". */
+export const moveDocumentSchema = z.object({
+  parentId: z.uuid().nullable(),
 });
 
 export const updateVisibilitySchema = z.object({

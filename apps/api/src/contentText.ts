@@ -39,7 +39,7 @@ export function readContentText(doc: Y.Doc): string {
  * the index as `<strong>invoice</strong>` and searching for "strong" would
  * match every document that uses bold.
  */
-function textOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText | Y.XmlHook): string {
+export function textOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText | Y.XmlHook): string {
   if (node instanceof Y.XmlText) {
     return node
       .toDelta()

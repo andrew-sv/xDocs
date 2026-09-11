@@ -1,10 +1,15 @@
 import {
   BLOCKS_KEY,
   TITLE_KEY,
+  blockFragmentName,
   createDocumentSchema,
+  moveDocumentSchema,
+  writeContentSchema,
   updateVisibilitySchema,
   type BlockMeta,
   toTsQuery,
+  type ContentBlockDTO,
+  type DocumentContentDTO,
   type DocumentDTO,
   type SearchResultDTO,
   type TrashEntryDTO,
@@ -13,7 +18,15 @@ import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
-import { canAccessDocument, subtreeIds, visibleDocumentIds, visibleTreeSql } from '../db/access.js';
+import {
+  canAccessDocument,
+  subtreeIds,
+  visibleDocumentIds,
+  visibleTreeSql,
+  wouldCreateCycle,
+} from '../db/access.js';
+import { withDocument } from '../collab.js';
+import { textOf as textOfFragment } from '../contentText.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
@@ -72,6 +85,47 @@ async function childBearing(ids: string[]): Promise<Set<string>> {
     .from(documents)
     .where(and(isNull(documents.deletedAt), isNotNull(documents.parentId), inArray(documents.parentId, ids)));
   return new Set(rows.map((row) => row.parentId!).filter(Boolean));
+}
+
+/**
+ * Append one paragraph block per string.
+ *
+ * A block is a single node in this editor, so an embedded newline cannot live
+ * inside one — each line becomes its own block, which is what typing the same
+ * text would have produced.
+ */
+function writeBlocks(doc: Y.Doc, texts: string[]): void {
+  const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
+  for (const text of texts) {
+    for (const line of text.split('\n')) {
+      const meta: BlockMeta = { id: randomUUID(), type: 'paragraph' };
+      blocks.push([meta]);
+      const paragraph = new Y.XmlElement('paragraph');
+      // An empty paragraph must stay empty: inserting a zero-length XmlText
+      // would still render, but it also confuses ProseMirror's mapping.
+      if (line.length > 0) {
+        const node = new Y.XmlText();
+        node.insert(0, line);
+        paragraph.insert(0, [node]);
+      }
+      const fragment = doc.getXmlFragment(blockFragmentName(meta.id));
+      fragment.insert(fragment.length, [paragraph]);
+    }
+  }
+}
+
+/** The document as text: the same view `content_text` is built from. */
+function readContent(id: string, doc: Y.Doc): DocumentContentDTO {
+  const blocks: ContentBlockDTO[] = doc
+    .getArray<BlockMeta>(BLOCKS_KEY)
+    .toArray()
+    .filter((block) => Boolean(block?.id))
+    .map((block) => ({
+      id: block.id,
+      type: block.type,
+      text: textOfFragment(doc.getXmlFragment(blockFragmentName(block.id))),
+    }));
+  return { id, title: doc.getText(TITLE_KEY).toString(), blocks };
 }
 
 /** A row as it comes back from a raw SQL query: snake_case, dates as strings. */
@@ -140,11 +194,32 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
     const userId = c.get('userId');
     const parent = c.req.query('parent') ?? null;
+    /*
+     * `flat=1` returns the whole visible tree at once instead of one level.
+     *
+     * The sidebar walks levels, but a script has no sidebar: finding a document
+     * by walking every level is a request per node, and the levels only exist
+     * because of how the UI navigates. Callers still get parentId on each row,
+     * so the tree is reconstructable.
+     */
+    const flat = c.req.query('flat') === '1' || c.req.query('flat') === 'true';
 
     // The visible set is ancestor-gated, so a child under a private parent is
     // absent even when the child itself is public.
     const visible = await visibleDocumentIds(userId);
     if (parent && !visible.has(parent)) return c.json([]);
+
+    if (flat) {
+      const ids = [...visible];
+      if (ids.length === 0) return c.json([]);
+      const all = await getDb()
+        .select(columns)
+        .from(documents)
+        .where(and(isNull(documents.deletedAt), inArray(documents.id, ids)))
+        .orderBy(desc(documents.updatedAt));
+      const parents = await childBearing(all.map((row) => row.id));
+      return c.json(all.map((row) => toDTO(row, userId, parents.has(row.id))));
+    }
 
     const rows = await getDb()
       .select(columns)
@@ -340,6 +415,129 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (!row) return c.json({ error: 'Not found' }, 404);
     const withChildren = await childBearing([row.id]);
     return c.json(toDTO(row, userId, withChildren.has(row.id)));
+  })
+
+  /*
+   * Reparent a document, or move it to the top level with parentId: null.
+   *
+   * Owner-only, like delete and visibility: this is structural, not editorial.
+   * Anyone who can see a public document may edit its text, but rearranging
+   * someone else's tree is a different thing.
+   *
+   * Note what this deliberately does NOT do: it leaves visibility alone. Moving
+   * a public document under a private parent makes it unreachable to others
+   * through ancestor gating, which is the honest outcome — silently flipping
+   * the document public to "fix" that would leak it.
+   */
+  /*
+   * Read the document's text.
+   *
+   * Served from the LIVE document through a direct connection, not from the
+   * `ystate` column: that column lags by the store debounce, so a read straight
+   * after a write would return the previous version.
+   */
+  .get('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => readContent(id, doc));
+    return c.json(content);
+  })
+
+  /*
+   * Replace the document's blocks, and optionally its title.
+   *
+   * This is the one place REST touches content, and it does it by joining the
+   * document as a participant rather than writing `ystate`. Writing the column
+   * directly would be wrong twice over: a connected editor would overwrite it
+   * on its next save, and open editors would never see the change at all.
+   *
+   * Anyone who can reach the document may write to it — the same rule the
+   * collaboration socket applies, since that is exactly what this is.
+   */
+  .put('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => {
+      // One transaction, so collaborators see the new version appear at once
+      // rather than watching it be rebuilt block by block.
+      doc.transact(() => {
+        const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
+        blocks.delete(0, blocks.length);
+        // Old fragments are left behind deliberately: Yjs cannot drop a root
+        // type, and keeping them is what makes undo able to bring text back.
+        writeBlocks(doc, body.data.blocks);
+        if (body.data.title !== undefined) {
+          const title = doc.getText(TITLE_KEY);
+          title.delete(0, title.length);
+          title.insert(0, body.data.title);
+        }
+      });
+      return readContent(id, doc);
+    });
+    return c.json(content);
+  })
+
+  /** Append blocks, leaving what is already there alone. */
+  .post('/:id/content', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+
+    const content = await withDocument(id, (doc) => {
+      doc.transact(() => writeBlocks(doc, body.data.blocks));
+      return readContent(id, doc);
+    });
+    return c.json(content);
+  })
+
+  .patch('/:id/parent', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const body = moveDocumentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+    const parentId = body.data.parentId;
+
+    const [row] = await getDb()
+      .select({ createdBy: documents.createdBy })
+      .from(documents)
+      .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
+    if (!row) return c.json({ error: 'Document not found' }, 404);
+    // 404 for a document you cannot see, 403 for one you can but do not own —
+    // the same split the other owner-only routes use.
+    if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+    if (row.createdBy !== userId) return c.json({ error: 'Only the owner can move a document' }, 403);
+
+    if (parentId) {
+      if (!(await canAccessDocument(userId, parentId))) {
+        return c.json({ error: 'Destination not found' }, 404);
+      }
+      /*
+       * A cycle is unreachable through the UI but trivial over the API, and it
+       * would be permanent: every recursive query here walks parent links, so a
+       * loop would spin rather than return, taking the listing and the access
+       * check down with it.
+       */
+      if (await wouldCreateCycle(id, parentId)) {
+        return c.json({ error: 'A document cannot be moved inside itself' }, 400);
+      }
+    }
+
+    const [moved] = await getDb()
+      .update(documents)
+      .set({ parentId, updatedAt: new Date() })
+      .where(eq(documents.id, id))
+      .returning(columns);
+
+    const withChildren = await childBearing([id]);
+    return c.json(toDTO(moved!, userId, withChildren.has(id)));
   })
 
   .patch('/:id/visibility', async (c) => {
