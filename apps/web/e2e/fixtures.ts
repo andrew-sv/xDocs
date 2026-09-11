@@ -1,5 +1,5 @@
-import { test as base, expect, type Page } from '@playwright/test';
-import { authHeaders, createDisposableUser, signInForTests } from '../test-auth.mjs';
+import { test as base, expect, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
+import { TEST_ORIGIN, authHeaders, createDisposableUser, signInForTests } from '../test-auth.mjs';
 
 const API = 'http://localhost:3001';
 const TOKEN_KEY = 'xdocs.session-token';
@@ -40,17 +40,63 @@ export async function seedSession(page: Page): Promise<void> {
 
 export type TestDocument = { id: string; title: string };
 
+/**
+ * Destroy a document and its subtree for good.
+ *
+ * A soft delete alone parked every run's documents in the test account's
+ * Trash — over sixteen hundred of them. The permanent route only accepts
+ * something already trashed, hence two steps. Either may fail harmlessly: the
+ * test may have trashed it already, or it went with a purged ancestor.
+ */
+async function purgeDocument(request: APIRequestContext, id: string, headers: Record<string, string>) {
+  const status = (response: Promise<APIResponse>) => response.then((r) => r.status(), () => 0);
+  const trashed = await status(request.delete(`${API}/api/documents/${id}`, { headers }));
+  const purged = await status(request.delete(`${API}/api/documents/${id}/permanent`, { headers }));
+  // 403 twice means it is already gone, with an ancestor or by the test's own
+  // hand. Anything else short of a purge leaves a document behind.
+  if (purged !== 204 && !(trashed === 403 && purged === 403)) {
+    console.warn(`e2e cleanup: document ${id} was left behind (delete ${trashed}, purge ${purged})`);
+  }
+}
+
+/**
+ * Record every document a page creates, with the credential that created it.
+ *
+ * Specs make documents through the UI too ("+ New", "+ Add document"), often
+ * as a disposable user whose token only the page holds. Taking the header off
+ * the create request itself means teardown can purge each one as its owner.
+ */
+function trackCreatedDocuments(page: Page): () => Promise<Array<{ id: string; authorization: string }>> {
+  const pending: Array<Promise<{ id: string; authorization: string } | null>> = [];
+  page.on('response', (response) => {
+    const request = response.request();
+    if (request.method() !== 'POST' || response.status() !== 201) return;
+    if (new URL(response.url()).pathname !== '/api/documents') return;
+    pending.push(
+      Promise.all([response.json() as Promise<{ id: string }>, request.allHeaders()]).then(
+        ([doc, headers]) => (headers.authorization ? { id: doc.id, authorization: headers.authorization } : null),
+        () => null,
+      ),
+    );
+  });
+  return async () => (await Promise.all(pending)).filter((entry) => entry !== null);
+}
+
 export const test = base.extend<{ doc: TestDocument }>({
-  // Every page starts signed in.
-  page: async ({ page }, use) => {
+  // Every page starts signed in, and leaves nothing it created behind.
+  page: async ({ page, request }, use) => {
     await seedSession(page);
+    const created = trackCreatedDocuments(page);
     await use(page);
+    for (const { id, authorization } of await created()) {
+      await purgeDocument(request, id, { authorization, origin: TEST_ORIGIN });
+    }
   },
 
   /**
    * Create the document over REST rather than through the UI: it is faster and
-   * keeps each test independent, so specs can run fully parallel. Torn down
-   * afterwards (a soft delete — the row survives by design).
+   * keeps each test independent, so specs can run fully parallel. Purged
+   * afterwards, with everything created under it.
    */
   doc: async ({ request }, use) => {
     const token = await getTestToken();
@@ -60,9 +106,7 @@ export const test = base.extend<{ doc: TestDocument }>({
     });
     const doc = (await created.json()) as TestDocument;
     await use(doc);
-    await request
-      .delete(`${API}/api/documents/${doc.id}`, { headers: authHeaders(token) })
-      .catch(() => {});
+    await purgeDocument(request, doc.id, authHeaders(token));
   },
 });
 
