@@ -1,4 +1,11 @@
-import type { DocumentDTO, SearchResultDTO, TrashEntryDTO, Visibility } from '@xdocs/shared';
+import type {
+  ApiKeyDTO,
+  CreatedApiKeyDTO,
+  DocumentDTO,
+  SearchResultDTO,
+  TrashEntryDTO,
+  Visibility,
+} from '@xdocs/shared';
 import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth';
 
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
@@ -42,6 +49,10 @@ export const api = {
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
   search: (q: string) =>
     request<SearchResultDTO[]>(`/documents/search?q=${encodeURIComponent(q)}`),
+  listApiKeys: () => request<ApiKeyDTO[]>('/keys'),
+  createApiKey: (name: string) =>
+    request<CreatedApiKeyDTO>('/keys', { method: 'POST', body: JSON.stringify({ name }) }),
+  revokeApiKey: (id: string) => request<void>(`/keys/${id}`, { method: 'DELETE' }),
   listTrash: () => request<TrashEntryDTO[]>('/documents/trash'),
   /** Irreversible: removes the row and its Yjs content. */
   permanentlyDelete: (id: string) =>

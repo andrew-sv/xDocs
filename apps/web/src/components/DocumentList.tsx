@@ -31,6 +31,7 @@ type Props = {
   searching: boolean;
   onQueryChange: (query: string) => void;
   onOpenSearchResult: (result: SearchResultDTO) => void;
+  onOpenKeys: () => void;
 };
 
 function DocumentRow({
@@ -110,6 +111,7 @@ export function DocumentList({
   searching,
   onQueryChange,
   onOpenSearchResult,
+  onOpenKeys,
 }: Props) {
   const searchActive = query.trim().length > 0;
   return (
@@ -235,6 +237,9 @@ export function DocumentList({
             {trash.length}
           </span>
         )}
+      </button>
+      <button type="button" className="trash-toggle" data-testid="keys-toggle" onClick={onOpenKeys}>
+        <span>🔑 API keys</span>
       </button>
       {user && (
         <div className="account" data-testid="account">

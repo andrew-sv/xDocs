@@ -15,6 +15,13 @@
       "when": 1789114001020,
       "tag": "0001_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789116429883,
+      "tag": "0002_api_keys",
+      "breakpoints": true
     }
   ]
 }

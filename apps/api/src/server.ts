@@ -11,11 +11,18 @@ import {
   googleConfigured,
   isAllowedEmail,
 } from './auth.js';
+import { identityFromApiKey, isApiKey } from './apiKeys.js';
 import { collabConfiguration } from './collab.js';
 import { documentsRoute } from './routes/documents.js';
+import { keysRoute } from './routes/keys.js';
 
-/** Set by the session guard so routes know who is asking. */
-type Variables = { userId: string; email: string };
+/**
+ * Set by the guard so routes know who is asking, and how.
+ *
+ * `authMethod` exists because a few things must stay out of reach of a
+ * machine credential — managing keys, above all.
+ */
+type Variables = { userId: string; email: string; authMethod: 'session' | 'api-key' };
 
 const app = new Hono<{ Variables: Variables }>()
   .use('*', logger())
@@ -36,6 +43,24 @@ const app = new Hono<{ Variables: Variables }>()
   .all('/api/auth/*', (c) => auth.handler(c.req.raw))
   // Everything else needs a session.
   .use('/api/*', async (c, next) => {
+    /*
+     * Two credentials, one guard.
+     *
+     * An API key is checked first and recognised by its prefix, so it never
+     * reaches Better Auth — which would reject it anyway, but more slowly and
+     * less clearly. Everything downstream sees the same userId either way, so
+     * ownership and visibility rules need no notion of "a key did this".
+     */
+    const bearer = c.req.header('authorization')?.replace(/^Bearer /i, '');
+    if (isApiKey(bearer)) {
+      const identity = await identityFromApiKey(bearer!);
+      if (!identity) return c.json({ error: 'Invalid or revoked API key' }, 401);
+      c.set('userId', identity.userId);
+      c.set('email', identity.email);
+      c.set('authMethod', 'api-key');
+      return next();
+    }
+
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Unauthorized' }, 401);
     // 403, not 401: the session is genuine, the account simply is not allowed.
@@ -45,9 +70,11 @@ const app = new Hono<{ Variables: Variables }>()
     }
     c.set('userId', session.user.id);
     c.set('email', session.user.email);
+    c.set('authMethod', 'session');
     return next();
   })
-  .route('/api/documents', documentsRoute);
+  .route('/api/documents', documentsRoute)
+  .route('/api/keys', keysRoute);
 
 const handleHttp = getRequestListener(app.fetch);
 

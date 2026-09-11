@@ -79,3 +79,38 @@ export const documents = pgTable(
 );
 
 export type DocumentRow = typeof documents.$inferSelect;
+
+/**
+ * Credentials for scripts and other machines.
+ *
+ * Session tokens are wrong for automation — they expire, they belong to one
+ * browser, and revoking one logs a person out. A key is owned by a user and
+ * acts entirely as them: same allowlist, same visibility rules, same ownership
+ * checks. It is deliberately NOT a separate principal with its own grants.
+ */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    /*
+     * SHA-256 of the key. The key itself is shown once at creation and never
+     * stored, so a database leak yields nothing usable — and "show me the key
+     * again" is impossible by construction rather than by policy.
+     */
+    hash: text('hash').notNull().unique(),
+    /** First few characters, so a key is still identifiable in a list. */
+    prefix: text('prefix').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Rough: written on use, so "is this key still in use" is answerable. */
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    /** Revocation is a soft delete, so a revoked key's history survives it. */
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [index('api_keys_user_idx').on(table.userId)],
+);
+
+export type ApiKeyRow = typeof apiKeys.$inferSelect;

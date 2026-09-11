@@ -103,6 +103,25 @@ export function toTsQuery(raw: string): string | null {
   return words.map((word, i) => (i === words.length - 1 ? `${word}:*` : word)).join(' & ');
 }
 
+/** An API key as listed. The key itself is returned once, at creation. */
+export const apiKeySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  /** First characters of the key, so a row is identifiable without the secret. */
+  prefix: z.string(),
+  createdAt: z.iso.datetime(),
+  lastUsedAt: z.iso.datetime().nullable(),
+});
+export type ApiKeyDTO = z.infer<typeof apiKeySchema>;
+
+/** Creation is the only response that ever contains the key itself. */
+export const createdApiKeySchema = apiKeySchema.extend({ key: z.string() });
+export type CreatedApiKeyDTO = z.infer<typeof createdApiKeySchema>;
+
+export const createApiKeySchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
   /** When set, the new document becomes a child and copies its visibility. */

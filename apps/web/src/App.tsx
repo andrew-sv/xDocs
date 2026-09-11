@@ -1,5 +1,6 @@
 import type { DocumentDTO, SearchResultDTO, TrashEntryDTO } from '@xdocs/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiKeysDialog } from './components/ApiKeysDialog';
 import { DocumentEditor } from './components/DocumentEditor';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DocumentList } from './components/DocumentList';
@@ -49,6 +50,7 @@ export function App() {
   const [searching, setSearching] = useState(false);
   /** Permanent deletion is confirmed first — nothing restores it afterwards. */
   const [pendingPurge, setPendingPurge] = useState<TrashEntryDTO | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
   const { data: session } = useSession();
 
   const handleVisibilityChange = useCallback(
@@ -372,6 +374,7 @@ export function App() {
           if (next.trim().length > 0) setTrashOpen(false);
         }}
         onOpenSearchResult={openSearchResult}
+        onOpenKeys={() => setKeysOpen(true)}
       />
       {error && <main className="editor"><p className="error">{error}</p></main>}
       {!error && selected && (
@@ -406,6 +409,7 @@ export function App() {
           }}
         />
       )}
+      {keysOpen && <ApiKeysDialog onClose={() => setKeysOpen(false)} />}
       {pendingPurge && (
         <ConfirmDialog
           title="Delete forever"

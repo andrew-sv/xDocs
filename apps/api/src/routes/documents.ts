@@ -140,11 +140,32 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
   .get('/', async (c) => {
     const userId = c.get('userId');
     const parent = c.req.query('parent') ?? null;
+    /*
+     * `flat=1` returns the whole visible tree at once instead of one level.
+     *
+     * The sidebar walks levels, but a script has no sidebar: finding a document
+     * by walking every level is a request per node, and the levels only exist
+     * because of how the UI navigates. Callers still get parentId on each row,
+     * so the tree is reconstructable.
+     */
+    const flat = c.req.query('flat') === '1' || c.req.query('flat') === 'true';
 
     // The visible set is ancestor-gated, so a child under a private parent is
     // absent even when the child itself is public.
     const visible = await visibleDocumentIds(userId);
     if (parent && !visible.has(parent)) return c.json([]);
+
+    if (flat) {
+      const ids = [...visible];
+      if (ids.length === 0) return c.json([]);
+      const all = await getDb()
+        .select(columns)
+        .from(documents)
+        .where(and(isNull(documents.deletedAt), inArray(documents.id, ids)))
+        .orderBy(desc(documents.updatedAt));
+      const parents = await childBearing(all.map((row) => row.id));
+      return c.json(all.map((row) => toDTO(row, userId, parents.has(row.id))));
+    }
 
     const rows = await getDb()
       .select(columns)
