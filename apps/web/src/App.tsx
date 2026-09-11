@@ -233,7 +233,16 @@ export function App() {
   /** Open a document AND show its sub-documents in the sidebar. */
   const openDocument = useCallback((doc: DocumentDTO) => {
     setSelected(doc);
-    setTrail((prev) => [...prev, doc]);
+    setTrail((prev) => {
+      /*
+       * A document already on the path is a step back to it, not a step
+       * deeper. The "Current" row is the last crumb and opens through here like
+       * any other row, so appending unconditionally stacked a duplicate crumb
+       * on every click.
+       */
+      const at = prev.findIndex((d) => d.id === doc.id);
+      return at === -1 ? [...prev, doc] : [...prev.slice(0, at), doc];
+    });
   }, []);
 
   /** Jump to a crumb; index -1 is the top level. */
