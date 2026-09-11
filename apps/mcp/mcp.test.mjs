@@ -97,6 +97,27 @@ const afterReplace = await call(client, 'read_document', { id });
 ck('replace removes what was there', afterReplace.structuredContent.blocks.join('|') === 'Only this now.');
 ck('and can set the title', afterReplace.structuredContent.title === 'Replaced by MCP');
 
+// --- code blocks ------------------------------------------------------------
+const diagram = '+---+\n|   |  keeps its indentation\n+---+';
+const codeAppend = await call(client, 'append_to_document', { id, blocks: [{ type: 'code', text: diagram }] });
+ck('a code block can be written', !codeAppend.isError);
+const afterCode = await call(client, 'read_document', { id });
+ck('it is one block, not one per line', afterCode.structuredContent.blocks.length === 2);
+ck(
+  'structured content gives it back in the shape the tools take',
+  JSON.stringify(afterCode.structuredContent.blocks[1]) === JSON.stringify({ type: 'code', text: diagram }),
+);
+ck('and the text result shows it fenced', text(afterCode).includes(`2. \`\`\`\n${diagram}\n\`\`\``));
+// So a read can be passed straight back to a write.
+await call(client, 'replace_document_content', { id, blocks: afterCode.structuredContent.blocks });
+const rewritten = await call(client, 'read_document', { id });
+ck(
+  'a read round-trips through replace unchanged',
+  JSON.stringify(rewritten.structuredContent.blocks) === JSON.stringify(afterCode.structuredContent.blocks),
+);
+const badBlock = await call(client, 'append_to_document', { id, blocks: [{ type: 'heading', text: 'x' }] });
+ck('an unknown block type is rejected', badBlock.isError === true);
+
 // --- listing and search -----------------------------------------------------
 const listed = await call(client, 'list_documents', {});
 ck('the document appears in a listing', text(listed).includes(id));

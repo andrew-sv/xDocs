@@ -214,6 +214,16 @@ the CRDT, and round-tripping that over HTTP would need the TipTap schema on the
 server. A block is a single node here, so a newline inside one becomes another
 block — the same shape typing it would have produced.
 
+The one exception is a code block, whose text only means anything verbatim.
+Write `{"type": "code", "text": "..."}` in place of a string and it becomes one
+code block with its newlines and indentation intact; reads report such a block
+as `"type": "code"`, and the object form accepts what a read returns, so a
+document can be read and written back unchanged.
+
+```json
+{ "blocks": ["A paragraph", { "type": "code", "text": "if (x) {\n  y();\n}" }] }
+```
+
 ### Search
 
 The search box at the top of the sidebar searches titles and block text

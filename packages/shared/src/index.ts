@@ -129,15 +129,27 @@ export const createDocumentSchema = z.object({
 });
 
 /**
+ * What a block holds, as the REST API sees it.
+ *
+ * Not `BlockMeta.type`: that is always "paragraph", including for a block the
+ * editor has since turned into a code block. This is read from the block's
+ * content instead — "code" when its only node is a code block, "paragraph" for
+ * everything else.
+ */
+export const contentBlockTypeSchema = z.enum(['paragraph', 'code']);
+export type ContentBlockType = z.infer<typeof contentBlockTypeSchema>;
+
+/**
  * A block as the REST API exposes it.
  *
  * Text only, deliberately: the editor's rich text lives in ProseMirror nodes
  * inside the CRDT, and round-tripping that through HTTP would need the TipTap
- * schema on the server. Reading returns the words; writing sets them.
+ * schema on the server. Reading returns the words; writing sets them. The one
+ * structure it keeps is a code block, whose text is only readable verbatim.
  */
 export const contentBlockSchema = z.object({
   id: z.string(),
-  type: blockTypeSchema,
+  type: contentBlockTypeSchema,
   text: z.string(),
 });
 export type ContentBlockDTO = z.infer<typeof contentBlockSchema>;
@@ -149,11 +161,25 @@ export const documentContentSchema = z.object({
 });
 export type DocumentContentDTO = z.infer<typeof documentContentSchema>;
 
+/**
+ * One block to write.
+ *
+ * A bare string is a paragraph, and a newline in it starts another paragraph
+ * block. `{type: 'code'}` is ONE code block that keeps its newlines and
+ * indentation. The object form accepts what a read returns, so a document can
+ * be read, edited and written back without reshaping it.
+ */
+export const writeBlockSchema = z.union([
+  z.string(),
+  z.object({ type: contentBlockTypeSchema, text: z.string() }),
+]);
+export type WriteBlockInput = z.infer<typeof writeBlockSchema>;
+
 /** Body for writing content: replace everything, or append to it. */
 export const writeContentSchema = z.object({
   /** Omitted leaves the title alone; only a replace may set it. */
   title: z.string().trim().max(200).optional(),
-  blocks: z.array(z.string()).max(500),
+  blocks: z.array(writeBlockSchema).max(500),
 });
 export type WriteContentInput = z.infer<typeof writeContentSchema>;
 

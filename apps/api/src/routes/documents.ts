@@ -9,10 +9,12 @@ import {
   type BlockMeta,
   toTsQuery,
   type ContentBlockDTO,
+  type ContentBlockType,
   type DocumentContentDTO,
   type DocumentDTO,
   type SearchResultDTO,
   type TrashEntryDTO,
+  type WriteBlockInput,
 } from '@xdocs/shared';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -88,30 +90,49 @@ async function childBearing(ids: string[]): Promise<Set<string>> {
 }
 
 /**
- * Append one paragraph block per string.
- *
- * A block is a single node in this editor, so an embedded newline cannot live
- * inside one — each line becomes its own block, which is what typing the same
- * text would have produced.
+ * TipTap's node name for a code block. y-tiptap discards an element whose name
+ * the editor's schema does not know, so this must match StarterKit exactly.
  */
-function writeBlocks(doc: Y.Doc, texts: string[]): void {
+const CODE_BLOCK_NODE = 'codeBlock';
+
+/**
+ * Append the given blocks.
+ *
+ * A paragraph is a single node, so an embedded newline cannot live inside one
+ * — each line becomes its own block, which is what typing the same text would
+ * have produced. A code block's text may contain newlines, so it stays whole.
+ */
+function writeBlocks(doc: Y.Doc, inputs: WriteBlockInput[]): void {
   const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
-  for (const text of texts) {
-    for (const line of text.split('\n')) {
-      const meta: BlockMeta = { id: randomUUID(), type: 'paragraph' };
-      blocks.push([meta]);
-      const paragraph = new Y.XmlElement('paragraph');
-      // An empty paragraph must stay empty: inserting a zero-length XmlText
-      // would still render, but it also confuses ProseMirror's mapping.
-      if (line.length > 0) {
-        const node = new Y.XmlText();
-        node.insert(0, line);
-        paragraph.insert(0, [node]);
-      }
-      const fragment = doc.getXmlFragment(blockFragmentName(meta.id));
-      fragment.insert(fragment.length, [paragraph]);
+
+  const append = (nodeName: string, text: string) => {
+    // The meta type stays "paragraph" for a code block too, exactly as when
+    // the editor converts one; readers look at the content instead.
+    const meta: BlockMeta = { id: randomUUID(), type: 'paragraph' };
+    blocks.push([meta]);
+    const element = new Y.XmlElement(nodeName);
+    // An empty block must stay empty: inserting a zero-length XmlText would
+    // still render, but it also confuses ProseMirror's mapping.
+    if (text.length > 0) {
+      const node = new Y.XmlText();
+      node.insert(0, text);
+      element.insert(0, [node]);
     }
+    const fragment = doc.getXmlFragment(blockFragmentName(meta.id));
+    fragment.insert(fragment.length, [element]);
+  };
+
+  for (const input of inputs) {
+    const { type, text } = typeof input === 'string' ? { type: 'paragraph', text: input } : input;
+    if (type === 'code') append(CODE_BLOCK_NODE, text);
+    else for (const line of text.split('\n')) append('paragraph', line);
   }
+}
+
+/** See `contentBlockTypeSchema`: a block is code only if that is all it holds. */
+function contentTypeOf(fragment: Y.XmlFragment): ContentBlockType {
+  const only = fragment.length === 1 ? fragment.get(0) : null;
+  return only instanceof Y.XmlElement && only.nodeName === CODE_BLOCK_NODE ? 'code' : 'paragraph';
 }
 
 /** The document as text: the same view `content_text` is built from. */
@@ -120,11 +141,10 @@ function readContent(id: string, doc: Y.Doc): DocumentContentDTO {
     .getArray<BlockMeta>(BLOCKS_KEY)
     .toArray()
     .filter((block) => Boolean(block?.id))
-    .map((block) => ({
-      id: block.id,
-      type: block.type,
-      text: textOfFragment(doc.getXmlFragment(blockFragmentName(block.id))),
-    }));
+    .map((block) => {
+      const fragment = doc.getXmlFragment(blockFragmentName(block.id));
+      return { id: block.id, type: contentTypeOf(fragment), text: textOfFragment(fragment) };
+    });
   return { id, title: doc.getText(TITLE_KEY).toString(), blocks };
 }
 
