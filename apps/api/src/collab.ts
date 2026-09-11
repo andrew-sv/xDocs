@@ -1,6 +1,6 @@
 import { Database } from '@hocuspocus/extension-database';
 import type { Server, ServerConfiguration } from '@hocuspocus/server';
-import { collabDocName, TITLE_KEY } from '@xdocs/shared';
+import { collabDocName, DOCUMENTS_CHANGED, TITLE_KEY, WORKSPACE_DOC_NAME } from '@xdocs/shared';
 
 import * as Y from 'yjs';
 import { sessionFromToken } from './auth.js';
@@ -54,6 +54,22 @@ export async function withDocument<T>(
   return result;
 }
 
+/**
+ * Tell every open app that the document list may have changed.
+ *
+ * The ping is content-free on purpose: every signed-in user listens on the same
+ * channel, so it cannot say what changed without telling people about
+ * documents they may not see. Clients refetch over REST, which applies the
+ * access rules. Called after every successful change through the documents
+ * routes, and by the store hook when a title changes.
+ */
+export function notifyDocumentsChanged(): void {
+  collabServer?.hocuspocus.documents.get(WORKSPACE_DOC_NAME)?.broadcastStateless(DOCUMENTS_CHANGED);
+}
+
+/** The title each loaded document last stored, so only a rename pings. */
+const storedTitles = new Map<string, string>();
+
 /** `doc:<uuid>` -> `<uuid>`; null for anything we don't recognise. */
 function documentIdFrom(documentName: string): string | null {
   const [prefix, id] = documentName.split(':');
@@ -95,20 +111,31 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
       store: async ({ documentName, state, document }) => {
         const id = documentIdFrom(documentName);
         if (!id) return;
+        const title = readTitle(document);
         await getDb()
           .update(documents)
           .set({
             ystate: Buffer.from(state),
-            title: readTitle(document),
+            title,
             // Mirrored for search, exactly like the title and for the same
             // reason: `ystate` is opaque to Postgres.
             contentText: readContentText(document),
             updatedAt: new Date(),
           })
           .where(eq(documents.id, id));
+        // Renaming is typing, not a REST call, so the routes never see it.
+        // Every save lands here, though — ping only when the title moved.
+        if (storedTitles.get(documentName) !== title) {
+          storedTitles.set(documentName, title);
+          notifyDocumentsChanged();
+        }
       },
     }),
   ],
+
+  afterUnloadDocument: async ({ documentName }) => {
+    storedTitles.delete(documentName);
+  },
 
   /*
    * Authentication AND authorisation happen here, together.
@@ -121,9 +148,16 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
    * bearer beats cookies here: a websocket handshake carries no usable
    * cross-site cookie.
    */
-  onAuthenticate: async ({ token, documentName }) => {
+  onAuthenticate: async ({ token, documentName, connectionConfig }) => {
     const session = await sessionFromToken(token);
     if (!session) throw new Error('Invalid or expired session');
+
+    if (documentName === WORKSPACE_DOC_NAME) {
+      // Anyone signed in may listen and nobody may write: the channel only
+      // carries content-free pings (see notifyDocumentsChanged).
+      connectionConfig.readOnly = true;
+      return { userId: session.user.id, email: session.user.email };
+    }
 
     const id = documentIdFrom(documentName);
     if (!id) throw new Error(`Malformed document name: ${documentName}`);

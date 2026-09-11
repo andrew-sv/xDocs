@@ -12,8 +12,15 @@ test.describe('sidebar level switching', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    /*
+     * Only the FIRST list request is held. Creating a document pings every
+     * open app to refetch (#22), so more list requests follow; they must pass
+     * straight through, and the assertion waits for the held one in particular.
+     */
+    let held: import('@playwright/test').Request | null = null;
     await page.route('**/api/documents', async (route) => {
-      if (route.request().method() !== 'GET') return route.continue();
+      if (route.request().method() !== 'GET' || held) return route.continue();
+      held = route.request();
       // Fetch NOW but deliver later: the body has to be the list as it was
       // BEFORE the new document existed, which is what makes it stale.
       const response = await route.fetch();
@@ -30,10 +37,7 @@ test.describe('sidebar level switching', () => {
 
     // Arm the wait BEFORE releasing, then assert only once the stale response
     // has actually been applied — asserting sooner passes either way.
-    const landed = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'GET' && response.url().endsWith('/api/documents'),
-    );
+    const landed = page.waitForResponse((response) => response.request() === held);
     release();
     await landed;
     await expect(page.locator(`[data-doc-id="${newId}"]`)).toHaveCount(1);

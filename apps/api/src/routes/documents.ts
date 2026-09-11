@@ -27,7 +27,7 @@ import {
   visibleTreeSql,
   wouldCreateCycle,
 } from '../db/access.js';
-import { withDocument } from '../collab.js';
+import { notifyDocumentsChanged, withDocument } from '../collab.js';
 import { textOf as textOfFragment } from '../contentText.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
@@ -213,6 +213,16 @@ async function ancestorPaths(ids: string[], userId: string): Promise<Map<string,
 }
 
 export const documentsRoute = new Hono<{ Variables: Variables }>()
+  /*
+   * Any successful change here may change someone's sidebar, so every open app
+   * is told to refetch (#22). One middleware rather than a call per route, so
+   * a new route cannot forget it; content writes ping too, which only costs a
+   * refetch.
+   */
+  .use('*', async (c, next) => {
+    await next();
+    if (c.req.method !== 'GET' && c.res.ok) notifyDocumentsChanged();
+  })
   .get('/', async (c) => {
     const userId = c.get('userId');
     const parent = c.req.query('parent') ?? null;
@@ -225,6 +235,15 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
      * so the tree is reconstructable.
      */
     const flat = c.req.query('flat') === '1' || c.req.query('flat') === 'true';
+
+    /*
+     * When this list was read, so a client can tell which of two lists is
+     * newer. Taken before the first query: everything committed by then is in
+     * it. Requests do not run in the order they were sent, so under load a
+     * list fetched earlier can arrive later, and the order of sending proved
+     * no guide (#22). One process, one clock, so these compare.
+     */
+    c.header('x-list-as-of', String(Date.now()));
 
     // The visible set is ancestor-gated, so a child under a private parent is
     // absent even when the child itself is public.

@@ -149,12 +149,24 @@ Each of these caused a real bug. Changing them silently breaks things.
   `GET /documents/search` ORs `plainto_tsquery` (same lexer as the index) with a
   hand-built prefix query (search-as-you-type, which plainto cannot do). Each
   side ANDs its own terms, so the OR does not loosen matching.
-- **Every list response must be discardable.** `refresh()` in `App.tsx` takes a
-  sequence number that any local mutation bumps, on top of the level guard. The
-  level guard alone misses same-level races: creating a document while the first
-  list fetch is in flight lets that response land afterwards and wipe the new
-  row — the document is open but absent from the sidebar. See the spec in
-  `e2e/stale.spec.ts`, which has to fetch early and deliver late to reproduce it.
+- **Every list response must be discardable, and fetches must not cancel each
+  other.** `refresh()` in `App.tsx` drops a response when the level changed, when
+  a local mutation (`invalidateList`) happened after it was sent, or when it is
+  older than the list on screen. The level guard alone misses same-level races:
+  creating a document while the first list fetch is in flight lets that response
+  land afterwards and wipe the new row (`e2e/stale.spec.ts`). "Older" is the
+  server's read time, `x-list-as-of`, not the order sent: under load the server
+  answers out of order, and a list read before a restore landed last and hid the
+  restored row. And no fetch may retire another merely by starting — with pings
+  arriving faster than responses, that froze the sidebar entirely.
+- **Sidebar liveness is a content-free ping (#22).** The documents routes (one
+  middleware, every successful non-GET) and the collab store hook (only when a
+  title actually changed) call `notifyDocumentsChanged()`, which broadcasts
+  `documents-changed` on the read-only `workspace` collab channel; open apps
+  refetch over REST. Never put ids or titles in the ping — every signed-in user
+  hears it. A refetch can land before the debounced save of a title being typed,
+  so `App.tsx` keeps unsaved titles (`withUnsavedTitles`) over fetched rows;
+  without that, the name you are typing flips back to "Untitled".
 - **REST content writes go through `withDocument()` in `src/collab.ts`, never
   the `ystate` column.** It opens a Hocuspocus direct connection, so the edit is
   a real CRDT operation: it merges with what people are typing and appears in

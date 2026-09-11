@@ -70,6 +70,15 @@ export const api = {
   /** Children of `parentId`, or the top level when omitted. */
   listDocuments: (parentId?: string | null) =>
     request<DocumentDTO[]>(`/documents${parentId ? `?parent=${parentId}` : ''}`),
+  /** The same, with the server time the list was read — see refresh() in App. */
+  listLevel: async (parentId: string | null): Promise<{ rows: DocumentDTO[]; asOf: number }> => {
+    const res = await send(`/documents${parentId ? `?parent=${parentId}` : ''}`);
+    if (!res.ok) throw new Error(`GET /documents failed: ${res.status}`);
+    return {
+      rows: (await res.json()) as DocumentDTO[],
+      asOf: Number(res.headers.get('x-list-as-of') ?? 0),
+    };
+  },
   createDocument: (title = 'Untitled', parentId?: string | null) =>
     request<DocumentDTO>('/documents', {
       method: 'POST',
