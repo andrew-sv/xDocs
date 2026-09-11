@@ -116,7 +116,31 @@ ck(
 ck('descendants keep their place in the tree',
   (await listIds(owner, child.id)).includes(grandchild.id));
 
+// --- the path to a document ---------------------------------------------------
+const pathOf = (token, id) => fetch(`${API}/api/documents/${id}/path`, { headers: H(token) });
+const titles = async (res) => (await res.json()).map((d) => d.title);
+
+ck('a nested document\'s path is its ancestors, root first',
+  JSON.stringify(await titles(await pathOf(owner, grandchild.id))) === JSON.stringify(['Parent', 'Child']));
+ck('a top-level document\'s path is empty',
+  JSON.stringify(await titles(await pathOf(owner, parent.id))) === '[]');
+ck('ancestors carry full metadata, marked as having children',
+  (await pathOf(owner, grandchild.id).then((r) => r.json())).every((d) => d.id && d.hasChildren === true));
+ck('a malformed id is a 404, not a 500', (await pathOf(owner, 'not-a-uuid')).status === 404);
+
+// Ancestor gating: a public child under a private parent is unreachable, and
+// its path must not be a way to learn the parent's title.
+const secretParent = await create(owner, 'Secret parent');
+const publicChild = await create(owner, 'Public child', secretParent.id);
+await setVisibility(owner, publicChild.id, 'public');
+ck('a stranger cannot read the path of a document under a private parent (404)',
+  (await pathOf(stranger, publicChild.id)).status === 404);
+await setVisibility(owner, secretParent.id, 'public');
+ck('once the whole chain is public, the stranger gets the path',
+  JSON.stringify(await titles(await pathOf(stranger, publicChild.id))) === JSON.stringify(['Secret parent']));
+
 await fetch(`${API}/api/documents/${parent.id}`, { method: 'DELETE', headers: H(owner) });
+ck('a deleted document has no path (404)', (await pathOf(owner, grandchild.id)).status === 404);
 await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail ? 1 : 0);

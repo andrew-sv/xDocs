@@ -50,6 +50,8 @@ function initialYState(title: string): Buffer {
   return update;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Never leak the Yjs binary over REST — the client gets content over the socket. */
 const columns = {
   id: documents.id,
@@ -435,6 +437,26 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (!row) return c.json({ error: 'Not found' }, 404);
     const withChildren = await childBearing([row.id]);
     return c.json(toDTO(row, userId, withChildren.has(row.id)));
+  })
+
+  /*
+   * The document's ancestors, root first; empty at the top level.
+   *
+   * For opening a document whose place in the tree the client does not know —
+   * a restore, an undo, a link. Checking the document alone is enough:
+   * visibility is ancestor-gated (see visibleTreeSql), so every ancestor of a
+   * reachable document is reachable too, and the path cannot reveal one the
+   * caller could not open.
+   */
+  .get('/:id/path', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    // Checked before SQL: a malformed id would fail the uuid cast as a 500.
+    if (!UUID.test(id) || !(await canAccessDocument(userId, id))) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+    const paths = await ancestorPaths([id], userId);
+    return c.json(paths.get(id) ?? []);
   })
 
   /*

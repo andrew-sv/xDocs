@@ -218,21 +218,40 @@ export function App() {
     }
   }, []);
 
+  /**
+   * Open a restored document where it actually lives, with the sidebar at its
+   * parent's level.
+   *
+   * That is not necessarily the level on screen, and not necessarily where it
+   * used to be either: restore lifts a document to the top level when its
+   * parent is still deleted. The trail used to be reset to the top level,
+   * which showed a nested document with no breadcrumbs and outside its tree.
+   */
+  const openRestored = useCallback(
+    async (restored: DocumentDTO) => {
+      const path = await api.getDocumentPath(restored.id).catch(() => null);
+      if (path) setTrail(path);
+      setSelected(restored);
+      /*
+       * Refetch rather than splice the row in: the list is ordered by
+       * updatedAt, which restore leaves alone. When the level changed, the
+       * level effect fetches the new one and this response is discarded by
+       * refresh()'s own guard; when it did not, this is the fetch that
+       * brings the row back.
+       */
+      await refresh();
+    },
+    [refresh],
+  );
+
   const restoreFromTrash = useCallback(
     async (entry: TrashEntryDTO) => {
       const restored = await api.restoreDocument(entry.id);
       setTrash((prev) => prev.filter((t) => t.id !== entry.id));
-      /*
-       * Restore may have lifted the document to the top level (its parent is
-       * still deleted), so refresh the level rather than splicing the row in
-       * where it used to live.
-       */
-      await refresh();
       setTrashOpen(false);
-      setSelected(restored);
-      setTrail([]);
+      await openRestored(restored);
     },
-    [refresh],
+    [openRestored],
   );
 
   const purgeDocument = useCallback(async (entry: TrashEntryDTO) => {
@@ -400,11 +419,10 @@ export function App() {
     setPendingRestore(null);
     const restored = await api.restoreDocument(pendingRestore.id);
     void refreshTrash();
-    // Refetch rather than splice it back: the list is ordered by updatedAt and
-    // restore leaves that untouched, so this returns it to its original place.
-    await refresh();
-    setSelected(restored);
-  }, [pendingRestore, refresh]);
+    // Usually still the level on screen, but the undo stays offered for seven
+    // seconds and the user may have navigated away in that time.
+    await openRestored(restored);
+  }, [pendingRestore, openRestored]);
 
   /*
    * Cmd/Ctrl+Z for an undoable document deletion.
