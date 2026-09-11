@@ -4,14 +4,16 @@ import {
   createDocumentSchema,
   updateVisibilitySchema,
   type BlockMeta,
+  toTsQuery,
   type DocumentDTO,
+  type SearchResultDTO,
   type TrashEntryDTO,
 } from '@xdocs/shared';
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
-import { canAccessDocument, subtreeIds, visibleDocumentIds } from '../db/access.js';
+import { canAccessDocument, subtreeIds, visibleDocumentIds, visibleTreeSql } from '../db/access.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
@@ -70,6 +72,68 @@ async function childBearing(ids: string[]): Promise<Set<string>> {
     .from(documents)
     .where(and(isNull(documents.deletedAt), isNotNull(documents.parentId), inArray(documents.parentId, ids)));
   return new Set(rows.map((row) => row.parentId!).filter(Boolean));
+}
+
+/** A row as it comes back from a raw SQL query: snake_case, dates as strings. */
+type SearchRow = {
+  id: string;
+  title: string;
+  visibility: 'private' | 'public';
+  parent_id: string | null;
+  created_by: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  snippet?: string;
+};
+
+function fromSql(row: SearchRow): DocumentColumns {
+  return {
+    id: row.id,
+    title: row.title,
+    visibility: row.visibility,
+    parentId: row.parent_id,
+    createdBy: row.created_by,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+/**
+ * The ancestor chain of each id, root first.
+ *
+ * Search results are the one place a document arrives with no context — the
+ * whole point is finding things that are buried — so each hit carries the path
+ * it lives under. Every ancestor has a child by definition, hence hasChildren.
+ *
+ * Walks upward from all matches in one query rather than one per result.
+ */
+async function ancestorPaths(ids: string[], userId: string): Promise<Map<string, DocumentDTO[]>> {
+  const paths = new Map<string, DocumentDTO[]>();
+  if (ids.length === 0) return paths;
+
+  const result = await getDb().execute(sql`
+    WITH RECURSIVE up AS (
+      SELECT id AS match_id, id, parent_id, title, visibility, created_by, created_at, updated_at, 0 AS depth
+        FROM documents
+       WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      UNION ALL
+      SELECT u.match_id, d.id, d.parent_id, d.title, d.visibility, d.created_by, d.created_at, d.updated_at, u.depth + 1
+        FROM documents d
+        JOIN up u ON d.id = u.parent_id
+    )
+    SELECT match_id, id, parent_id, title, visibility, created_by, created_at, updated_at, depth
+      FROM up
+     WHERE depth > 0
+     ORDER BY match_id, depth DESC
+  `);
+
+  const rows = (result as unknown as { rows?: Array<SearchRow & { match_id: string }> }).rows ?? [];
+  for (const row of rows) {
+    const path = paths.get(row.match_id) ?? [];
+    path.push(toDTO(fromSql(row), userId, true));
+    paths.set(row.match_id, path);
+  }
+  return paths;
 }
 
 export const documentsRoute = new Hono<{ Variables: Variables }>()
@@ -132,6 +196,70 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       })
       .returning(columns);
     return c.json(toDTO(row!, userId, false), 201);
+  })
+
+  /*
+   * Declared before /:id, like /trash.
+   *
+   * Full-text over the title and the mirrored `content_text`, restricted to the
+   * caller's visible tree by the same recursive rule as everything else — a
+   * search that ignored it would be a read hole straight through visibility.
+   */
+  .get('/search', async (c) => {
+    const userId = c.get('userId');
+    const raw = (c.req.query('q') ?? '').trim();
+    const prefixQuery = toTsQuery(raw);
+    // Punctuation-only input has no terms to match; that is an empty result,
+    // not a malformed query.
+    if (!prefixQuery) return c.json([]);
+
+    const result = await getDb().execute(sql`
+      ${visibleTreeSql(userId)},
+      /*
+       * Two queries OR'd together, because neither alone is right.
+       *
+       * plainto_tsquery runs the user's words through the SAME lexer that built
+       * the index, which matters more than it sounds: Postgres lexes
+       * "invoice-2026-draft" as 'invoice', '-2026', 'draft' — with the hyphen
+       * read as a minus sign — so a hand-split query for "2026" never matches
+       * it. But plainto_tsquery has no prefix matching, so nothing appears
+       * until you finish a word.
+       *
+       * The OR keeps both: exact lexing for punctuated titles, prefix matching
+       * for search-as-you-type. Each side ANDs its own terms, so this does not
+       * loosen the match to "any word".
+       */
+      q AS (
+        SELECT plainto_tsquery('english', ${raw}) || to_tsquery('english', ${prefixQuery}) AS query
+      )
+      SELECT d.id, d.title, d.visibility, d.parent_id, d.created_by, d.created_at, d.updated_at,
+             ts_headline(
+               'english', coalesce(d.content_text, ''), q.query,
+               'StartSel="[[", StopSel="]]", MaxWords=26, MinWords=10, ShortWord=2, MaxFragments=1'
+             ) AS snippet
+        FROM documents d
+        JOIN visible v ON v.id = d.id
+        CROSS JOIN q
+       WHERE d.deleted_at IS NULL
+         AND d.search @@ q.query
+       -- rank_cd rewards matches close together, so a document arguing about
+       -- the phrase beats one that mentions each word in a different block.
+       ORDER BY ts_rank_cd(d.search, q.query) DESC, d.updated_at DESC
+       LIMIT 30
+    `);
+
+    const rows = (result as unknown as { rows?: SearchRow[] }).rows ?? [];
+    if (rows.length === 0) return c.json([]);
+
+    const withChildren = await childBearing(rows.map((row) => row.id));
+    const paths = await ancestorPaths(rows.map((row) => row.id), userId);
+
+    const results: SearchResultDTO[] = rows.map((row) => ({
+      document: toDTO(fromSql(row), userId, withChildren.has(row.id)),
+      path: paths.get(row.id) ?? [],
+      snippet: row.snippet ?? '',
+    }));
+    return c.json(results);
   })
 
   /*

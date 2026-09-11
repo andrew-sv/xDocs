@@ -66,6 +66,43 @@ export const trashEntrySchema = z.object({
 });
 export type TrashEntryDTO = z.infer<typeof trashEntrySchema>;
 
+/**
+ * One search hit.
+ *
+ * `snippet` marks matched terms with [[ ]] rather than HTML — the client turns
+ * them into <mark> as text nodes, so a document whose content happens to look
+ * like markup cannot inject anything.
+ */
+export const searchResultSchema = z.object({
+  document: documentSchema,
+  /** Ancestors, root first, so a buried result can say where it lives. */
+  path: z.array(documentSchema),
+  snippet: z.string(),
+});
+export type SearchResultDTO = z.infer<typeof searchResultSchema>;
+
+/** Wraps [[matched]] runs so the client can highlight without parsing HTML. */
+export const SNIPPET_OPEN = '[[';
+export const SNIPPET_CLOSE = ']]';
+
+/**
+ * Turn a raw query into a Postgres tsquery.
+ *
+ * This is the PREFIX half of the search query; the route ORs it with
+ * plainto_tsquery over the raw input, which handles punctuation the same way
+ * the index does. Words here are reduced to letters and digits — punctuation
+ * would be a syntax error in to_tsquery — and the final word gets a prefix
+ * match so results narrow as you type.
+ *
+ * Shared so the client can tell "no usable terms" from "no results" without a
+ * round trip.
+ */
+export function toTsQuery(raw: string): string | null {
+  const words = raw.toLowerCase().match(/[\p{L}\p{N}]+/gu);
+  if (!words || words.length === 0) return null;
+  return words.map((word, i) => (i === words.length - 1 ? `${word}:*` : word)).join(' & ');
+}
+
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
   /** When set, the new document becomes a child and copies its visibility. */

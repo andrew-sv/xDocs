@@ -20,7 +20,8 @@ test.describe('trash', () => {
     const title = `trash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await page.getByTestId('title-input').fill(title);
 
-    const row = page.getByTestId('doc-list').getByTestId('doc-row').first();
+    // By title, not .first(): public documents from other users share this list.
+    const row = page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: title });
     await row.hover();
     await row.getByTestId('doc-delete').click();
     await page.getByTestId('confirm-delete').click();
@@ -73,7 +74,8 @@ test.describe('trash', () => {
     await page.getByTestId('title-input').fill(parent);
 
     // Drill in and add a child, then come back up to delete the parent.
-    await page.getByTestId('doc-list').getByTestId('doc-open').first().click();
+    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: parent })
+      .getByTestId('doc-open').click();
     await page.getByTestId('add-document').click();
     await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     await page.getByTestId('crumb').first().click();

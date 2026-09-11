@@ -1,6 +1,45 @@
 import { expect, openDocument, test } from './fixtures';
 
 test.describe('sidebar level switching', () => {
+  test('a document created while the list is still loading is not wiped by it', async ({ page }) => {
+    /*
+     * The first list request is held open, so it resolves AFTER the new
+     * document has been added to the sidebar. Without the sequence guard in
+     * App.tsx that stale response replaces the list and the new document
+     * vanishes from the sidebar — while still being the open document.
+     */
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/documents', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      // Fetch NOW but deliver later: the body has to be the list as it was
+      // BEFORE the new document existed, which is what makes it stale.
+      const response = await route.fetch();
+      const body = await response.text();
+      await gate;
+      await route.fulfill({ response, body });
+    });
+
+    await page.goto('/');
+    await page.getByTestId('new-document').click();
+    await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
+    const row = page.getByTestId('doc-list').getByTestId('doc-row').first();
+    const newId = await row.getAttribute('data-doc-id');
+
+    // Arm the wait BEFORE releasing, then assert only once the stale response
+    // has actually been applied — asserting sooner passes either way.
+    const landed = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'GET' && response.url().endsWith('/api/documents'),
+    );
+    release();
+    await landed;
+    await expect(page.locator(`[data-doc-id="${newId}"]`)).toHaveCount(1);
+    await page.unroute('**/api/documents');
+  });
+
   test('never shows the previous level while loading the next', async ({ page, doc }) => {
     await openDocument(page, doc);
     await page.getByTestId('add-document').click();

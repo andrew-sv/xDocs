@@ -1,9 +1,15 @@
+import { sql } from 'drizzle-orm';
 import { customType, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 /** Raw Yjs update payload. drizzle has no first-class bytea, so declare it. */
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
+});
+
+/** Postgres full-text vector. Generated, so it is never written directly. */
+const tsvector = customType<{ data: string; driverData: string }>({
+  dataType: () => 'tsvector',
 });
 
 export const documents = pgTable(
@@ -45,9 +51,31 @@ export const documents = pgTable(
      * the soft delete exists to preserve.
      */
     parentId: uuid('parent_id'),
+    /*
+     * Plain text of every block, mirrored out of the CRDT by the collab store
+     * hook — the same denormalisation as `title`, for the same reason.
+     *
+     * Search cannot read the real content: it lives in `ystate` as an opaque
+     * Yjs update, so Postgres cannot index it and answering a query would mean
+     * decoding every document. This column is derived, never authoritative;
+     * the next store overwrites it.
+     */
+    contentText: text('content_text'),
+    /*
+     * The search index itself, generated so it can never drift from the two
+     * columns it summarises. Title is weighted above body text, so a document
+     * called "Invoices" outranks one that merely mentions invoices.
+     */
+    search: tsvector('search').generatedAlwaysAs(
+      (): ReturnType<typeof sql> =>
+        sql`setweight(to_tsvector('english', coalesce(${documents.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${documents.contentText}, '')), 'B')`,
+    ),
   },
-  // Every sidebar query filters on this.
-  (table) => [index('documents_parent_idx').on(table.parentId)],
+  (table) => [
+    // Every sidebar query filters on this.
+    index('documents_parent_idx').on(table.parentId),
+    index('documents_search_idx').using('gin', table.search),
+  ],
 );
 
 export type DocumentRow = typeof documents.$inferSelect;

@@ -4,6 +4,7 @@ import { TITLE_KEY } from '@xdocs/shared';
 
 import * as Y from 'yjs';
 import { sessionFromToken } from './auth.js';
+import { readContentText } from './contentText.js';
 import { eq } from 'drizzle-orm';
 import { canAccessDocument } from './db/access.js';
 import { getDb } from './db/index.js';
@@ -55,6 +56,9 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
           .set({
             ystate: Buffer.from(state),
             title: readTitle(document),
+            // Mirrored for search, exactly like the title and for the same
+            // reason: `ystate` is opaque to Postgres.
+            contentText: readContentText(document),
             updatedAt: new Date(),
           })
           .where(eq(documents.id, id));

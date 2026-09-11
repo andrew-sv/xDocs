@@ -1,4 +1,4 @@
-import type { DocumentDTO, TrashEntryDTO, Visibility } from '@xdocs/shared';
+import type { DocumentDTO, SearchResultDTO, TrashEntryDTO, Visibility } from '@xdocs/shared';
 import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth';
 
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
@@ -40,6 +40,8 @@ export const api = {
       body: JSON.stringify({ title, ...(parentId ? { parentId } : {}) }),
     }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
+  search: (q: string) =>
+    request<SearchResultDTO[]>(`/documents/search?q=${encodeURIComponent(q)}`),
   listTrash: () => request<TrashEntryDTO[]>('/documents/trash'),
   /** Irreversible: removes the row and its Yjs content. */
   permanentlyDelete: (id: string) =>
