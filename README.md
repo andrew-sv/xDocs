@@ -93,6 +93,80 @@ refused by the collab server until restored.
 Deleting a document cascades to its sub-documents under one shared timestamp,
 which is what makes the whole subtree restorable together.
 
+### MCP server
+
+`apps/mcp` exposes xDocs to Claude as MCP tools, so it can search your documents
+for context and write notes back into them. It is a **stdio** server: the client
+spawns it, and it talks to the same public REST API an outside script would,
+holding an `xdk_` key.
+
+That is the whole security story — the key acts as its owner, so the allowlist,
+ancestor-gated visibility and owner-only writes all apply unchanged. The MCP
+layer cannot reach anything the key could not already reach with `curl`, because
+it goes through exactly that interface rather than importing the database.
+
+#### Setting it up
+
+**1. Create a key.** In the app, click **🔑 API keys** at the foot of the
+sidebar, name it (“Claude”), and copy it. It is shown once — it is stored
+hashed, so it cannot be shown again. Revoking is one click in the same dialog.
+
+**2. Add the server.** In Claude Code:
+
+```bash
+claude mcp add xdocs --env XDOCS_API_KEY=xdk_… -- pnpm --filter @xdocs/mcp start
+```
+
+Add `--env XDOCS_API_URL=https://your-api.up.railway.app` to work against
+staging instead of a local stack.
+
+**3. Check it.** Run `/mcp` in Claude Code — `xdocs` should be connected, with
+eight tools. Then ask it to search your documents, or to write one.
+
+Claude Desktop wants the same thing as JSON:
+
+```json
+{
+  "mcpServers": {
+    "xdocs": {
+      "command": "pnpm",
+      "args": ["--filter", "@xdocs/mcp", "start"],
+      "env": {
+        "XDOCS_API_URL": "https://your-api.up.railway.app",
+        "XDOCS_API_KEY": "xdk_…"
+      }
+    }
+  }
+}
+```
+
+Two environment variables, and only one is required:
+
+| Variable | Required | Default |
+|---|---|---|
+| `XDOCS_API_KEY` | yes — the server exits at once without it | — |
+| `XDOCS_API_URL` | no | `http://localhost:3001` |
+
+There is also a `.mcp.json` in this repo, so Claude Code picks the server up
+automatically in this project when `XDOCS_API_KEY` is exported in your shell —
+no key is committed to it.
+
+If the API is not running the server still starts: failures surface per tool
+call, naming the URL it tried, because clients spawn it long before the stack is
+up and exiting would make a working setup look broken.
+
+Eight tools: `search_documents`, `list_documents`, `read_document`,
+`create_document`, `append_to_document`, `replace_document_content`,
+`move_document`, `set_document_visibility`. Reads are annotated read-only and
+replacing content is annotated destructive, so clients can ask before it runs.
+
+**No delete, restore or trash tools, deliberately.** A mistaken delete is a
+surprise you find later rather than a dialog you decline, so removing a document
+stays a human action in the UI, where it has a confirmation and an undo.
+
+Because writes go through the content bridge, a document Claude writes appears
+in an open editor as it lands.
+
 ### The HTTP API
 
 Everything the app does over REST can be driven by a script. Create a key under

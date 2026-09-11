@@ -8,7 +8,7 @@
     "typecheck": "pnpm -r typecheck",
     "e2e": "pnpm -F @xdocs/web e2e",
     "test": "pnpm -F @xdocs/web test",
-    "integration": "pnpm -F @xdocs/web integration",
+    "integration": "pnpm -F @xdocs/web integration && pnpm -F @xdocs/mcp test",
     "smoke": "pnpm -F @xdocs/web smoke",
     "start": "pnpm -F @xdocs/api start",
     "db:generate": "pnpm -F @xdocs/api db:generate",
