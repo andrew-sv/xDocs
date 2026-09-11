@@ -1,4 +1,5 @@
-import type { DocumentDTO } from '@xdocs/shared';
+import type { DocumentDTO, TrashEntryDTO } from '@xdocs/shared';
+import { TrashList } from './TrashList';
 
 type SignedInUser = { name?: string | null; email: string; image?: string | null };
 
@@ -17,6 +18,13 @@ type Props = {
   onSelect: (doc: DocumentDTO) => void;
   onCreate: () => void;
   onDelete: (doc: DocumentDTO) => void;
+  trash: TrashEntryDTO[];
+  trashOpen: boolean;
+  trashLoading: boolean;
+  onOpenTrash: () => void;
+  onCloseTrash: () => void;
+  onRestoreFromTrash: (entry: TrashEntryDTO) => void;
+  onPurge: (entry: TrashEntryDTO) => void;
 };
 
 function DocumentRow({
@@ -84,6 +92,13 @@ export function DocumentList({
   onSelect,
   onCreate,
   onDelete,
+  trash,
+  trashOpen,
+  trashLoading,
+  onOpenTrash,
+  onCloseTrash,
+  onRestoreFromTrash,
+  onPurge,
 }: Props) {
   return (
     <aside className="sidebar">
@@ -93,6 +108,16 @@ export function DocumentList({
           + New
         </button>
       </div>
+      {trashOpen ? (
+        <TrashList
+          entries={trash}
+          loading={trashLoading}
+          onRestore={onRestoreFromTrash}
+          onPurge={onPurge}
+          onClose={onCloseTrash}
+        />
+      ) : (
+        <>
       {trail.length > 0 && (
         <nav className="crumbs" data-testid="crumbs" aria-label="Document path">
           <button type="button" className="crumb" data-testid="crumb-root" onClick={() => onNavigateCrumb(-1)}>
@@ -158,6 +183,21 @@ export function DocumentList({
           </>
         )}
       </ul>
+        </>
+      )}
+      <button
+        type="button"
+        className={trashOpen ? 'trash-toggle active' : 'trash-toggle'}
+        data-testid="trash-toggle"
+        onClick={trashOpen ? onCloseTrash : onOpenTrash}
+      >
+        <span>🗑 Trash</span>
+        {trash.length > 0 && (
+          <span className="trash-count" data-testid="trash-count">
+            {trash.length}
+          </span>
+        )}
+      </button>
       {user && (
         <div className="account" data-testid="account">
           {user.image && <img className="account-avatar" src={user.image} alt="" />}

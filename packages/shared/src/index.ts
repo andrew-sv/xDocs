@@ -56,6 +56,16 @@ export const documentSchema = z.object({
 });
 export type DocumentDTO = z.infer<typeof documentSchema>;
 
+/** A deleted document as shown in Trash: one entry per delete operation. */
+export const trashEntrySchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  deletedAt: z.iso.datetime(),
+  /** Sub-documents that were deleted with it and come back on restore. */
+  descendantCount: z.number().int().nonnegative(),
+});
+export type TrashEntryDTO = z.infer<typeof trashEntrySchema>;
+
 export const createDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200).default('Untitled'),
   /** When set, the new document becomes a child and copies its visibility. */

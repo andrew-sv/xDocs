@@ -5,8 +5,9 @@ import {
   updateVisibilitySchema,
   type BlockMeta,
   type DocumentDTO,
+  type TrashEntryDTO,
 } from '@xdocs/shared';
-import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
@@ -133,6 +134,73 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     return c.json(toDTO(row!, userId, false), 201);
   })
 
+  /*
+   * Declared before /:id — otherwise the param route captures "trash".
+   *
+   * Lists deletion ROOTS only. Deleting a parent cascades under one shared
+   * timestamp, so listing every descendant would show a five-document subtree
+   * as five entries you cannot restore independently.
+   */
+  .get('/trash', async (c) => {
+    const userId = c.get('userId');
+    const rows = await getDb().execute(sql`
+      WITH RECURSIVE roots AS (
+        SELECT id, title, deleted_at
+          FROM documents d
+         WHERE d.deleted_at IS NOT NULL
+           AND d.created_by = ${userId}
+           AND (
+             d.parent_id IS NULL
+             OR NOT EXISTS (
+               SELECT 1 FROM documents p
+                WHERE p.id = d.parent_id AND p.deleted_at = d.deleted_at
+             )
+           )
+      ),
+      descendants AS (
+        SELECT r.id AS root_id, d.id
+          FROM roots r
+          JOIN documents d ON d.parent_id = r.id AND d.deleted_at IS NOT NULL
+        UNION ALL
+        SELECT x.root_id, d.id
+          FROM descendants x
+          JOIN documents d ON d.parent_id = x.id AND d.deleted_at IS NOT NULL
+      )
+      SELECT r.id, r.title, r.deleted_at,
+             (SELECT count(*) FROM descendants x WHERE x.root_id = r.id) AS descendant_count
+        FROM roots r
+       ORDER BY r.deleted_at DESC
+    `);
+    const list = (rows as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+    const entries: TrashEntryDTO[] = list.map((row) => ({
+      id: String(row.id),
+      title: String(row.title),
+      deletedAt: new Date(row.deleted_at as string).toISOString(),
+      descendantCount: Number(row.descendant_count ?? 0),
+    }));
+    return c.json(entries);
+  })
+
+  /*
+   * The only operation in the app that destroys data: the rows AND their
+   * ystate, which is every document's entire content. No soft delete behind it.
+   */
+  .delete('/:id/permanent', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+
+    const [owned] = await getDb()
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.id, id), eq(documents.createdBy, userId), isNotNull(documents.deletedAt)));
+    // Only something already in the trash can be destroyed — never a live one.
+    if (!owned) return c.json({ error: 'Only the owner can permanently delete a trashed document.' }, 403);
+
+    const ids = await subtreeIds(id);
+    await getDb().delete(documents).where(inArray(documents.id, ids));
+    return c.body(null, 204);
+  })
+
   .get('/:id', async (c) => {
     const userId = c.get('userId');
     const id = c.req.param('id');
@@ -202,6 +270,25 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       .update(documents)
       .set({ deletedAt: null })
       .where(and(inArray(documents.id, ids), eq(documents.deletedAt, target.deletedAt)));
+
+    /*
+     * If its parent is still deleted, the document would come back somewhere
+     * unreachable: access needs the whole ancestor chain visible, so it would
+     * be restored and still invisible. Lift it to the top level instead.
+     */
+    const [restored] = await getDb()
+      .select({ parentId: documents.parentId })
+      .from(documents)
+      .where(eq(documents.id, id));
+    if (restored?.parentId) {
+      const [parent] = await getDb()
+        .select({ deletedAt: documents.deletedAt })
+        .from(documents)
+        .where(eq(documents.id, restored.parentId));
+      if (!parent || parent.deletedAt !== null) {
+        await getDb().update(documents).set({ parentId: null }).where(eq(documents.id, id));
+      }
+    }
 
     const [row] = await getDb().select(columns).from(documents).where(eq(documents.id, id));
     const withChildren = await childBearing([id]);
