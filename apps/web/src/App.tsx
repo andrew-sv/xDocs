@@ -10,6 +10,24 @@ import { Toast } from './components/Toast';
 import { api } from './lib/api';
 import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
 
+/**
+ * The trail ending at `doc`, reached from `trail`.
+ *
+ * A document already on the path is a step back to it, not a step deeper. The
+ * sidebar's "Current" row is the last crumb and opens like any other row, so
+ * appending unconditionally stacked a duplicate crumb on every click (#11).
+ * Otherwise the document goes right after its parent: at the top level if it
+ * has none, after the parent's crumb if that is on the path, and at the end of
+ * the trail when neither is known.
+ */
+function pathTo(trail: DocumentDTO[], doc: DocumentDTO): DocumentDTO[] {
+  const at = trail.findIndex((d) => d.id === doc.id);
+  if (at !== -1) return [...trail.slice(0, at), doc];
+  if (doc.parentId === null) return [doc];
+  const parentAt = trail.findIndex((d) => d.id === doc.parentId);
+  return parentAt === -1 ? [...trail, doc] : [...trail.slice(0, parentAt + 1), doc];
+}
+
 export function App() {
   const [documents, setDocuments] = useState<DocumentDTO[]>([]);
   /*
@@ -233,17 +251,54 @@ export function App() {
   /** Open a document AND show its sub-documents in the sidebar. */
   const openDocument = useCallback((doc: DocumentDTO) => {
     setSelected(doc);
-    setTrail((prev) => {
-      /*
-       * A document already on the path is a step back to it, not a step
-       * deeper. The "Current" row is the last crumb and opens through here like
-       * any other row, so appending unconditionally stacked a duplicate crumb
-       * on every click.
-       */
-      const at = prev.findIndex((d) => d.id === doc.id);
-      return at === -1 ? [...prev, doc] : [...prev.slice(0, at), doc];
-    });
+    setTrail((prev) => pathTo(prev, doc));
   }, []);
+
+  /**
+   * Follow a sub-document link. The parent is the open document, which is not
+   * always on the trail — a just-added sub-document is opened without drilling
+   * into it — so it is put on the path first and the child goes under it.
+   */
+  const openSubDocument = useCallback((parent: DocumentDTO, child: DocumentDTO) => {
+    setSelected(child);
+    setTrail((prev) => pathTo(pathTo(prev, parent), child));
+  }, []);
+
+  /*
+   * Sub-documents of the open document, for the links at its foot.
+   *
+   * When the open document is the sidebar's current level, its children ARE
+   * the sidebar's list, so reuse it: a new child, a rename typed a moment ago
+   * or a delete shows up at once, instead of after the server's debounced copy.
+   * The open document is not always that level (a just-added sub-document, one
+   * restored by undo), and then its children are fetched.
+   */
+  const selectedId = selected?.id ?? null;
+  const childrenAreSidebarLevel = selectedId !== null && selectedId === currentParentId;
+  const [fetchedChildren, setFetchedChildren] = useState<{ parentId: string; docs: DocumentDTO[] } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (selectedId === null || childrenAreSidebarLevel) return;
+    let current = true;
+    api.listDocuments(selectedId).then(
+      (docs) => {
+        if (current) setFetchedChildren({ parentId: selectedId, docs });
+      },
+      // Links are a convenience; the sidebar still reaches every child.
+      () => {},
+    );
+    return () => {
+      current = false;
+    };
+  }, [selectedId, childrenAreSidebarLevel]);
+  const subDocuments = childrenAreSidebarLevel
+    ? documentsParentId === currentParentId
+      ? documents
+      : []
+    : fetchedChildren?.parentId === selectedId
+      ? fetchedChildren.docs
+      : [];
 
   /** Jump to a crumb; index -1 is the top level. */
   const navigateToCrumb = useCallback((index: number) => {
@@ -432,6 +487,8 @@ export function App() {
           onTitleChange={handleTitleChange}
           onVisibilityChange={handleVisibilityChange}
           onAddSubDocument={() => addSubDocument(selected)}
+          subDocuments={subDocuments}
+          onOpenSubDocument={(child) => openSubDocument(selected, child)}
         />
       )}
       {!error && !selected && (

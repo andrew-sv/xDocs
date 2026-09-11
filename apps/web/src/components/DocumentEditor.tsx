@@ -30,14 +30,33 @@ type Props = {
   onVisibilityChange: (id: string, visibility: DocumentDTO['visibility']) => Promise<void>;
   /** Create a sub-document of this one and open it. */
   onAddSubDocument: () => void;
+  /** This document's children, linked at its foot. */
+  subDocuments: DocumentDTO[];
+  onOpenSubDocument: (child: DocumentDTO) => void;
 };
+
+function DocIcon() {
+  return (
+    <svg width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" aria-hidden="true">
+      <path d="M2.5 1.5h6l3 3v10h-9z M8.5 1.5v3h3" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export function DocumentEditor({
   document: doc,
   onTitleChange,
   onVisibilityChange,
   onAddSubDocument,
+  subDocuments,
+  onOpenSubDocument,
 }: Props) {
+  // Creation order, so the links do not reshuffle every time a child is edited
+  // (the sidebar's list is ordered by last update).
+  const orderedSubDocuments = useMemo(
+    () => [...subDocuments].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [subDocuments],
+  );
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
@@ -333,6 +352,26 @@ export function DocumentEditor({
             + Add document
           </button>
           </div>
+          {orderedSubDocuments.length > 0 && (
+            <nav className="sub-docs" data-testid="sub-docs" aria-label="Sub-documents">
+              <h2 className="sub-docs-title">Sub-documents</h2>
+              <ul className="sub-docs-list">
+                {orderedSubDocuments.map((child) => (
+                  <li key={child.id}>
+                    <button
+                      type="button"
+                      className="sub-doc-link"
+                      data-testid="sub-doc-link"
+                      onClick={() => onOpenSubDocument(child)}
+                    >
+                      <DocIcon />
+                      <span className="sub-doc-title">{child.title || 'Untitled'}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
         </>
       )}
 
