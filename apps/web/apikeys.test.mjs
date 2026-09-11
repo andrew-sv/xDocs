@@ -7,6 +7,10 @@
  * nothing more.
  */
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 let fail = 0;
@@ -101,5 +105,6 @@ ck('a flat listing includes them', flat.some((d) => d.id === child.id) && flat.s
 ck('flat rows still say where they sit', flat.find((d) => d.id === child.id)?.parentId === parent.id);
 ck('a flat listing is still gated by visibility', !flat.some((d) => d.id === strangerDoc.id));
 
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

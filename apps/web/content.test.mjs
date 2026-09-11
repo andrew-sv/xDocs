@@ -8,6 +8,10 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -204,5 +208,6 @@ ck(
 ck('an unknown block type is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status === 400);
 ck('a code block without text is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400);
 
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

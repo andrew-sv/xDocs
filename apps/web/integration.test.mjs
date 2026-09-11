@@ -3,6 +3,10 @@ import * as Y from 'yjs';
 import { resolveMove, applyMove } from './src/lib/reorder.ts';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { authHeaders, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -227,5 +231,6 @@ D.provider.destroy();
 // 10. Cleanup
 await fetch(`${API}/api/documents/${id}`, { method: 'DELETE', headers: H() });
 
+await tracker.purge();
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -9,6 +9,10 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -119,5 +123,6 @@ ck('an empty query returns nothing rather than everything', (await search(owner,
 ck('a punctuation-only query is empty, not an error', (await search(owner, '  ??? ')).length === 0);
 ck('an unmatched word returns no hits', (await search(owner, 'qqzzxx' + Date.now())).length === 0);
 
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);
