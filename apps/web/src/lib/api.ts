@@ -93,6 +93,7 @@ export const api = {
   /** Irreversible: removes the row and its Yjs content. */
   permanentlyDelete: (id: string) =>
     request<void>(`/documents/${id}/permanent`, { method: 'DELETE' }),
+  getDocument: (id: string) => request<DocumentDTO>(`/documents/${id}`),
   /** Ancestors, root first — for opening a document whose place in the tree is unknown. */
   getDocumentPath: (id: string) => request<DocumentDTO[]>(`/documents/${id}/path`),
   restoreDocument: (id: string) =>
