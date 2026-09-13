@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
 import { LinkClicks, attachFile } from '../lib/attachments';
+import { AttachmentImage, ImageDrop, insertImage, isImage } from '../lib/images';
 import { BlockKeymap } from '../lib/blockKeymap';
 import { CommandPalette, type PaletteState } from '../lib/commandPalette';
 import type { CommandId } from '../lib/commands';
@@ -146,6 +147,8 @@ export function BlockEditor({
         }),
         CollaborationCaret.configure({ provider, user: localUser }),
         LinkClicks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
+        AttachmentImage,
+        ImageDrop.configure({ onFiles: (files) => void handleFiles(files) }),
       ],
     },
     [block.id, ydoc, provider, fragment, undoManager],
@@ -155,11 +158,18 @@ export function BlockEditor({
     if (!editor) return;
     setNote({ kind: 'progress', text: `Uploading “${file.name}”…` });
     try {
-      await attachFile(editor, documentId, file);
+      // An image is shown; anything else is linked by name.
+      if (isImage(file)) await insertImage(editor, documentId, file);
+      else await attachFile(editor, documentId, file);
       setNote(null);
     } catch (e) {
       setNote({ kind: 'error', text: e instanceof Error ? e.message : 'Upload failed.' });
     }
+  }
+
+  /** Pasted or dropped, so possibly several at once. */
+  async function handleFiles(files: File[]) {
+    for (const file of files) await handleFile(file);
   }
 
   // Expose this block's editor so the parent can read its HTML when exporting.

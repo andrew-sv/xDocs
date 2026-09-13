@@ -227,6 +227,12 @@ visibility, disappears into the trash with it, returns on restore, and is
 destroyed with it by a permanent delete. The 10 MB cap is what keeps storing
 them in the database reasonable.
 
+An image is shown in place rather than linked: attaching, pasting or dropping
+one inserts an image node holding the same `/api/attachments/<id>` link, and the
+editor fetches it with the session's token and displays it from a blob. Its
+filename lives in `alt`, which is mirrored into `content_text`, so an image is
+findable by name and the content routes still have something to show for it.
+
 An attachment is an ordinary link, not a node of its own, so its name is plain
 text that search finds and the content routes return. Because auth is a bearer
 token, which a link cannot carry, clicking one makes the editor fetch the file

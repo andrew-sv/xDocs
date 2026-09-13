@@ -349,6 +349,12 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .block-actions { display: flex; gap: 8px; }
 .add-document { border-style: solid; }
 
+/* Images: attachments rendered inline (see lib/images.ts) */
+.tiptap .block-image-holder { margin: 0.4em 0; }
+.tiptap .block-image { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.tiptap .block-image-holder.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.block-image-missing { display: inline-block; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 13px; }
+
 /* Sub-document links at the foot of a document */
 .sub-docs { max-width: 720px; margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--border); }
 .sub-docs-title { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
