@@ -270,6 +270,17 @@ export const attachmentSchema = z.object({
 export type AttachmentDTO = z.infer<typeof attachmentSchema>;
 
 /**
+ * An attachment as the document's file list shows it.
+ *
+ * `linked` is whether the document still refers to it. Deleting the link to a
+ * file does not delete the file — it cannot, since the deletion is undoable —
+ * so unused files accumulate invisibly. The list makes them visible, and
+ * deletable, without guessing on anyone's behalf.
+ */
+export const documentAttachmentSchema = attachmentSchema.extend({ linked: z.boolean() });
+export type DocumentAttachmentDTO = z.infer<typeof documentAttachmentSchema>;
+
+/**
  * A collab channel that carries no content, only a signal.
  *
  * The server sends DOCUMENTS_CHANGED on it whenever the document list may have

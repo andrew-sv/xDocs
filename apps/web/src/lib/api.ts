@@ -2,6 +2,7 @@ import type {
   ApiKeyDTO,
   AttachmentDTO,
   AttachmentUsageDTO,
+  DocumentAttachmentDTO,
   CreatedApiKeyDTO,
   DocumentDTO,
   SearchResultDTO,
@@ -122,6 +123,9 @@ export const api = {
     return (await res.json()) as AttachmentDTO;
   },
   attachmentUsage: () => request<AttachmentUsageDTO>('/attachments/usage'),
+  listAttachments: (documentId: string) =>
+    request<DocumentAttachmentDTO[]>(`/documents/${documentId}/attachments`),
+  deleteAttachment: (id: string) => request<void>(`/attachments/${id}`, { method: 'DELETE' }),
   downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null }> => {
     const res = await send(`/attachments/${id}`);
     if (!res.ok) throw await failure(res, 'Download failed');

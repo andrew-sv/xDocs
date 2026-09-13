@@ -17,6 +17,7 @@ import { getToken } from '../lib/auth';
 import { COLLAB_URL } from '../lib/collab';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
+import { DocumentFiles } from './DocumentFiles';
 import { TitleEditor } from './TitleEditor';
 import { VisibilityToggle } from './VisibilityToggle';
 import { Toast } from './Toast';
@@ -65,6 +66,8 @@ export function DocumentEditor({
   const [dropTarget, setDropTarget] = useState<{ id: string; edge: DropEdge } | null>(null);
   const [undoManager, setUndoManager] = useState<Y.UndoManager | null>(null);
   const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
+  /** Bumped when a block uploads a file, so the file list picks it up. */
+  const [filesKey, setFilesKey] = useState(0);
 
   useEffect(() => {
     // One Y.Doc + one socket per open document. Every block is a fragment on
@@ -320,6 +323,7 @@ export function DocumentEditor({
                 onNudge={handleNudge}
                 undoManager={undoManager}
                 documentId={doc.id}
+                onAttached={() => setFilesKey((key) => key + 1)}
                 onInsertBelow={handleInsertBelow}
                 onRunCommand={(id) => void runCommand(id)}
                 registerEditor={registerEditor}
@@ -353,6 +357,7 @@ export function DocumentEditor({
             + Add document
           </button>
           </div>
+          <DocumentFiles documentId={doc.id} reloadKey={filesKey} />
           {orderedSubDocuments.length > 0 && (
             <nav className="sub-docs" data-testid="sub-docs" aria-label="Sub-documents">
               <h2 className="sub-docs-title">Sub-documents</h2>

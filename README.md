@@ -202,6 +202,8 @@ turn one leaked credential into access that revoking the original does not undo.
 | `POST /api/documents/:id/attachments` | attach a file: multipart field `file`, up to 10 MB |
 | `GET /api/attachments/:id` | download it, always as an attachment |
 | `GET /api/attachments/usage` | this account's file storage: used, and the limit |
+| `GET /api/documents/:id/attachments` | its files, each marked used or not |
+| `DELETE /api/attachments/:id` | delete one for good |
 | `GET`/`POST`/`DELETE /api/keys` | manage keys; session only |
 
 #### Content goes through the CRDT, not around it
@@ -233,6 +235,11 @@ one inserts an image node holding the same `/api/attachments/<id>` link, and the
 editor fetches it with the session's token and displays it from a blob. Its
 filename lives in `alt`, which is mirrored into `content_text`, so an image is
 findable by name and the content routes still have something to show for it.
+A document lists its files at the foot, marking any that nothing links to any
+more. Deleting a link cannot delete the file — that deletion is undoable, and
+the link may be in someone else's unsynced edit — so files outlive their links
+and would otherwise pile up unseen. Deleting one from the list is permanent, and
+says so, including whether the document still links to it.
 
 An attachment is an ordinary link, not a node of its own, so its name is plain
 text that search finds and the content routes return. Because auth is a bearer
