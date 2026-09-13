@@ -122,6 +122,15 @@ ck(
   'a read round-trips through replace unchanged',
   JSON.stringify(rewritten.structuredContent.blocks) === JSON.stringify(afterCode.structuredContent.blocks),
 );
+// --- links ---------------------------------------------------------------------
+await call(client, 'replace_document_content', { id, blocks: ['Read [the docs](https://example.com/docs) first.'] });
+const withLink = await call(client, 'read_document', { id });
+ck('a link written through MCP comes back in the same notation',
+  withLink.structuredContent.blocks[0] === 'Read [the docs](https://example.com/docs) first.');
+const refusedLink = await call(client, 'append_to_document', { id, blocks: ['[no](javascript:alert(1))'] });
+ck('a link the editor could not open is refused', refusedLink.isError === true);
+ck('and the refusal explains itself', /not a link/i.test(text(refusedLink)));
+
 const badBlock = await call(client, 'append_to_document', { id, blocks: [{ type: 'heading', text: 'x' }] });
 ck('an unknown block type is rejected', badBlock.isError === true);
 

@@ -117,6 +117,13 @@ document's (`canAccessDocument`); there is no separate file permission.
 
 Each of these caused a real bug. Changing them silently breaks things.
 
+- **Fill a Yjs text node only after it is part of the document, and clear marks
+  explicitly.** A detached `Y.XmlText` reports length 0 and queues what it is
+  given, so appending run by run wrote every run at 0 — the text came out
+  backwards. And text inserted beside a link inherits its formatting, so plain
+  runs pass `{ link: null }`; without it the words after a link were swallowed
+  into it. Both are covered in `content.test.mjs` (#25).
+
 - **Never pass the document-wide `UndoManager` to Collaboration's
   `yUndoOptions`.** That plugin assumes it owns its manager and calls
   `undoManager.destroy()` on editor teardown; Yjs's `destroy()` detaches the
