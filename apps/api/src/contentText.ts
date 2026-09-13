@@ -46,6 +46,14 @@ export function textOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText | Y.XmlHoo
       .map((op: { insert?: unknown }) => (typeof op.insert === 'string' ? op.insert : ''))
       .join('');
   }
+  /*
+   * An image has no text, only attributes. Its filename lives in `alt`, so
+   * taking that is what makes an image findable by name and gives the REST
+   * content view something to show for it.
+   */
+  if (node instanceof Y.XmlElement && node.nodeName === 'image') {
+    return node.getAttribute('alt') ?? '';
+  }
   if (node instanceof Y.XmlFragment || node instanceof Y.XmlElement) {
     const children: string[] = [];
     for (let i = 0; i < node.length; i++) {

@@ -181,6 +181,17 @@ Each of these caused a real bug. Changing them silently breaks things.
   `send()` treats any 403 as "this account is not allowed in", drops the token
   and shows the login gate. Refusals on a document or file are 404, which also
   keeps ids unprobeable.
+- **An inline image is TipTap's own `image` node, rendered through a node view
+  that fetches the file.** The node name is not private on purpose: y-tiptap
+  DELETES an element whose name a client's schema does not know, so a private
+  name would be destroyed by every client that had not reloaded. An `<img>`
+  cannot send a bearer token, so the node view fetches the attachment and shows
+  a blob URL, and it declares `ignoreMutation: () => true` — ProseMirror reads
+  DOM changes inside a node view as an edit, and swapping the `<img>` for a
+  fallback turned the image into a paragraph of text, which then synced to
+  everyone. `alt` carries the filename, and `contentText.ts` mirrors it so
+  images are searchable; `e2e/images.spec.ts` covers the reload path, which is
+  what caught the mutation bug.
 - **An attachment is a Link mark whose href is `/api/attachments/<id>`, not a
   node.** The name stays searchable text, and an older client renders a link
   instead of dropping an unknown node. The href is origin-relative and needs a

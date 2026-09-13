@@ -205,6 +205,28 @@ ck(
     JSON.stringify(roundTrip.blocks.map(({ type, text }) => [type, text])),
 );
 
+// --- images: the filename is what search and the content view can see -----------
+const imageDoc = await create(owner, 'Image test');
+const imageClient = connect(imageDoc.id, owner);
+await imageClient.synced;
+await sleep(300);
+const imageBlockId = imageClient.doc.getArray('blocks').get(0).id;
+const imageFragment = imageClient.doc.getXmlFragment(`block-${imageBlockId}`);
+const imageNeedle = `zorblat${Date.now()}`;
+const imageNode = new Y.XmlElement('image');
+imageNode.setAttribute('src', '/api/attachments/00000000-0000-0000-0000-000000000000');
+imageNode.setAttribute('alt', `${imageNeedle}.png`);
+imageFragment.delete(0, imageFragment.length);
+imageFragment.insert(0, [imageNode]);
+await sleep(600);
+
+const imageContent = await getContent(owner, imageDoc.id).then((r) => r.json());
+ck('an image block reads back as its filename', imageContent.blocks[0].text === `${imageNeedle}.png`);
+imageClient.provider.destroy();
+await sleep(3500);
+const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, { headers: H(owner) }).then((r) => r.json());
+ck('and an image is findable by its filename', imageHits.some((h) => h.document.id === imageDoc.id));
+
 ck('an unknown block type is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status === 400);
 ck('a code block without text is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400);
 
