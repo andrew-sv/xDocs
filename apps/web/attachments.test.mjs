@@ -7,9 +7,13 @@
  * destroyed by a permanent delete — there is no separate permission model to
  * get out of step.
  */
+import { HocuspocusProvider } from '@hocuspocus/provider';
+import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
 
 const API = 'http://localhost:3001';
+const WS = 'ws://localhost:3001';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const MAX = 10 * 1024 * 1024;
 
 let fail = 0;
@@ -122,6 +126,66 @@ await fetch(`${API}/api/documents/${doc.id}/visibility`, {
 });
 ck('once the document is public, others can download', (await download(stranger, attached.id)).status === 200);
 ck('and attach, as they can edit', (await upload(stranger, doc.id, new Uint8Array([1]), 'theirs.txt', 'text/plain')).status === 201);
+
+// --- the document's file list ------------------------------------------------
+const listDoc = await create(owner, 'File list test');
+const listed = (token, id) => fetch(`${API}/api/documents/${id}/attachments`, { headers: H(token) });
+const del = (token, id) => fetch(`${API}/api/attachments/${id}`, { method: 'DELETE', headers: H(token) });
+
+ck('a document with no files lists none', (await listed(owner, listDoc.id).then((r) => r.json())).length === 0);
+const loose = await upload(owner, listDoc.id, new Uint8Array([1, 2, 3]), 'loose.txt', 'text/plain').then((r) => r.json());
+const listedOnce = await listed(owner, listDoc.id).then((r) => r.json());
+ck('an uploaded file appears in the list', listedOnce.length === 1 && listedOnce[0].id === loose.id);
+ck('with its name and size', listedOnce[0].filename === 'loose.txt' && listedOnce[0].size === 3);
+ck('and is marked unused while nothing links to it', listedOnce[0].linked === false);
+
+/*
+ * Linked the way the editor does it: a link mark in the CRDT. The content
+ * routes are plain text here, so this is the only way to make a real link.
+ */
+const ydoc = new Y.Doc();
+const provider = new HocuspocusProvider({ url: WS, name: `doc:${listDoc.id}`, document: ydoc, token: owner });
+await new Promise((r) => provider.on('synced', () => r()));
+await sleep(300);
+const blockId = ydoc.getArray('blocks').get(0).id;
+const fragment = ydoc.getXmlFragment(`block-${blockId}`);
+const paragraph = new Y.XmlElement('paragraph');
+const linkText = new Y.XmlText();
+paragraph.insert(0, [linkText]);
+fragment.delete(0, fragment.length);
+fragment.insert(0, [paragraph]);
+linkText.insert(0, 'loose.txt');
+linkText.format(0, 9, { link: { href: loose.href } });
+await sleep(600);
+ck('a linked file is marked as used', (await listed(owner, listDoc.id).then((r) => r.json()))[0].linked === true);
+
+// An image counts too: it refers to its file through src, not a link mark.
+const picture = await upload(owner, listDoc.id, new Uint8Array([1]), 'picture.png', 'image/png').then((r) => r.json());
+const image = new Y.XmlElement('image');
+image.setAttribute('src', picture.href);
+image.setAttribute('alt', 'picture.png');
+fragment.insert(fragment.length, [image]);
+await sleep(600);
+const withImage = await listed(owner, listDoc.id).then((r) => r.json());
+ck('an image marks its file as used', withImage.find((f) => f.id === picture.id)?.linked === true);
+
+// Remove both: the files survive, since the deletion is undoable.
+fragment.delete(0, fragment.length);
+await sleep(600);
+ck('the image file survives its removal too', (await listed(owner, listDoc.id).then((r) => r.json())).length === 2);
+await del(owner, picture.id);
+provider.destroy();
+const afterUnlink = await listed(owner, listDoc.id).then((r) => r.json());
+ck('removing the link keeps the file', afterUnlink.length === 1);
+ck('but marks it unused again', afterUnlink[0].linked === false);
+ck('and it still downloads', (await download(owner, loose.id)).status === 200);
+
+ck('a stranger cannot list a private document\'s files', (await listed(stranger, listDoc.id)).status === 404);
+ck('nor delete one of its files', (await del(stranger, loose.id)).status === 404);
+ck('an unknown file is a 404', (await del(owner, '00000000-0000-0000-0000-000000000000')).status === 404);
+ck('the owner can delete it', (await del(owner, loose.id)).status === 204);
+ck('and it is gone for good', (await download(owner, loose.id)).status === 404);
+ck('leaving the list empty', (await listed(owner, listDoc.id).then((r) => r.json())).length === 0);
 
 // --- trash, restore, purge ------------------------------------------------------
 await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(owner) });

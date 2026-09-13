@@ -1,14 +1,21 @@
 import {
+  ATTACHMENT_HREF,
+  BLOCKS_KEY,
   DEFAULT_ATTACHMENT_QUOTA_BYTES,
   MAX_ATTACHMENT_BYTES,
   attachmentHref,
+  blockFragmentName,
   quotaRefusal,
   type AttachmentDTO,
   type AttachmentUsageDTO,
+  type BlockMeta,
+  type DocumentAttachmentDTO,
 } from '@xdocs/shared';
 import { eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import * as Y from 'yjs';
+import { withDocument } from '../collab.js';
 import { canAccessDocument } from '../db/access.js';
 import { getDb } from '../db/index.js';
 import { attachments } from '../db/schema.js';
@@ -83,6 +90,33 @@ function toDTO(row: AttachmentColumns): AttachmentDTO {
   };
 }
 
+/** Every attachment the document still refers to: link marks, and image sources. */
+function linkedAttachments(doc: Y.Doc): Set<string> {
+  const ids = new Set<string>();
+  const add = (href: unknown) => {
+    if (typeof href !== 'string') return;
+    const id = ATTACHMENT_HREF.exec(href)?.[1];
+    if (id) ids.add(id.toLowerCase());
+  };
+
+  const walk = (node: Y.XmlFragment | Y.XmlElement | Y.XmlText) => {
+    if (node instanceof Y.XmlText) {
+      for (const op of node.toDelta() as Array<{ attributes?: { link?: { href?: unknown } } }>) {
+        add(op.attributes?.link?.href);
+      }
+      return;
+    }
+    if (node instanceof Y.XmlElement) add(node.getAttribute('src'));
+    for (let i = 0; i < node.length; i++) walk(node.get(i) as Y.XmlElement);
+  };
+
+  for (const block of doc.getArray<BlockMeta>(BLOCKS_KEY).toArray()) {
+    if (!block?.id) continue;
+    walk(doc.getXmlFragment(blockFragmentName(block.id)));
+  }
+  return ids;
+}
+
 /*
  * Access follows the document, and nothing else: anyone who can open a
  * document can attach to it and download from it — the same rule the content
@@ -150,6 +184,66 @@ export const attachmentsRoute = new Hono<{ Variables: Variables }>()
       quotaBytes: QUOTA_BYTES,
     };
     return c.json(usage);
+  })
+
+  /*
+   * A document's files, including those nothing links to any more.
+   *
+   * Read from the LIVE document, like the content routes: `ystate` lags by the
+   * store debounce, so a file attached a moment ago would look unused.
+   */
+  .get('/documents/:id/attachments', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    if (!UUID.test(id) || !(await canAccessDocument(userId, id))) {
+      return c.json({ error: 'Document not found' }, 404);
+    }
+
+    const rows = await getDb()
+      .select({
+        id: attachments.id,
+        documentId: attachments.documentId,
+        filename: attachments.filename,
+        contentType: attachments.contentType,
+        size: attachments.size,
+        createdAt: attachments.createdAt,
+      })
+      .from(attachments)
+      .where(eq(attachments.documentId, id))
+      .orderBy(attachments.createdAt);
+    if (rows.length === 0) return c.json([]);
+
+    const linked = await withDocument(id, linkedAttachments);
+    const list: DocumentAttachmentDTO[] = rows.map((row) => ({
+      ...toDTO(row),
+      linked: linked.has(row.id.toLowerCase()),
+    }));
+    return c.json(list);
+  })
+
+  /*
+   * Delete a file for good.
+   *
+   * Anyone who can edit the document may, as with attaching — and a file still
+   * linked can be deleted too: the link is theirs to fix, and refusing would
+   * leave no way to remove something attached by mistake. The UI says which
+   * files are in use.
+   */
+  .delete('/attachments/:id', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    if (!UUID.test(id)) return c.json({ error: 'Not found' }, 404);
+
+    const [row] = await getDb()
+      .select({ id: attachments.id, documentId: attachments.documentId })
+      .from(attachments)
+      .where(eq(attachments.id, id));
+    if (!row || !(await canAccessDocument(userId, row.documentId))) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+
+    await getDb().delete(attachments).where(eq(attachments.id, id));
+    return c.body(null, 204);
   })
 
   /*

@@ -45,6 +45,8 @@ type Props = {
   undoManager: Y.UndoManager;
   /** The document files are attached to. */
   documentId: string;
+  /** A file was uploaded, so the document's file list is out of date. */
+  onAttached: () => void;
 };
 
 function DragDots() {
@@ -78,6 +80,7 @@ export function BlockEditor({
   registerEditor,
   undoManager,
   documentId,
+  onAttached,
 }: Props) {
   const [palette, setPalette] = useState<PaletteState | null>(null);
   const [focused, setFocused] = useState(false);
@@ -161,6 +164,7 @@ export function BlockEditor({
       // An image is shown; anything else is linked by name.
       if (isImage(file)) await insertImage(editor, documentId, file);
       else await attachFile(editor, documentId, file);
+      onAttached();
       setNote(null);
     } catch (e) {
       setNote({ kind: 'error', text: e instanceof Error ? e.message : 'Upload failed.' });

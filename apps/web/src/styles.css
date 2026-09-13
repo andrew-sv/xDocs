@@ -355,6 +355,18 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .tiptap .block-image { display: block; max-width: 100%; height: auto; border-radius: 6px; }
 .tiptap .block-image-holder.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .block-image-missing { display: inline-block; padding: 6px 10px; border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 13px; }
+/* Files attached to a document */
+.doc-files { max-width: 720px; margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--border); }
+.doc-files-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.doc-file { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.doc-file-open { flex: 1; min-width: 0; border: 0; background: none; padding: 3px 6px; margin-left: -6px; border-radius: 5px; font: inherit; color: var(--text); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.doc-file-open::before { content: '📎'; margin-right: 6px; font-size: 0.9em; }
+.doc-file-open:hover { background: var(--panel); }
+.doc-file-meta { display: flex; align-items: center; gap: 8px; flex: none; font-size: 11px; color: var(--muted); }
+.doc-file-unused { border: 1px solid var(--border); border-radius: 20px; padding: 1px 7px; }
+.doc-file-delete { flex: none; opacity: 0; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+.doc-file:hover .doc-file-delete, .doc-file-delete:focus-visible { opacity: 1; }
+.doc-file-delete:hover { background: var(--panel); color: #9b2c2c; }
 
 /* Sub-document links at the foot of a document */
 .sub-docs { max-width: 720px; margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--border); }
