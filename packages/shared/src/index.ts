@@ -144,8 +144,12 @@ export type ContentBlockType = z.infer<typeof contentBlockTypeSchema>;
  *
  * Text only, deliberately: the editor's rich text lives in ProseMirror nodes
  * inside the CRDT, and round-tripping that through HTTP would need the TipTap
- * schema on the server. Reading returns the words; writing sets them. The one
- * structure it keeps is a code block, whose text is only readable verbatim.
+ * schema on the server. Reading returns the words; writing sets them.
+ *
+ * Two exceptions, both because the plain words would be wrong without them: a
+ * code block, whose text is only readable verbatim, and links, which are
+ * written the Markdown way as `[label](href)` in both directions (a backslash
+ * escapes a literal bracket). Code block text is never link notation.
  */
 export const contentBlockSchema = z.object({
   id: z.string(),

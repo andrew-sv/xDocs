@@ -22,8 +22,10 @@ const blocksSchema = z
   )
   .describe(
     'Blocks, in order. A string is a paragraph; a newline inside one starts another paragraph block. ' +
-      '{"type": "code", "text": "..."} is ONE code block that keeps its newlines and indentation and ' +
-      'renders in a monospace font — use it for code, commands, config and ASCII diagrams.',
+      'Links are written as [label](https://example.com) and become real links; a backslash escapes a ' +
+      'literal bracket. {"type": "code", "text": "..."} is ONE code block that keeps its newlines and ' +
+      'indentation and renders in a monospace font — use it for code, commands, config and ASCII diagrams ' +
+      '(its text is verbatim, so link notation stays as typed).',
   );
 
 /** Documents are summarised as text so the model can read a result directly. */
@@ -104,7 +106,8 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
     {
       title: 'Read a document',
       description:
-        'Read a document’s title and the text of every block, in order. Code blocks are shown fenced with ```.',
+        'Read a document’s title and the text of every block, in order. Links come back as ' +
+        '[label](href) and can be written back unchanged; code blocks are shown fenced with ```.',
       inputSchema: z.object({ id: documentIdSchema }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

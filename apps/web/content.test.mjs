@@ -227,6 +227,55 @@ await sleep(3500);
 const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, { headers: H(owner) }).then((r) => r.json());
 ck('and an image is findable by its filename', imageHits.some((h) => h.document.id === imageDoc.id));
 
+// --- links ----------------------------------------------------------------------
+const linkDoc = await create(owner, 'Link test');
+const linkWritten = await putContent(owner, linkDoc.id, {
+  blocks: [
+    'See [the docs](https://example.com/docs) for more.',
+    'Brackets \\[not a link\\] stay literal.',
+    { type: 'code', text: 'const link = "[label](href)";' },
+  ],
+}).then((r) => r.json());
+ck('a link round-trips as written', linkWritten.blocks[0].text === 'See [the docs](https://example.com/docs) for more.');
+ck('escaped brackets stay literal', linkWritten.blocks[1].text === 'Brackets \\[not a link\\] stay literal.');
+ck('code block text is verbatim, not link notation', linkWritten.blocks[2].text === 'const link = "[label](href)";');
+
+// The mark is real, not decoration: a connected client sees it.
+const linkClient = connect(linkDoc.id, owner);
+await linkClient.synced;
+await sleep(300);
+const linkedBlockId = linkClient.doc.getArray('blocks').get(0).id;
+const linkedDelta = linkClient.doc.getXmlFragment(`block-${linkedBlockId}`).get(0).get(0).toDelta();
+ck(
+  'a client receives it as a link mark',
+  linkedDelta.some((op) => op.attributes?.link?.href === 'https://example.com/docs' && op.insert === 'the docs'),
+);
+
+// And a link made in the editor reads back in the same notation.
+const linkFragment = linkClient.doc.getXmlFragment(`block-${linkedBlockId}`);
+const linkParagraph = new Y.XmlElement('paragraph');
+const linkTextNode = new Y.XmlText();
+linkParagraph.insert(0, [linkTextNode]);
+linkFragment.delete(0, linkFragment.length);
+linkFragment.insert(0, [linkParagraph]);
+// Written the way the editor does it: type the words, then mark a range.
+linkTextNode.insert(0, 'xDocs is here');
+linkTextNode.format(0, 5, { link: { href: 'https://xdocs.test/' } });
+await sleep(600);
+const linkBack = await getContent(owner, linkDoc.id).then((r) => r.json());
+ck('a link made in the editor reads back as [label](href)', linkBack.blocks[0].text === '[xDocs](https://xdocs.test/) is here');
+linkClient.provider.destroy();
+
+// What search indexes stays plain: the words, not the notation.
+const linkSearch = await fetch(`${API}/api/documents/search?q=${encodeURIComponent('the docs')}`, { headers: H(owner) }).then((r) => r.json());
+ck('search still sees the words, not the markup', Array.isArray(linkSearch));
+
+const unsafeLink = await putContent(owner, linkDoc.id, { blocks: ['[click](javascript:alert(1))'] });
+ck('an unusable link is refused (400)', unsafeLink.status === 400);
+const afterUnsafe = await getContent(owner, linkDoc.id).then((r) => r.json());
+ck('and the document is left alone', afterUnsafe.blocks[0].text === '[xDocs](https://xdocs.test/) is here');
+ck('a relative link is allowed', (await putContent(owner, linkDoc.id, { blocks: ['[a doc](/doc/00000000-0000-0000-0000-000000000000)'] })).status === 200);
+
 ck('an unknown block type is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status === 400);
 ck('a code block without text is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400);
 

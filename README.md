@@ -218,6 +218,12 @@ the CRDT, and round-tripping that over HTTP would need the TipTap schema on the
 server. A block is a single node here, so a newline inside one becomes another
 block — the same shape typing it would have produced.
 
+Links survive in both directions, written the Markdown way as
+`[label](https://example.com)`; a backslash escapes a literal bracket, and an
+address the editor could not open — `javascript:` and the like — is refused
+rather than written in. What search indexes stays the plain words, not the
+notation.
+
 #### Attachments
 
 The editor toolbar's 📎 uploads a file and inserts its name as a link to
@@ -247,7 +253,7 @@ not a container anyone owns. The sidebar shows what is used once there is
 anything to show, and an upload that would pass the limit is refused with what
 is used and what the limit is — "quota exceeded" leaves nobody any wiser.
 
-The one exception is a code block, whose text only means anything verbatim.
+The other exception is a code block, whose text only means anything verbatim.
 Write `{"type": "code", "text": "..."}` in place of a string and it becomes one
 code block with its newlines and indentation intact; reads report such a block
 as `"type": "code"`, and the object form accepts what a read returns, so a
