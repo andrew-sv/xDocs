@@ -184,9 +184,15 @@ Each of these caused a real bug. Changing them silently breaks things.
 - **An attachment is a Link mark whose href is `/api/attachments/<id>`, not a
   node.** The name stays searchable text, and an older client renders a link
   instead of dropping an unknown node. The href is origin-relative and needs a
-  bearer token, so `AttachmentLinks` (priority 1000, above StarterKit's Link)
-  claims the click and downloads through `fetch`; without it Link would
-  `window.open()` the href onto the SPA. `e2e/links.spec.ts` fails if it goes.
+  bearer token, so it is downloaded through `fetch`, never followed.
+- **Link runs with `openOnClick: false`, and `LinkClicks` handles Mod-click.**
+  Link opens a link on ANY click, which made a link's own words uneditable —
+  clicking into them navigated away (#23). A plain click now places the caret;
+  Mod-click opens a URL or downloads an attachment, as does the Open button in
+  the toolbar's link field. `e2e/links.spec.ts` covers all three.
+  Note for specs: a synthetic click moves the browser caret without ProseMirror
+  reading it back, so "the caret landed here" cannot be asserted after one —
+  it behaves the same over plain text, a mark, or a link.
 - **The formatting toolbar floats over the block above, so keep its left group
   short of that block's middle.** Link and attach sit in a separate right-hand
   group for this reason: one row of every button covered the middle, and a click

@@ -50,15 +50,39 @@ export async function saveAttachment(id: string, fallbackName: string): Promise<
 }
 
 /**
- * Clicking an attachment downloads it instead of navigating.
+ * Follow a link: download an attachment, or open a URL in a new tab.
  *
- * Auth is a bearer token, which a plain link cannot carry, and the href is
- * origin-relative — opened directly it would land on the SPA, not the API.
- * StarterKit's Link would `window.open()` it on click, so this runs first:
- * priority above Link's 100, and it claims the click.
+ * An attachment cannot simply be opened. Auth is a bearer token, which a link
+ * cannot carry, and its href is origin-relative — followed directly it would
+ * land on the SPA, not the API.
  */
-export const AttachmentLinks = Extension.create<{ onError: (message: string) => void }>({
-  name: 'attachmentLinks',
+export function followLink(
+  href: string | null | undefined,
+  fallbackName: string,
+  onError: (message: string) => void,
+): void {
+  if (!href) return;
+  const id = attachmentIdOf(href);
+  if (!id) {
+    window.open(href, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  saveAttachment(id, fallbackName).catch((e: unknown) =>
+    onError(e instanceof Error ? e.message : 'Download failed.'),
+  );
+}
+
+/**
+ * Mod-click follows a link; a plain click belongs to the text.
+ *
+ * StarterKit's Link opens a link on any click, which made the words of a link
+ * uneditable: clicking into them to fix a typo navigated away instead. It is
+ * configured with `openOnClick: false` (see BlockEditor) and this takes over,
+ * so a plain click just places the caret. The toolbar's link field has an Open
+ * button for anyone who does not know the shortcut.
+ */
+export const LinkClicks = Extension.create<{ onError: (message: string) => void }>({
+  name: 'linkClicks',
   priority: 1000,
 
   addOptions() {
@@ -69,18 +93,16 @@ export const AttachmentLinks = Extension.create<{ onError: (message: string) => 
     const { onError } = this.options;
     return [
       new Plugin({
-        key: new PluginKey('attachmentLinks'),
+        key: new PluginKey('linkClicks'),
         props: {
           handleClick: (view, _pos, event) => {
             if (event.button !== 0) return false;
+            if (!(event.metaKey || event.ctrlKey)) return false; // a plain click edits
             const link = event.target instanceof Element ? event.target.closest('a') : null;
             if (!link || !view.dom.contains(link)) return false;
-            const id = attachmentIdOf(link.getAttribute('href'));
-            if (!id) return false;
+            // The browser may also act on a modified click inside contenteditable.
             event.preventDefault();
-            saveAttachment(id, link.textContent?.trim() || 'download').catch((e: unknown) =>
-              onError(e instanceof Error ? e.message : 'Download failed.'),
-            );
+            followLink(link.getAttribute('href'), link.textContent?.trim() || 'download', onError);
             return true;
           },
         },

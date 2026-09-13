@@ -7,7 +7,7 @@ import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { localUser } from '../lib/identity';
-import { AttachmentLinks, attachFile } from '../lib/attachments';
+import { LinkClicks, attachFile } from '../lib/attachments';
 import { BlockKeymap } from '../lib/blockKeymap';
 import { CommandPalette, type PaletteState } from '../lib/commandPalette';
 import type { CommandId } from '../lib/commands';
@@ -130,7 +130,10 @@ export function BlockEditor({
         // came straight back when deleted. That behaviour exists so you can
         // click past a trailing table in a whole-document editor; here each
         // block IS one node, and new blocks come from Shift+Enter instead.
-        StarterKit.configure({ undoRedo: false, trailingNode: false }),
+        // link.openOnClick: Link opens a link on ANY click, so clicking into
+        // one to edit its words navigated away instead. LinkClicks handles
+        // Mod-click, and a plain click places the caret like any other text.
+        StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }),
         // Deliberately NOT given our undoManager: Collaboration destroys the
         // manager it is handed when this editor unmounts. See documentUndo.ts.
         Collaboration.configure({ fragment }),
@@ -142,7 +145,7 @@ export function BlockEditor({
           getKeyHandler: () => paletteKeyHandler.current,
         }),
         CollaborationCaret.configure({ provider, user: localUser }),
-        AttachmentLinks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
+        LinkClicks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
       ],
     },
     [block.id, ydoc, provider, fragment, undoManager],
@@ -265,7 +268,11 @@ export function BlockEditor({
         }}
       >
         {editor && focused && (
-          <Toolbar editor={editor} onAttachFile={() => fileInputRef.current?.click()} />
+          <Toolbar
+            editor={editor}
+            onAttachFile={() => fileInputRef.current?.click()}
+            onError={(text) => setNote({ kind: 'error', text })}
+          />
         )}
         <EditorContent editor={editor} />
         <input
