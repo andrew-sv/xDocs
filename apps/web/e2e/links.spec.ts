@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { blockEditor, expect, mod, openDocument, test } from './fixtures';
 
+/** Playwright spells click modifiers the same way as keys. */
+const MOD = mod as 'Meta' | 'Control';
+
 const ATTACHMENT_HREF = /^\/api\/attachments\/[0-9a-f-]{36}$/;
 
 test.describe('toolbar links', () => {
@@ -93,6 +96,70 @@ test.describe('toolbar links', () => {
     await expect(page.getByTestId('tb-link')).toBeVisible();
   });
 
+  test('a plain click opens nothing, leaving the text editable', async ({ page, context, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('the docs');
+    await page.keyboard.press(`${mod}+a`);
+    await page.getByTestId('tb-link').click();
+    await page.getByTestId('link-input').fill('https://example.org/docs');
+    await page.keyboard.press('Enter');
+
+    const link = blockEditor(page, 0).locator('a');
+    const box = (await link.boundingBox())!;
+    await link.click({ position: { x: box.width / 2, y: box.height / 2 } });
+
+    /*
+     * Clicking a link used to open it, so its words could not be edited at all.
+     * That the caret lands in the text is not asserted here: a synthetic click
+     * moves the browser's caret without ProseMirror reading it back, so typing
+     * after one behaves the same over plain text, bold text or a link — an
+     * artefact of the harness, not of the editor.
+     */
+    expect(context.pages()).toHaveLength(1);
+    await expect(link).toHaveText('the docs');
+    await expect(link).toHaveAttribute('href', 'https://example.org/docs');
+  });
+
+  test('Mod-click follows the link', async ({ page, context, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('the app');
+    await page.keyboard.press(`${mod}+a`);
+    await page.getByTestId('tb-link').click();
+    // The app's own origin: a real site would put the network in the test.
+    await page.getByTestId('link-input').fill('http://localhost:5173/');
+    await page.keyboard.press('Enter');
+
+    const opening = context.waitForEvent('page');
+    await blockEditor(page, 0).locator('a').click({ modifiers: [MOD] });
+    const opened = await opening;
+
+    expect(opened.url()).toBe('http://localhost:5173/');
+    await opened.close();
+  });
+
+  test('the link field opens the current link', async ({ page, context, doc }) => {
+    await openDocument(page, doc);
+    await blockEditor(page, 0).click();
+    await page.keyboard.type('the app');
+    await page.keyboard.press(`${mod}+a`);
+    await page.getByTestId('tb-link').click();
+    await page.getByTestId('link-input').fill('http://localhost:5173/');
+    await page.keyboard.press('Enter');
+
+    // Caret inside the link, so the field opens on the existing address.
+    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowLeft');
+    await page.getByTestId('tb-link').click();
+    const opening = context.waitForEvent('page');
+    await page.getByTestId('tb-link-open').click();
+    const opened = await opening;
+
+    expect(opened.url()).toBe('http://localhost:5173/');
+    await opened.close();
+  });
+
   test('link and attach are unavailable inside a code block', async ({ page, doc }) => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
@@ -136,7 +203,7 @@ test.describe('attachments', () => {
     await expect(link).toHaveAttribute('href', ATTACHMENT_HREF);
 
     const downloading = page.waitForEvent('download');
-    await link.click();
+    await link.click({ modifiers: [MOD] });
     const download = await downloading;
 
     // Fetched with the session's token: a plain navigation would carry none

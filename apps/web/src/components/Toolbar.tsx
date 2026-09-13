@@ -1,4 +1,5 @@
 import { useEditorState, type Editor } from '@tiptap/react';
+import { followLink } from '../lib/attachments';
 import { useEffect, useState } from 'react';
 
 type Action = {
@@ -77,9 +78,11 @@ type Props = {
   editor: Editor;
   /** Opens the file picker; the upload itself lives in BlockEditor, which outlives this. */
   onAttachFile: () => void;
+  /** Reported under the block, which outlives this toolbar. */
+  onError: (message: string) => void;
 };
 
-export function Toolbar({ editor, onAttachFile }: Props) {
+export function Toolbar({ editor, onAttachFile, onError }: Props) {
   const chain = () => editor.chain().focus();
   // The address being typed; null while the link field is closed.
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
@@ -195,6 +198,18 @@ export function Toolbar({ editor, onAttachFile }: Props) {
           <button type="button" className="tb" data-testid="tb-link-apply" onClick={submitLink}>
             Apply
           </button>
+          {active.link && (
+            <button
+              type="button"
+              className="tb"
+              data-testid="tb-link-open"
+              // Mod-click follows a link in the text; this is the same thing
+              // for anyone who does not know that.
+              onClick={() => followLink(linkDraft, 'download', onError)}
+            >
+              Open
+            </button>
+          )}
           {active.link && (
             <button
               type="button"
