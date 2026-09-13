@@ -1,11 +1,50 @@
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Extension, type Editor } from '@tiptap/react';
-import { ATTACHMENT_HREF, MAX_ATTACHMENT_BYTES } from '@xdocs/shared';
+import {
+  ATTACHMENT_HREF,
+  BLOCKS_KEY,
+  MAX_ATTACHMENT_BYTES,
+  blockFragmentName,
+  type BlockMeta,
+} from '@xdocs/shared';
+import * as Y from 'yjs';
 import { api } from './api';
 
 /** The attachment id behind a link, or null for an ordinary URL. */
 export function attachmentIdOf(href: string | null | undefined): string | null {
   return href ? (ATTACHMENT_HREF.exec(href)?.[1] ?? null) : null;
+}
+
+/**
+ * Every attachment this document refers to: link marks, and image sources.
+ *
+ * The same reading the server makes when it marks a file used or unused (see
+ * routes/attachments.ts), done locally so the file list can refetch when that
+ * set changes — and only then, rather than on every keystroke.
+ */
+export function attachmentIdsIn(ydoc: Y.Doc): string[] {
+  const ids = new Set<string>();
+  const add = (href: unknown) => {
+    const id = typeof href === 'string' ? attachmentIdOf(href) : null;
+    if (id) ids.add(id.toLowerCase());
+  };
+
+  const walk = (node: Y.XmlFragment | Y.XmlElement | Y.XmlText) => {
+    if (node instanceof Y.XmlText) {
+      for (const op of node.toDelta() as Array<{ attributes?: { link?: { href?: unknown } } }>) {
+        add(op.attributes?.link?.href);
+      }
+      return;
+    }
+    if (node instanceof Y.XmlElement) add(node.getAttribute('src'));
+    for (let i = 0; i < node.length; i++) walk(node.get(i) as Y.XmlElement);
+  };
+
+  for (const block of ydoc.getArray<BlockMeta>(BLOCKS_KEY).toArray()) {
+    if (!block?.id) continue;
+    walk(ydoc.getXmlFragment(blockFragmentName(block.id)));
+  }
+  return [...ids].sort();
 }
 
 /**

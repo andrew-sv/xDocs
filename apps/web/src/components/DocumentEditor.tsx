@@ -15,6 +15,7 @@ import type { CommandId } from '../lib/commands';
 import { exportDocumentToPdf } from '../lib/exportPdf';
 import { getToken } from '../lib/auth';
 import { COLLAB_URL } from '../lib/collab';
+import { attachmentIdsIn } from '../lib/attachments';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { DocumentFiles } from './DocumentFiles';
@@ -117,6 +118,40 @@ export function DocumentEditor({
   }, [doc.id]);
 
   const ydoc = provider?.document ?? null;
+
+  /*
+   * Which files this document refers to, read from the open document itself.
+   *
+   * The list route reports this too, but a fetch and a document that is still
+   * being edited cannot agree for long: an upload's own refetch could read the
+   * document before the new link had synced, and removing a link changed
+   * nothing until something else happened to refetch. The open document knows
+   * exactly, and re-reading it costs no request.
+   *
+   * Debounced, and only the SET is kept, so ordinary typing changes nothing.
+   */
+  const [referenced, setReferenced] = useState<string[]>([]);
+  useEffect(() => {
+    if (!ydoc) {
+      setReferenced([]);
+      return;
+    }
+    const read = () => setReferenced((prev) => {
+      const next = attachmentIdsIn(ydoc);
+      return next.join(',') === prev.join(',') ? prev : next;
+    });
+    read();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onUpdate = () => {
+      clearTimeout(timer);
+      timer = setTimeout(read, 300);
+    };
+    ydoc.on('update', onUpdate);
+    return () => {
+      clearTimeout(timer);
+      ydoc.off('update', onUpdate);
+    };
+  }, [ydoc]);
   const blocksArray = useMemo(() => ydoc?.getArray<BlockMeta>(BLOCKS_KEY) ?? null, [ydoc]);
   const blocks = useYArray(blocksArray);
   const titleText = useMemo(() => ydoc?.getText(TITLE_KEY) ?? null, [ydoc]);
@@ -357,7 +392,7 @@ export function DocumentEditor({
             + Add document
           </button>
           </div>
-          <DocumentFiles documentId={doc.id} reloadKey={filesKey} />
+          <DocumentFiles documentId={doc.id} reloadKey={filesKey} referenced={referenced} />
           {orderedSubDocuments.length > 0 && (
             <nav className="sub-docs" data-testid="sub-docs" aria-label="Sub-documents">
               <h2 className="sub-docs-title">Sub-documents</h2>

@@ -19,7 +19,15 @@ function readableSize(bytes: number): string {
  * used to pile up invisibly, reachable only by whoever still had the link.
  * Here they are listed, marked as in use or not, and can be deleted.
  */
-export function DocumentFiles({ documentId, reloadKey }: { documentId: string; reloadKey: number }) {
+type Props = {
+  documentId: string;
+  /** Bumped when a file is added, so the list is refetched. */
+  reloadKey: number;
+  /** Attachment ids the open document refers to right now; see DocumentEditor. */
+  referenced: string[];
+};
+
+export function DocumentFiles({ documentId, reloadKey, referenced }: Props) {
   const [files, setFiles] = useState<DocumentAttachmentDTO[]>([]);
   const [pendingDelete, setPendingDelete] = useState<DocumentAttachmentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +46,13 @@ export function DocumentFiles({ documentId, reloadKey }: { documentId: string; r
 
   if (files.length === 0) return null;
 
+  /*
+   * From the open document rather than the fetched `linked`: the fetch is a
+   * snapshot, and this is the document as it stands, including edits not yet
+   * saved. The route still reports it for callers that have no document open.
+   */
+  const inUse = (file: DocumentAttachmentDTO) => referenced.includes(file.id.toLowerCase());
+
   const remove = async (file: DocumentAttachmentDTO) => {
     setPendingDelete(null);
     try {
@@ -53,7 +68,7 @@ export function DocumentFiles({ documentId, reloadKey }: { documentId: string; r
       <h2 className="sub-docs-title">Files</h2>
       <ul className="doc-files-list">
         {files.map((file) => (
-          <li key={file.id} className="doc-file" data-testid="doc-file" data-linked={file.linked}>
+          <li key={file.id} className="doc-file" data-testid="doc-file" data-linked={inUse(file)}>
             <button
               type="button"
               className="doc-file-open"
@@ -68,7 +83,7 @@ export function DocumentFiles({ documentId, reloadKey }: { documentId: string; r
             </button>
             <span className="doc-file-meta">
               {readableSize(file.size)}
-              {!file.linked && (
+              {!inUse(file) && (
                 // Not an error: a file can outlive the text that linked it,
                 // and undo can bring that text back.
                 <span className="doc-file-unused" data-testid="doc-file-unused">
@@ -99,7 +114,7 @@ export function DocumentFiles({ documentId, reloadKey }: { documentId: string; r
           title="Delete file"
           message={`“${pendingDelete.filename}” will be permanently deleted. This cannot be undone.`}
           warning={
-            pendingDelete.linked
+            inUse(pendingDelete)
               ? 'This document still links to it, and that link will stop working.'
               : null
           }
