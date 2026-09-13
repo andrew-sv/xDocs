@@ -1,6 +1,7 @@
 import type {
   ApiKeyDTO,
   AttachmentDTO,
+  AttachmentUsageDTO,
   CreatedApiKeyDTO,
   DocumentDTO,
   SearchResultDTO,
@@ -120,6 +121,7 @@ export const api = {
     if (!res.ok) throw await failure(res, 'Upload failed');
     return (await res.json()) as AttachmentDTO;
   },
+  attachmentUsage: () => request<AttachmentUsageDTO>('/attachments/usage'),
   downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null }> => {
     const res = await send(`/attachments/${id}`);
     if (!res.ok) throw await failure(res, 'Download failed');

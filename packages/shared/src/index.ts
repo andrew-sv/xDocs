@@ -200,6 +200,48 @@ export type CreateDocumentInput = z.input<typeof createDocumentSchema>;
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 
 /**
+ * How much attachment storage one user may hold in total.
+ *
+ * The per-file cap alone bounds nothing: files live in the same Postgres
+ * database as every document's Yjs state, so one person uploading steadily
+ * would grow the backups and the bill without limit. The server can override
+ * this with ATTACHMENT_QUOTA_BYTES.
+ */
+export const DEFAULT_ATTACHMENT_QUOTA_BYTES = 200 * 1024 * 1024;
+
+export const attachmentUsageSchema = z.object({
+  usedBytes: z.number().int().nonnegative(),
+  quotaBytes: z.number().int().positive(),
+});
+export type AttachmentUsageDTO = z.infer<typeof attachmentUsageSchema>;
+
+/** Rounded: the exact byte count of a file store tells nobody anything. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
+/**
+ * Why this upload cannot be accepted, or null if it fits.
+ *
+ * Says what is used and what the limit is, because "quota exceeded" leaves
+ * someone with no idea how much to delete.
+ */
+export function quotaRefusal(
+  usedBytes: number,
+  incomingBytes: number,
+  quotaBytes: number,
+): string | null {
+  if (usedBytes + incomingBytes <= quotaBytes) return null;
+  return (
+    `That file would take you past your ${formatBytes(quotaBytes)} of file storage ` +
+    `(${formatBytes(usedBytes)} used). Delete some files and try again.`
+  );
+}
+
+/**
  * Where a document links to one of its attachments.
  *
  * Origin-relative on purpose: the SPA and the API sit on different hosts, and

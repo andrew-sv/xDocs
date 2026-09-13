@@ -1,5 +1,12 @@
-import { MAX_ATTACHMENT_BYTES, attachmentHref, type AttachmentDTO } from '@xdocs/shared';
-import { eq } from 'drizzle-orm';
+import {
+  DEFAULT_ATTACHMENT_QUOTA_BYTES,
+  MAX_ATTACHMENT_BYTES,
+  attachmentHref,
+  quotaRefusal,
+  type AttachmentDTO,
+  type AttachmentUsageDTO,
+} from '@xdocs/shared';
+import { eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { canAccessDocument } from '../db/access.js';
@@ -18,6 +25,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MULTIPART_OVERHEAD = 64 * 1024;
 
 const TOO_LARGE = `Files are limited to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB.`;
+
+/** Per-user total; see DEFAULT_ATTACHMENT_QUOTA_BYTES. */
+const QUOTA_BYTES =
+  Number(process.env.ATTACHMENT_QUOTA_BYTES) > 0
+    ? Number(process.env.ATTACHMENT_QUOTA_BYTES)
+    : DEFAULT_ATTACHMENT_QUOTA_BYTES;
+
+/** Bytes this user's files take up, across every document. */
+async function usedBytes(userId: string): Promise<number> {
+  const [row] = await getDb()
+    .select({ total: sql<string>`coalesce(sum(${attachments.size}), 0)` })
+    .from(attachments)
+    .where(eq(attachments.createdBy, userId));
+  return Number(row?.total ?? 0);
+}
 
 /** Only ever a display name and a download suggestion, never a path. */
 function cleanFilename(name: string): string {
@@ -90,6 +112,10 @@ export const attachmentsRoute = new Hono<{ Variables: Variables }>()
         return c.json({ error: 'Expected a multipart form with a "file" field.' }, 400);
       }
       if (file.size > MAX_ATTACHMENT_BYTES) return c.json({ error: TOO_LARGE }, 413);
+      // Checked per user, not per document: a document is not a container
+      // anyone owns, and files follow whoever uploaded them.
+      const refusal = quotaRefusal(await usedBytes(userId), file.size, QUOTA_BYTES);
+      if (refusal) return c.json({ error: refusal }, 413);
 
       const [row] = await getDb()
         .insert(attachments)
@@ -112,6 +138,19 @@ export const attachmentsRoute = new Hono<{ Variables: Variables }>()
       return c.json(toDTO(row!), 201);
     },
   )
+
+  /*
+   * How much of the quota this user has used.
+   *
+   * Registered before /attachments/:id, which would otherwise match "usage".
+   */
+  .get('/attachments/usage', async (c) => {
+    const usage: AttachmentUsageDTO = {
+      usedBytes: await usedBytes(c.get('userId')),
+      quotaBytes: QUOTA_BYTES,
+    };
+    return c.json(usage);
+  })
 
   /*
    * Download. Always as an attachment, with sniffing off and a sandboxing CSP,
