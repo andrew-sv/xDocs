@@ -84,6 +84,34 @@ ck('a malformed attachment id is a 404, not a 500', (await download(owner, 'not-
 ck('an unknown attachment is a 404', (await download(owner, '00000000-0000-0000-0000-000000000000')).status === 404);
 ck('uploading to a malformed document id is a 404', (await upload(owner, 'nope', new Uint8Array([1]), 'a', 'text/plain')).status === 404);
 
+// --- the storage quota ---------------------------------------------------------
+const usage = (token) => fetch(`${API}/api/attachments/usage`, { headers: H(token) }).then((r) => r.json());
+
+const before = await usage(owner);
+ck('usage reports a quota', before.quotaBytes > 0);
+ck('and bytes already used', typeof before.usedBytes === 'number' && before.usedBytes >= 0);
+
+const quotaDoc = await create(owner, 'Quota test');
+await upload(owner, quotaDoc.id, new Uint8Array(2048), 'counted.bin', 'application/octet-stream');
+const after = await usage(owner);
+ck('an upload adds exactly its size', after.usedBytes === before.usedBytes + 2048);
+ck('the quota itself does not move', after.quotaBytes === before.quotaBytes);
+
+// A stranger's files are not counted against this user.
+const strangerDoc = await create(stranger, 'Their quota');
+await upload(stranger, strangerDoc.id, new Uint8Array(4096), 'theirs.bin', 'application/octet-stream');
+ck('usage is per user', (await usage(owner)).usedBytes === after.usedBytes);
+ck('and each user sees their own', (await usage(stranger)).usedBytes === 4096);
+
+// Destroying the document frees what its files took.
+await fetch(`${API}/api/documents/${quotaDoc.id}`, { method: 'DELETE', headers: H(owner) });
+await fetch(`${API}/api/documents/${quotaDoc.id}/permanent`, { method: 'DELETE', headers: H(owner) });
+ck('deleting for good frees the space', (await usage(owner)).usedBytes === before.usedBytes);
+
+ck('usage needs a credential', (await fetch(`${API}/api/attachments/usage`)).status === 401);
+// "usage" must not be read as an attachment id by the route below it.
+ck('and is not mistaken for a file', (await usage(owner)).quotaBytes !== undefined);
+
 // --- access follows the document ---------------------------------------------
 ck('no credential is a 401', (await fetch(`${API}/api/attachments/${attached.id}`)).status === 401);
 ck('a stranger cannot download from a private document (404)', (await download(stranger, attached.id)).status === 404);

@@ -105,7 +105,10 @@ lookup filters on it, so a revoked key stops working on the next request.
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
 
-`attachments` holds uploaded files as bytea, capped at `MAX_ATTACHMENT_BYTES`.
+`attachments` holds uploaded files as bytea, capped per file at
+`MAX_ATTACHMENT_BYTES` and per user at `ATTACHMENT_QUOTA_BYTES`
+(`DEFAULT_ATTACHMENT_QUOTA_BYTES` when unset) — `/attachments/usage` is
+registered before `/attachments/:id`, which would otherwise match "usage".
 Its `document_id` FK is `ON DELETE CASCADE` — the opposite of `parent_id` — so
 files go with a permanent delete and survive a soft one. Access is exactly the
 document's (`canAccessDocument`); there is no separate file permission.

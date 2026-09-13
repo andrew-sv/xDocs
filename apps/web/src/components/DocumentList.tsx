@@ -1,5 +1,6 @@
 import type { DocumentDTO, SearchResultDTO, TrashEntryDTO } from '@xdocs/shared';
 import { SearchResults } from './SearchResults';
+import { StorageUsage } from './StorageUsage';
 import { TrashList } from './TrashList';
 
 type SignedInUser = { name?: string | null; email: string; image?: string | null };
@@ -258,6 +259,7 @@ export function DocumentList({
       <button type="button" className="trash-toggle" data-testid="keys-toggle" onClick={onOpenKeys}>
         <span>🔑 API keys</span>
       </button>
+      <StorageUsage />
       {user && (
         <div className="account" data-testid="account">
           {user.image && <img className="account-avatar" src={user.image} alt="" />}

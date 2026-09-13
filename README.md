@@ -201,6 +201,7 @@ turn one leaked credential into access that revoking the original does not undo.
 | `DELETE /api/documents/:id/permanent` | destroy it, trash only |
 | `POST /api/documents/:id/attachments` | attach a file: multipart field `file`, up to 10 MB |
 | `GET /api/attachments/:id` | download it, always as an attachment |
+| `GET /api/attachments/usage` | this account's file storage: used, and the limit |
 | `GET`/`POST`/`DELETE /api/keys` | manage keys; session only |
 
 #### Content goes through the CRDT, not around it
@@ -233,6 +234,12 @@ token, which a link cannot carry, clicking one makes the editor fetch the file
 with the session's token and save it; opening the href directly gets a 401.
 Downloads are always `Content-Disposition: attachment`, with `nosniff` and a
 sandboxing CSP, so an uploaded HTML or SVG file never runs on the API's origin.
+
+Each account has a total of 200 MB by default (`ATTACHMENT_QUOTA_BYTES` to
+change it), counted per uploader rather than per document, since a document is
+not a container anyone owns. The sidebar shows what is used once there is
+anything to show, and an upload that would pass the limit is refused with what
+is used and what the limit is — "quota exceeded" leaves nobody any wiser.
 
 The one exception is a code block, whose text only means anything verbatim.
 Write `{"type": "code", "text": "..."}` in place of a string and it becomes one
