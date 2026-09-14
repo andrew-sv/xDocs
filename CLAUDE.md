@@ -279,6 +279,19 @@ Each of these caused a real bug. Changing them silently breaks things.
 `pnpm integration` and `pnpm e2e` both need the stack running (`pnpm dev`);
 Playwright will start it itself if it is not, and reuses it if it is.
 
+**CI runs the browser suite as three `--shard`s, one runner each.** Each shard
+brings up its own Postgres and its own stack, so they share nothing: a spec may
+not depend on data another spec made, and must create what it asserts on.
+Nothing does today — every spec works from its own fixtures — and a spec that
+broke this would pass locally, where one dev database holds everything, and
+fail only in CI. The count lives in two places in `ci.yml` (`matrix.shard` and
+`--shard=N/3`) and they have to agree. Three is about the knee: a runner spends
+roughly 75s on setup before a single test runs, so a fourth shard buys ~20s and
+a fifth ~10s. Shard rather than raise `workers` — one runner hosts the whole
+stack, and loading it with browsers is what #28 was about. Note CI must call
+`playwright test` directly; `pnpm e2e -- --shard=...` swallows the flag and
+silently runs the whole suite in every shard.
+
 **Put new UI behaviour in `apps/web/e2e/`.** The first two layers cannot see
 layout, focus or event routing — the undo bug shipped completely broken with
 both of them green, and the two-click add button, the "Untitled" flash and the

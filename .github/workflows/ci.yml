@@ -91,8 +91,19 @@ jobs:
       - run: pnpm integration
 
   e2e:
-    name: Browser (Playwright)
+    # Sharded because this is by far the longest job, and it cannot simply be
+    # given more workers: one runner hosts the whole stack, and six browsers on
+    # it is what #28 was about. Each shard is a separate runner with its own
+    # Postgres, so they share nothing — which also means no shard may depend on
+    # data another one makes. Raising the count means editing both `shard` and
+    # `--shard`; they have to agree.
+    name: Browser (Playwright) ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
+    strategy:
+      # One shard failing should not hide a different failure in another.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:17
@@ -140,13 +151,16 @@ jobs:
 
       # playwright.config.ts starts the dev servers itself when CI is set
       # (reuseExistingServer is false there), so nothing needs starting here.
-      - run: pnpm e2e
+      # `playwright test` directly, not `pnpm e2e -- --shard=...`: pnpm swallows
+      # the forwarded flags there and every shard silently runs the whole suite.
+      - run: pnpm -F @xdocs/web exec playwright test --shard=${{ matrix.shard }}/3
 
       - name: Upload report on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-report
+          # Unique per shard: upload-artifact refuses to write a name twice.
+          name: playwright-report-shard-${{ matrix.shard }}
           path: apps/web/playwright-report
           retention-days: 7
 

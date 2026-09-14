@@ -101,9 +101,11 @@ test.describe('authentication', () => {
    * every list response silently dropped. A fresh context would not catch it,
    * since the latch starts off; this has to be the same page.
    */
-  test('signing back in after signing out loads documents again', async ({ browser }) => {
-    await getTestToken(); // create the shared account if this is a fresh database
-
+  test('signing back in after signing out loads documents again', async ({ browser, doc }) => {
+    // The `doc` fixture creates this as the shared account, and purges it
+    // afterwards. Naming a document it definitely owns is what lets the last
+    // assertion mean "the list loaded": CI starts from an empty database, so
+    // "no rows" is otherwise a legitimate sidebar and tells us nothing.
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -120,8 +122,7 @@ test.describe('authentication', () => {
       await expect(page.getByTestId('new-document')).toBeVisible();
       await expect(page.getByTestId('account')).toContainText(TEST_USER.name);
       // The sidebar has to actually load, not just unlock.
-      await expect(page.getByTestId('doc-list-loading')).toHaveCount(0);
-      await expect(page.getByTestId('doc-row').first()).toBeVisible();
+      await expect(page.locator(`[data-doc-id="${doc.id}"]`)).toBeVisible();
     } finally {
       await context.close();
     }
