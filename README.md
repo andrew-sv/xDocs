@@ -286,6 +286,24 @@ Pings sent while a socket is down are lost, so a reconnect, and returning to the
 tab, also refetch. List responses carry `x-list-as-of`, the server time they
 were read, and the sidebar never replaces a list with an older one.
 
+### Who else is here
+
+Each caret carries the name on the account that is typing, and the document
+header shows a row of initials for everyone else in it, each in that person's
+own colour — the same colour their caret is drawn in.
+
+Identity is the **account**, not the connection. The colour is a hash of the
+account id rather than a random pick, so one person is one colour on every
+device and after every reload; it used to be drawn per tab, which made the same
+colleague a new animal in every window. Awareness has one entry per open socket,
+so the list keys people by account id: your own second tab is not a stranger,
+and someone with the document open twice is one person in the row.
+
+Presence rides on the awareness state the carets already use, rather than a
+channel of its own. Being "here" therefore means having the document open, not
+having typed — and leaving removes you without anything needing to be cleaned
+up, because the state goes with the socket.
+
 ### Search
 
 The search box at the top of the sidebar searches titles and block text
@@ -447,11 +465,6 @@ pooled `DATABASE_URL`, and the API connects over TCP with
 - **Version history.** Yjs keeps enough to undo within a session, and the
   database stores only the current state — there are no snapshots to browse and
   no way back to yesterday's wording.
-- **Collaborators are still anonymous at the caret.** Sign-in is real, but the
-  caret label is a random animal and colour picked per tab (`lib/identity.ts`),
-  so the same person looks like somebody new after a reload and their name is
-  not the one they signed in with. There is also no "who else is here" list —
-  presence is visible only where someone's caret happens to be.
 - **Comments and suggestions.** No way to annotate text without editing it.
 - **Tables.** A separate TipTap extension rather than part of StarterKit, and
   nothing here wires one up.

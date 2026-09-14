@@ -145,6 +145,19 @@ Each of these caused a real bug. Changing them silently breaks things.
 - **To override an editor keybinding, use extension `priority` above 100.**
   StarterKit's HardBreak owns `Shift-Enter`; `BlockKeymap` outranks it at 1000
   and returns `true` to stop it also firing.
+- **A collaborator is an account, not a connection.** The caret label and the
+  "who else is here" row both come from awareness's `user` field, which carries
+  `{id, name, color}` built from the session (`lib/identity.ts`). The colour is
+  a hash of the account id, never random: it used to be drawn per tab, so one
+  person was a different creature in every window and after every reload (#45).
+  Awareness has one entry per CONNECTION, so `useCollaborators` keys by account
+  id to collapse someone's second tab, and drops your own id — the row answers
+  "who else". CollaborationCaret writes that field when each block editor is
+  created, and `DocumentEditor` writes it again whenever the identity changes,
+  because the session resolves after the first editors mount; awareness is per
+  connection, so one write covers every block. Do not put `me` in the editor's
+  dependency array to "fix" that — rebuilding every editor mid-session throws
+  away focus and selection.
 - **Use `@tiptap/extension-collaboration-caret`**, not `-cursor` (the v2 name,
   frozen and incompatible with TipTap 3).
 - **Drag and drop:** the payload uses a private MIME type, never `text/plain`

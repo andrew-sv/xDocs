@@ -11,13 +11,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import type { Editor } from '@tiptap/react';
 import { useYArray } from '../hooks/useYArray';
+import { useCollaborators } from '../hooks/useCollaborators';
 import type { CommandId } from '../lib/commands';
 import { exportDocumentToPdf } from '../lib/exportPdf';
-import { getToken } from '../lib/auth';
+import { getToken, useSession } from '../lib/auth';
+import { collaboratorFrom } from '../lib/identity';
 import { COLLAB_URL } from '../lib/collab';
 import { attachmentIdsIn } from '../lib/attachments';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
+import { Collaborators } from './Collaborators';
 import { DocumentFiles } from './DocumentFiles';
 import { TitleEditor } from './TitleEditor';
 import { VisibilityToggle } from './VisibilityToggle';
@@ -60,6 +63,17 @@ export function DocumentEditor({
     [subDocuments],
   );
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+
+  /*
+   * Who this tab is, to everyone else in the document.
+   *
+   * Read here rather than passed down: the session is a shared store, so asking
+   * for it costs nothing, and threading it through App for the sole benefit of
+   * a caret label would put it in the way of every component in between.
+   */
+  const { data: session } = useSession();
+  const me = useMemo(() => collaboratorFrom(session?.user), [session?.user]);
+  const others = useCollaborators(provider, me);
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
@@ -116,6 +130,21 @@ export function DocumentEditor({
       setUndoManager(null);
     };
   }, [doc.id]);
+
+  /*
+   * Publish this tab's identity for the carets and the collaborator list.
+   *
+   * CollaborationCaret also writes this field when each block editor is
+   * created, which is what makes a caret appear at all. Doing it here as well
+   * covers the case that ordering cannot: the session resolves a moment after
+   * the first editors mount, so those were created knowing nothing, and only a
+   * later write turns "no caret" into a named one. Awareness is per connection
+   * rather than per editor, so this one write speaks for every block.
+   */
+  useEffect(() => {
+    if (!provider || !me) return;
+    provider.setAwarenessField('user', me);
+  }, [provider, me]);
 
   const ydoc = provider?.document ?? null;
 
@@ -330,6 +359,7 @@ export function DocumentEditor({
           isOwner={doc.isOwner}
           onChange={(next) => onVisibilityChange(doc.id, next)}
         />
+        <Collaborators people={others} />
         <span className={`status status-${status}`}>
           {status === 'connected' && synced ? 'Live' : status === 'connected' ? 'Syncing…' : status}
         </span>
@@ -344,6 +374,7 @@ export function DocumentEditor({
                 block={block}
                 ydoc={ydoc}
                 provider={provider}
+                me={me}
                 canRemove={blocks.length > 1}
                 onRemove={() => removeBlock(block.id)}
                 autoFocus={block.id === pendingFocusId}

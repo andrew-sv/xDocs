@@ -6,7 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
-import { localUser } from '../lib/identity';
+import type { Collaborator } from '../lib/identity';
 import { LinkClicks, attachFile } from '../lib/attachments';
 import { AttachmentImage, ImageDrop, insertImage, isImage } from '../lib/images';
 import { BlockKeymap } from '../lib/blockKeymap';
@@ -21,6 +21,8 @@ type Props = {
   block: BlockMeta;
   ydoc: Y.Doc;
   provider: HocuspocusProvider;
+  /** This tab's identity for the caret; null until the session has loaded. */
+  me: Collaborator | null;
   onRemove: () => void;
   canRemove: boolean;
   /** Set on a block that was just created, so the caret lands in it. */
@@ -63,6 +65,7 @@ export function BlockEditor({
   block,
   ydoc,
   provider,
+  me,
   onRemove,
   canRemove,
   autoFocus,
@@ -148,12 +151,22 @@ export function BlockEditor({
           onRun: (id) => runCommandRef.current(id),
           getKeyHandler: () => paletteKeyHandler.current,
         }),
-        CollaborationCaret.configure({ provider, user: localUser }),
+        /*
+         * Null until the session loads, which leaves this tab without a caret
+         * for a moment rather than giving it a placeholder name that would
+         * appear on everyone else's screen and then change. DocumentEditor
+         * publishes the identity to awareness as soon as it has one, and that
+         * is what fills in the caret for editors created before then.
+         */
+        CollaborationCaret.configure({ provider, user: me ?? undefined }),
         LinkClicks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
         AttachmentImage,
         ImageDrop.configure({ onFiles: (files) => void handleFiles(files) }),
       ],
     },
+    // `me` is deliberately absent: it changes once, when the session resolves,
+    // and rebuilding every editor for it would throw away focus and selection
+    // mid-keystroke. DocumentEditor's awareness write covers that change.
     [block.id, ydoc, provider, fragment, undoManager],
   );
 
