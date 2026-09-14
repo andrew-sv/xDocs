@@ -71,14 +71,16 @@ Three layers, deliberately:
   teardown and keybinding bugs.
 - **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
-- **`pnpm e2e`** — 82 Chromium tests over the real stack: real clicks, real
-  Cmd+Z, real HTML5 drag, two browser contexts editing one document.
+- **`pnpm e2e`** — Chromium over the real stack: real clicks, real Cmd+Z, real
+  HTML5 drag, two browser contexts editing one document. CI runs it as three
+  shards on three runners, each with its own database.
 
 The browser suite exists because the first two layers cannot see layout, focus
 or event routing — the undo feature once shipped completely broken with both of
-them green. Each of its first four groups targets a defect that actually
-shipped, and each was verified by reintroducing that defect and confirming the
-matching spec fails.
+them green. A good few of its specs target a defect that actually shipped, and
+each of those was verified by reintroducing the defect and confirming the
+matching spec fails. Some deliberately assert the old broken behaviour alongside
+the fix, so a dependency upgrade that brings it back fails loudly.
 
 `npx playwright test --ui` to debug locally; failures record a trace, screenshot
 and video under `test-results/`.
@@ -366,11 +368,13 @@ inserts an empty block — it does not split the text at the caret.
 
 ### Undo
 
-One `Y.UndoManager` per document, shared by every block editor, so a single
-Cmd/Ctrl+Z walks back through text edits, title edits, reordering and block
-deletion in the order they actually happened. The alternative — TipTap's
-default, one manager per editor — gives each block a private history that
-cannot see structural changes, so deleting a block would be unundoable.
+TipTap's own history is off (`StarterKit.configure({ undoRedo: false })`)
+because Yjs owns undo: one `Y.UndoManager` per document, shared by every block
+editor, so a single Cmd/Ctrl+Z walks back through text edits, title edits,
+reordering and block deletion in the order they actually happened. The
+alternative — one manager per editor, which is what TipTap does by default —
+gives each block a private history that cannot see structural changes, so
+deleting a block would be unundoable.
 
 The manager is deliberately **not** passed to Collaboration's `yUndoOptions`.
 That plugin assumes it owns its manager's lifecycle and calls
@@ -422,19 +426,37 @@ declare, which would mean committing `DATABASE_URL` and the password.
 CORS is pinned to `WEB_ORIGIN`, so Vercel preview deployments will not reach
 staging unless their URL is added.
 
-## Notes for later
+## Why the hosting is split
 
-- `drizzle-kit` uses `DATABASE_URL_UNPOOLED`; the app uses the pooled
-  `DATABASE_URL`. The API is a long-lived process, so it connects over TCP with
-  `drizzle-orm/node-postgres` rather than the `neon-http` driver.
-- TipTap's own history is disabled (`StarterKit.configure({ undoRedo: false })`)
-  because Yjs owns undo via its `UndoManager`.
-- **Deployment:** Hocuspocus holds authoritative in-memory state per document,
-  so it needs a single persistent process. Vercel Functions support WebSockets,
-  but multiple instances would split-brain the document. Deploy the SPA to
-  Vercel and the collab server to a persistent host, or move to TipTap Cloud.
+Hocuspocus holds authoritative in-memory state per document, so it needs a
+**single persistent process**. Vercel Functions do support WebSockets, but
+several instances would split-brain the document: two people could be served by
+different instances, each sure it held the real state.
+
+Hence the split above — SPA on Vercel, API and collab server on Railway, data in
+Neon. That is settled, not a placeholder: TipTap Cloud was the alternative and
+would mean handing over the part of this repo that is actually interesting.
+
+Two database details that follow from the same "long-lived process" fact:
+`drizzle-kit` needs the direct `DATABASE_URL_UNPOOLED` while the app uses the
+pooled `DATABASE_URL`, and the API connects over TCP with
+`drizzle-orm/node-postgres` rather than the `neon-http` driver.
 
 ## Not built yet
 
-Auth (collaborators are anonymous colours), drag-to-reorder, block types beyond
-paragraph/heading/list, images, version history, search.
+- **Version history.** Yjs keeps enough to undo within a session, and the
+  database stores only the current state — there are no snapshots to browse and
+  no way back to yesterday's wording.
+- **Collaborators are still anonymous at the caret.** Sign-in is real, but the
+  caret label is a random animal and colour picked per tab (`lib/identity.ts`),
+  so the same person looks like somebody new after a reload and their name is
+  not the one they signed in with. There is also no "who else is here" list —
+  presence is visible only where someone's caret happens to be.
+- **Comments and suggestions.** No way to annotate text without editing it.
+- **Tables.** A separate TipTap extension rather than part of StarterKit, and
+  nothing here wires one up.
+
+Everything the sections above describe is built; this list is only what they do
+not. It was badly out of date once (#33) — it still claimed auth, search,
+drag-to-reorder and images were missing long after they shipped — so if you add
+a feature, the honest cost of it is deleting a line here.
