@@ -252,11 +252,29 @@ Each of these caused a real bug. Changing them silently breaks things.
   Note for specs: a synthetic click moves the browser caret without ProseMirror
   reading it back, so "the caret landed here" cannot be asserted after one —
   it behaves the same over plain text, a mark, or a link.
+- **Comments live on the Yjs doc, not in Postgres (#46).** Threads are a
+  `Y.Map` under `COMMENTS_KEY`, and the highlight is a `comment` MARK carrying
+  a `threadId` — so a thread merges when two people comment at once, and its
+  range follows the text being edited. No REST route touches them. A thread's
+  `comments` is a map keyed by comment id, never an array: editing is then one
+  field write, where an array would need delete-plus-insert and could duplicate
+  a comment exactly as reordering blocks can. Deleting the last comment deletes
+  the thread AND its mark together (`deleteComment` reports it) — a mark left
+  behind is a highlight that opens nothing. `unsetCommentThread` clears one
+  thread's mark rather than `unsetMark`, which would strip every other thread
+  overlapping the range. The mark name is plain for the same reason the image
+  node is: y-tiptap drops what a client's schema does not know.
 - **The formatting toolbar floats over the block above, so keep its left group
   short of that block's middle.** Link and attach sit in a separate right-hand
   group for this reason: one row of every button covered the middle, and a click
   into the block above landed on a button — `e2e/editor.spec.ts` "Shift+Enter
-  inserts a block below" caught it.
+  inserts a block below" caught it. The comment rail then took 320px out of the
+  document column and broke it again, the same spec catching it a second time:
+  the left group ends 51px clear of the midpoint at 1280px wide, and it only
+  still does because the toolbar starts at the block's outer edge (`left: 0`,
+  in the drag-handle gutter) rather than at its text. Narrowing the column, or
+  adding buttons to the left group, spends that margin — measure it rather than
+  assuming, as the numbers are not obvious from the CSS.
 - **API keys are recognised by their `xdk_` prefix before Better Auth sees the
   request**, and resolve to a plain userId — so ownership and visibility rules
   need no notion of "a key did this". `/api/keys` is session-only for the same

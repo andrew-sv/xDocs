@@ -7,6 +7,7 @@ import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import type { Collaborator } from '../lib/identity';
+import { CommentMark } from '../lib/commentMark';
 import { LinkClicks, attachFile } from '../lib/attachments';
 import { AttachmentImage, ImageDrop, insertImage, isImage } from '../lib/images';
 import { BlockKeymap } from '../lib/blockKeymap';
@@ -23,6 +24,10 @@ type Props = {
   provider: HocuspocusProvider;
   /** This tab's identity for the caret; null until the session has loaded. */
   me: Collaborator | null;
+  /** Open a thread on this block's current selection. */
+  onComment: (blockId: string, quote: string, apply: (threadId: string) => void) => void;
+  /** Expand a thread in the rail, from a click on its highlight. */
+  onActivateThread: (threadId: string) => void;
   onRemove: () => void;
   canRemove: boolean;
   /** Set on a block that was just created, so the caret lands in it. */
@@ -66,6 +71,8 @@ export function BlockEditor({
   ydoc,
   provider,
   me,
+  onComment,
+  onActivateThread,
   onRemove,
   canRemove,
   autoFocus,
@@ -87,6 +94,16 @@ export function BlockEditor({
 }: Props) {
   const [palette, setPalette] = useState<PaletteState | null>(null);
   const [focused, setFocused] = useState(false);
+  /*
+   * Read through a ref inside the editor's plugins.
+   *
+   * The editor is built once per block and its extensions close over whatever
+   * they were handed, so a prop read directly would be frozen at the value it
+   * had on mount. A ref is the same trick the command palette uses, and for the
+   * same reason.
+   */
+  const onActivateThreadRef = useRef(onActivateThread);
+  onActivateThreadRef.current = onActivateThread;
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   /*
@@ -160,6 +177,7 @@ export function BlockEditor({
          */
         CollaborationCaret.configure({ provider, user: me ?? undefined }),
         LinkClicks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
+        CommentMark.configure({ onActivate: (id) => onActivateThreadRef.current(id) }),
         AttachmentImage,
         ImageDrop.configure({ onFiles: (files) => void handleFiles(files) }),
       ],
@@ -169,6 +187,25 @@ export function BlockEditor({
     // mid-keystroke. DocumentEditor's awareness write covers that change.
     [block.id, ydoc, provider, fragment, undoManager],
   );
+
+  /**
+   * Open a thread on whatever is selected.
+   *
+   * The quote is taken here, from the live selection, because only this editor
+   * knows it; the mark is applied through the callback once DocumentEditor has
+   * written the thread and can say what id to point at. Doing it in that order
+   * means a mark is never left pointing at a thread that does not exist.
+   */
+  function startComment() {
+    if (!editor) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) return;
+    const quote = editor.state.doc.textBetween(from, to, ' ');
+    if (!quote.trim()) return;
+    onComment(block.id, quote, (threadId) => {
+      editor.chain().focus().setTextSelection({ from, to }).setCommentThread(threadId).run();
+    });
+  }
 
   async function handleFile(file: File) {
     if (!editor) return;
@@ -299,6 +336,7 @@ export function BlockEditor({
             editor={editor}
             onAttachFile={() => fileInputRef.current?.click()}
             onError={(text) => setNote({ kind: 'error', text })}
+            onComment={startComment}
           />
         )}
         <EditorContent editor={editor} />

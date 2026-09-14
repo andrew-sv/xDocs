@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
-    "test": "node reorder.test.mjs && node undo.test.mjs && node keymap.test.mjs && node trailing.test.mjs && node commands.test.mjs && node quota.test.mjs && node identity.test.mjs",
+    "test": "node reorder.test.mjs && node undo.test.mjs && node keymap.test.mjs && node trailing.test.mjs && node commands.test.mjs && node quota.test.mjs && node identity.test.mjs && node comments.test.mjs",
     "integration": "node integration.test.mjs && node visibility.test.mjs && node nested.test.mjs && node trash.test.mjs && node search.test.mjs && node apikeys.test.mjs && node move.test.mjs && node content.test.mjs && node attachments.test.mjs && node live.test.mjs",
     "smoke": "node smoke.mjs"
   },

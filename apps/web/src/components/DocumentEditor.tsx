@@ -12,15 +12,27 @@ import * as Y from 'yjs';
 import type { Editor } from '@tiptap/react';
 import { useYArray } from '../hooks/useYArray';
 import { useCollaborators } from '../hooks/useCollaborators';
+import { useThreads } from '../hooks/useThreads';
 import type { CommandId } from '../lib/commands';
 import { exportDocumentToPdf } from '../lib/exportPdf';
 import { getToken, useSession } from '../lib/auth';
 import { collaboratorFrom } from '../lib/identity';
+import {
+  addComment,
+  createThread,
+  deleteComment,
+  editComment,
+  quoteFor,
+  readRailCollapsed,
+  setResolved,
+  writeRailCollapsed,
+} from '../lib/comments';
 import { COLLAB_URL } from '../lib/collab';
 import { attachmentIdsIn } from '../lib/attachments';
 import { applyMove, resolveMove, resolveNudge, type DropEdge } from '../lib/reorder';
 import { BlockEditor } from './BlockEditor';
 import { Collaborators } from './Collaborators';
+import { CommentsRail } from './CommentsRail';
 import { DocumentFiles } from './DocumentFiles';
 import { TitleEditor } from './TitleEditor';
 import { VisibilityToggle } from './VisibilityToggle';
@@ -74,6 +86,47 @@ export function DocumentEditor({
   const { data: session } = useSession();
   const me = useMemo(() => collaboratorFrom(session?.user), [session?.user]);
   const others = useCollaborators(provider, me);
+
+  /*
+   * Comments. The threads live on the same Yjs doc as the text, so this is a
+   * subscription rather than a fetch, and a comment written by somebody else
+   * appears here the moment it lands.
+   */
+  const threads = useThreads(provider?.document ?? null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  /*
+   * Whether the rail is folded away. Remembered per browser, and read once on
+   * mount rather than watched: this is a preference, and it changing in another
+   * tab is not worth reflowing a document someone is typing in.
+   */
+  const [railCollapsed, setRailCollapsed] = useState(readRailCollapsed);
+  const toggleRail = useCallback((collapsed: boolean) => {
+    setRailCollapsed(collapsed);
+    writeRailCollapsed(collapsed);
+  }, []);
+  /*
+   * Anything that has a comment to show must open the rail first, or the
+   * composer and the thread would both be behind a fold — pressing 💬 would
+   * appear to do nothing at all.
+   */
+  const showInRail = useCallback(
+    (threadId: string | null) => {
+      setRailCollapsed(false);
+      setActiveThreadId(threadId);
+    },
+    [],
+  );
+  /*
+   * A thread being written but not yet created.
+   *
+   * Nothing is committed until Send: pressing 💬 and changing your mind should
+   * leave no trace, and an empty thread would already be a highlight on
+   * everyone else's screen with nothing behind it.
+   */
+  const [pendingThread, setPendingThread] = useState<
+    { blockId: string; quote: string; apply: (threadId: string) => void } | null
+  >(null);
+
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
@@ -201,6 +254,90 @@ export function DocumentEditor({
     if (editor) editorsRef.current.set(blockId, editor);
     else editorsRef.current.delete(blockId);
   }, []);
+
+  /*
+   * Clear a thread's highlight wherever it ended up.
+   *
+   * Every block is asked, not just the one the thread was opened in: text moves
+   * between blocks, and a mark left behind would point at a thread that no
+   * longer exists — a highlight you could click that opened nothing.
+   */
+  const clearMark = useCallback((threadId: string) => {
+    editorsRef.current.forEach((editor) => {
+      editor.commands.unsetCommentThread(threadId);
+    });
+  }, []);
+
+  /** Open a thread on a selection, then highlight exactly that range. */
+  const startThread = useCallback(
+    (blockId: string, quote: string, apply: (threadId: string) => void) => {
+      const ydoc = provider?.document;
+      if (!ydoc || !me) return;
+      // Nothing is written until there is something to say, so the composer
+      // opens first and the thread is created when Send is pressed.
+      setPendingThread({ blockId, quote: quoteFor(quote), apply });
+      showInRail(null);
+    },
+    [provider, me, showInRail],
+  );
+
+  /** Commit the pending thread: write it, then mark the text it quotes. */
+  const sendPendingThread = useCallback(
+    (text: string) => {
+      const ydoc = provider?.document;
+      if (!ydoc || !me || !pendingThread) return;
+      const threadId = createThread(ydoc, {
+        blockId: pendingThread.blockId,
+        quote: pendingThread.quote,
+        text,
+        author: { id: me.id, name: me.name },
+      });
+      pendingThread.apply(threadId);
+      setPendingThread(null);
+      showInRail(threadId);
+    },
+    [provider, me, pendingThread],
+  );
+
+  const replyToThread = useCallback(
+    (threadId: string, text: string) => {
+      const ydoc = provider?.document;
+      if (!ydoc || !me) return;
+      addComment(ydoc, threadId, text, { id: me.id, name: me.name });
+    },
+    [provider, me],
+  );
+
+  const editThreadComment = useCallback(
+    (threadId: string, commentId: string, text: string) => {
+      const ydoc = provider?.document;
+      if (ydoc) editComment(ydoc, threadId, commentId, text);
+    },
+    [provider],
+  );
+
+  const deleteThreadComment = useCallback(
+    (threadId: string, commentId: string) => {
+      const ydoc = provider?.document;
+      if (!ydoc) return;
+      // Deleting the last comment takes the thread with it, and the highlight
+      // has to go at the same time or it would open nothing.
+      const { threadGone } = deleteComment(ydoc, threadId, commentId);
+      if (threadGone) {
+        clearMark(threadId);
+        setActiveThreadId((current) => (current === threadId ? null : current));
+      }
+    },
+    [provider, clearMark],
+  );
+
+  const resolveThread = useCallback(
+    (threadId: string, resolved: boolean) => {
+      const ydoc = provider?.document;
+      if (ydoc) setResolved(ydoc, threadId, resolved);
+    },
+    [provider],
+  );
 
   const runCommand = useCallback(
     async (id: CommandId) => {
@@ -340,7 +477,13 @@ export function DocumentEditor({
     setToast({ id: Date.now(), message: 'Paragraph deleted' });
   }
 
+  /*
+   * The rail is a sibling of the scrolling document, not inside it: it has to
+   * keep its own scroll position while the document moves, and stay put when
+   * the document is scrolled to the bottom.
+   */
   return (
+    <div className="workspace">
     <main className="editor">
       <header className="editor-header">
         {synced && titleText ? (
@@ -393,6 +536,11 @@ export function DocumentEditor({
                 onInsertBelow={handleInsertBelow}
                 onRunCommand={(id) => void runCommand(id)}
                 registerEditor={registerEditor}
+                onComment={startThread}
+                onActivateThread={(threadId) => {
+                  setPendingThread(null);
+                  showInRail(threadId);
+                }}
               />
             ))}
           </div>
@@ -449,5 +597,27 @@ export function DocumentEditor({
 
       {toast && <Toast message={toast.message} onUndo={runUndo} onDismiss={dismissToast} />}
     </main>
+
+    {synced && (
+      <CommentsRail
+        threads={threads}
+        activeId={activeThreadId}
+        me={me}
+        pending={pendingThread ? { quote: pendingThread.quote } : null}
+        onSendPending={sendPendingThread}
+        onCancelPending={() => setPendingThread(null)}
+        onActivate={(id) => {
+          setPendingThread(null);
+          setActiveThreadId(id);
+        }}
+        collapsed={railCollapsed}
+        onToggleCollapsed={toggleRail}
+        onReply={replyToThread}
+        onEdit={editThreadComment}
+        onDelete={deleteThreadComment}
+        onResolve={resolveThread}
+      />
+    )}
+    </div>
   );
 }
