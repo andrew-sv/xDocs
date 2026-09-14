@@ -76,6 +76,19 @@ ck(
 ck('document is still private after those attempts',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(owner) }).then((r) => r.json())).visibility === 'private');
 
+/*
+ * An owner-only refusal must NOT carry the code that ends a session (#31).
+ *
+ * The web client signs out on `account_not_allowed` and on nothing else, so a
+ * route that answered 403 with that code — or that the client read as one —
+ * would log the user out for doing something as ordinary as clicking delete on
+ * a document they do not own.
+ */
+const refusal = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(stranger) })
+  .then((r) => r.json());
+ck('the refusal carries no account_not_allowed code', refusal.code === undefined);
+ck('and explains itself in words', typeof refusal.error === 'string' && refusal.error.length > 0);
+
 // --- owner makes it public --------------------------------------------------
 const madePublic = await patchAs(owner, 'public').then((r) => r.json());
 ck('owner can make it public', madePublic.visibility === 'public');

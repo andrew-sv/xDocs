@@ -15,6 +15,17 @@ export const BLOCKS_KEY = 'blocks';
  */
 export const TITLE_KEY = 'title';
 
+/**
+ * The one 403 that means "this account may not use xDocs at all".
+ *
+ * Shared because both sides have to agree on it exactly: the client signs out
+ * on this code and on nothing else. Every other 403 is an ordinary refusal of
+ * one action — "only the owner can delete this" — and must leave the session
+ * alone. Treating all of them alike is what made 403 unusable for anything but
+ * the allowlist, and forced other routes to answer 404 instead (#31).
+ */
+export const ACCOUNT_NOT_ALLOWED = 'account_not_allowed';
+
 /** Y.XmlFragment key bound to a single block's TipTap editor. */
 export function blockFragmentName(blockId: string): string {
   return `block-${blockId}`;

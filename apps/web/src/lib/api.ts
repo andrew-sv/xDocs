@@ -9,6 +9,8 @@ import type {
   TrashEntryDTO,
   Visibility,
 } from '@xdocs/shared';
+// A value, not a type: `send()` compares the server's code against it.
+import { ACCOUNT_NOT_ALLOWED } from '@xdocs/shared';
 import { ForbiddenError, UnauthorizedError, clearToken, getToken } from './auth';
 
 /** Empty in dev so the Vite proxy handles it; absolute once deployed. */
@@ -30,11 +32,26 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     throw new UnauthorizedError();
   }
   if (res.status === 403) {
-    // Signed in successfully, but this account is not allowed. Drop the token
-    // so they are not left in a half-signed-in state.
-    clearToken();
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new ForbiddenError(body?.error);
+    const body = (await res.json().catch(() => null)) as
+      | { error?: string; code?: string }
+      | null;
+    /*
+     * Only the allowlist refusal ends the session, and it says so by its code.
+     *
+     * Every 403 used to be read as "this account is not allowed in", which
+     * dropped the token and showed the login gate. That made 403 unusable for
+     * an ordinary refusal — an owner-only route answering "only the owner can
+     * delete this" would have signed the user out — and is why routes that
+     * simply cannot serve you answer 404 instead (#31).
+     */
+    if (body?.code === ACCOUNT_NOT_ALLOWED) {
+      // Drop the token so they are not left in a half-signed-in state.
+      clearToken();
+      throw new ForbiddenError(body.error);
+    }
+    // An ordinary refusal of this one action: the caller shows it and the
+    // session carries on untouched.
+    throw new Error(body?.error ?? 'You are not allowed to do that.');
   }
   return res;
 }

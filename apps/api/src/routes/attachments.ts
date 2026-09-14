@@ -121,8 +121,9 @@ function linkedAttachments(doc: Y.Doc): Set<string> {
  * Access follows the document, and nothing else: anyone who can open a
  * document can attach to it and download from it — the same rule the content
  * routes and the collab socket apply. Every refusal is a 404, never a 403: a
- * stranger's file should be indistinguishable from one that does not exist,
- * and the web client treats 403 as "this account is not allowed in".
+ * stranger's file should be indistinguishable from one that does not exist.
+ * (It was also once the case that any 403 signed the web client out. That is
+ * fixed — see ACCOUNT_NOT_ALLOWED — but unprobeable ids are reason enough.)
  */
 export const attachmentsRoute = new Hono<{ Variables: Variables }>()
   .post(

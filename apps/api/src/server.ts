@@ -1,5 +1,6 @@
 import { getRequestListener } from '@hono/node-server';
 import { Server } from '@hocuspocus/server';
+import { ACCOUNT_NOT_ALLOWED } from '@xdocs/shared';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -68,9 +69,14 @@ const app = new Hono<{ Variables: Variables }>()
     const session = await auth.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Unauthorized' }, 401);
     // 403, not 401: the session is genuine, the account simply is not allowed.
-    // The client tells them apart to show a useful message.
+    // The client tells them apart to show a useful message. The code is what it
+    // keys on — this is the only 403 that may end a session, so it is the only
+    // one that carries it (#31).
     if (!isAllowedEmail(session.user.email)) {
-      return c.json({ error: 'This account is not authorised for xDocs.' }, 403);
+      return c.json(
+        { error: 'This account is not authorised for xDocs.', code: ACCOUNT_NOT_ALLOWED },
+        403,
+      );
     }
     c.set('userId', session.user.id);
     c.set('email', session.user.email);

@@ -204,10 +204,18 @@ Each of these caused a real bug. Changing them silently breaks things.
   direct connection hangs off `server.hocuspocus`, not `server`.** `Server` is
   the transport; `Hocuspocus` is the document layer. It is set at startup rather
   than imported because the server is built from `collab.ts`'s own config.
-- **Never answer 403 for "you cannot reach this document".** The web client's
-  `send()` treats any 403 as "this account is not allowed in", drops the token
-  and shows the login gate. Refusals on a document or file are 404, which also
-  keeps ids unprobeable.
+- **Answer 404, not 403, for "you cannot reach this document" — to keep ids
+  unprobeable.** A 403 would confirm the document exists to someone who cannot
+  see it; 404 makes a stranger's document indistinguishable from one that never
+  existed. This used to be doubly forced, because the web client signed out on
+  *any* 403, so the rule read "never answer 403" (#31). It no longer does: only
+  the allowlist refusal carries `code: ACCOUNT_NOT_ALLOWED` (in
+  `packages/shared`) and only that ends the session. So 403 is now available for
+  an ordinary refusal of one action on a document you CAN see — "only the owner
+  can delete this" — which is what the owner-only routes already return. The
+  client shows those verbatim through `attempt()` in `App.tsx`. Adding the code
+  to any other refusal would sign people out; `visibility.test.mjs` asserts one
+  such refusal does not carry it.
 - **An inline image is TipTap's own `image` node, rendered through a node view
   that fetches the file.** The node name is not private on purpose: y-tiptap
   DELETES an element whose name a client's schema does not know, so a private
