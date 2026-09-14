@@ -29,7 +29,7 @@ test.describe('live sidebar', () => {
 
     await addChild(request, doc, 'Made elsewhere');
 
-    await expect(subDocRow(page, 'Made elsewhere')).toBeVisible({ timeout: 10_000 });
+    await expect(subDocRow(page, 'Made elsewhere')).toBeVisible();
   });
 
   test('a document deleted elsewhere disappears', async ({ page, request, doc }) => {
@@ -39,7 +39,7 @@ test.describe('live sidebar', () => {
 
     await request.delete(`${API}/api/documents/${child.id}`, { headers: authHeaders(await getTestToken()) });
 
-    await expect(subDocRow(page, 'Doomed elsewhere')).toHaveCount(0, { timeout: 10_000 });
+    await expect(subDocRow(page, 'Doomed elsewhere')).toHaveCount(0);
   });
 
   test('a rename made elsewhere shows up once it is saved', async ({ page, request, doc }) => {
@@ -55,7 +55,7 @@ test.describe('live sidebar', () => {
       data: { title: 'New name', blocks: ['body'] },
     });
 
-    await expect(subDocRow(page, 'New name')).toBeVisible({ timeout: 15_000 });
+    await expect(subDocRow(page, 'New name')).toBeVisible();
   });
 
   test('changes made while offline appear once the page is back', async ({ page, context, request, doc }) => {

@@ -44,7 +44,7 @@ test.describe('document files', () => {
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.press('Backspace');
 
-    await expect(page.getByTestId('doc-file-unused')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('doc-file-unused')).toBeVisible();
     await expect(files(page)).toHaveCount(1);
   });
 
