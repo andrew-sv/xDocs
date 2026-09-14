@@ -45,6 +45,24 @@ test.describe('content API', () => {
     await expect(blockEditor(page, 1).locator('p')).toHaveCount(0);
   });
 
+  test('a link written over the API is a real link in the editor', async ({ page, doc }) => {
+    await openDocument(page, doc);
+
+    const token = await getTestToken();
+    await page.request.put(`${API}/api/documents/${doc.id}/content`, {
+      headers: authHeaders(token, { 'content-type': 'application/json' }),
+      data: { blocks: ['See [the docs](https://example.com/docs) for more.'] },
+    });
+
+    // The mark name is the contract, as with code blocks: get it wrong and the
+    // editor renders plain text, which only a browser can tell you.
+    const link = blockEditor(page, 0).locator('a');
+    await expect(link).toHaveText('the docs', { timeout: 10_000 });
+    await expect(link).toHaveAttribute('href', 'https://example.com/docs');
+    // The words around it are not swallowed into the link.
+    await expect(blockEditor(page, 0)).toHaveText('See the docs for more.');
+  });
+
   test('an API title change appears live', async ({ page, doc }) => {
     await openDocument(page, doc);
     const token = await getTestToken();

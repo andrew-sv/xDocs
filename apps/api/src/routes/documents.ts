@@ -29,6 +29,7 @@ import {
 } from '../db/access.js';
 import { notifyDocumentsChanged, withDocument } from '../collab.js';
 import { textOf as textOfFragment } from '../contentText.js';
+import { linkProblem, markdownOf, parseLinks, writeRuns } from '../markdownLinks.js';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 
@@ -115,13 +116,20 @@ function writeBlocks(doc: Y.Doc, inputs: WriteBlockInput[]): void {
     const element = new Y.XmlElement(nodeName);
     // An empty block must stay empty: inserting a zero-length XmlText would
     // still render, but it also confuses ProseMirror's mapping.
-    if (text.length > 0) {
-      const node = new Y.XmlText();
-      node.insert(0, text);
-      element.insert(0, [node]);
-    }
+    const node = text.length > 0 ? new Y.XmlText() : null;
+    if (node) element.insert(0, [node]);
     const fragment = doc.getXmlFragment(blockFragmentName(meta.id));
     fragment.insert(fragment.length, [element]);
+    /*
+     * Written only once the node is part of the document. A Yjs text node
+     * reports length 0 until then and queues what it is given, so appending
+     * run by run before that wrote them all at 0 — in reverse.
+     */
+    if (node) {
+      // A code block is verbatim; a paragraph may carry [label](href) links.
+      if (nodeName === CODE_BLOCK_NODE) node.insert(0, text);
+      else writeRuns(node, parseLinks(text));
+    }
   };
 
   for (const input of inputs) {
@@ -145,7 +153,11 @@ function readContent(id: string, doc: Y.Doc): DocumentContentDTO {
     .filter((block) => Boolean(block?.id))
     .map((block) => {
       const fragment = doc.getXmlFragment(blockFragmentName(block.id));
-      return { id: block.id, type: contentTypeOf(fragment), text: textOfFragment(fragment) };
+      const type = contentTypeOf(fragment);
+      // Code is verbatim; everything else can carry links, so it is escaped
+      // and its links written as [label](href) — the form writes accept back.
+      const text = type === 'code' ? textOfFragment(fragment) : markdownOf(fragment);
+      return { id: block.id, type, text };
     });
   return { id, title: doc.getText(TITLE_KEY).toString(), blocks };
 }
@@ -523,6 +535,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: body.error.flatten() }, 400);
     if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+    // Checked before the document is touched, so a refused link cannot leave
+    // it half written.
+    const badLink = linkProblem(body.data.blocks);
+    if (badLink) return c.json({ error: badLink }, 400);
 
     const content = await withDocument(id, (doc) => {
       // One transaction, so collaborators see the new version appear at once
@@ -551,6 +567,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const body = writeContentSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: body.error.flatten() }, 400);
     if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
+    // Checked before the document is touched, so a refused link cannot leave
+    // it half written.
+    const badLink = linkProblem(body.data.blocks);
+    if (badLink) return c.json({ error: badLink }, 400);
 
     const content = await withDocument(id, (doc) => {
       doc.transact(() => writeBlocks(doc, body.data.blocks));
