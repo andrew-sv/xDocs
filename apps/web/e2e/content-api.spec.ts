@@ -57,7 +57,7 @@ test.describe('content API', () => {
     // The mark name is the contract, as with code blocks: get it wrong and the
     // editor renders plain text, which only a browser can tell you.
     const link = blockEditor(page, 0).locator('a');
-    await expect(link).toHaveText('the docs', { timeout: 10_000 });
+    await expect(link).toHaveText('the docs');
     await expect(link).toHaveAttribute('href', 'https://example.com/docs');
     // The words around it are not swallowed into the link.
     await expect(blockEditor(page, 0)).toHaveText('See the docs for more.');
