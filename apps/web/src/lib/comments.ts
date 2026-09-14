@@ -21,6 +21,33 @@ import * as Y from 'yjs';
  * two people editing at once could duplicate or lose a comment.
  */
 
+/**
+ * Whether the rail is collapsed, remembered across reloads.
+ *
+ * A preference about the window rather than anything about the document, so it
+ * is per browser and not in the CRDT — collapsing the rail on your laptop must
+ * not fold it away on somebody else's screen. Wrapped like the session token
+ * is, because storage throws in private mode and a blocked read must not stop
+ * the editor rendering.
+ */
+const RAIL_KEY = 'xdocs.comments-collapsed';
+
+export function readRailCollapsed(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function writeRailCollapsed(collapsed: boolean): void {
+  try {
+    localStorage.setItem(RAIL_KEY, String(collapsed));
+  } catch {
+    /* not fatal for this page's lifetime */
+  }
+}
+
 export type Comment = {
   id: string;
   authorId: string;

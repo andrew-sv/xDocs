@@ -23,7 +23,9 @@ import {
   deleteComment,
   editComment,
   quoteFor,
+  readRailCollapsed,
   setResolved,
+  writeRailCollapsed,
 } from '../lib/comments';
 import { COLLAB_URL } from '../lib/collab';
 import { attachmentIdsIn } from '../lib/attachments';
@@ -92,6 +94,28 @@ export function DocumentEditor({
    */
   const threads = useThreads(provider?.document ?? null);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  /*
+   * Whether the rail is folded away. Remembered per browser, and read once on
+   * mount rather than watched: this is a preference, and it changing in another
+   * tab is not worth reflowing a document someone is typing in.
+   */
+  const [railCollapsed, setRailCollapsed] = useState(readRailCollapsed);
+  const toggleRail = useCallback((collapsed: boolean) => {
+    setRailCollapsed(collapsed);
+    writeRailCollapsed(collapsed);
+  }, []);
+  /*
+   * Anything that has a comment to show must open the rail first, or the
+   * composer and the thread would both be behind a fold — pressing 💬 would
+   * appear to do nothing at all.
+   */
+  const showInRail = useCallback(
+    (threadId: string | null) => {
+      setRailCollapsed(false);
+      setActiveThreadId(threadId);
+    },
+    [],
+  );
   /*
    * A thread being written but not yet created.
    *
@@ -252,9 +276,9 @@ export function DocumentEditor({
       // Nothing is written until there is something to say, so the composer
       // opens first and the thread is created when Send is pressed.
       setPendingThread({ blockId, quote: quoteFor(quote), apply });
-      setActiveThreadId(null);
+      showInRail(null);
     },
-    [provider, me],
+    [provider, me, showInRail],
   );
 
   /** Commit the pending thread: write it, then mark the text it quotes. */
@@ -270,7 +294,7 @@ export function DocumentEditor({
       });
       pendingThread.apply(threadId);
       setPendingThread(null);
-      setActiveThreadId(threadId);
+      showInRail(threadId);
     },
     [provider, me, pendingThread],
   );
@@ -515,7 +539,7 @@ export function DocumentEditor({
                 onComment={startThread}
                 onActivateThread={(threadId) => {
                   setPendingThread(null);
-                  setActiveThreadId(threadId);
+                  showInRail(threadId);
                 }}
               />
             ))}
@@ -586,6 +610,8 @@ export function DocumentEditor({
           setPendingThread(null);
           setActiveThreadId(id);
         }}
+        collapsed={railCollapsed}
+        onToggleCollapsed={toggleRail}
         onReply={replyToThread}
         onEdit={editThreadComment}
         onDelete={deleteThreadComment}

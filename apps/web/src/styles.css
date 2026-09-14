@@ -509,7 +509,8 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .workspace { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .workspace > .editor { flex: 1; min-width: 0; }
 .comments-rail { flex: none; width: 320px; background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 14px 14px 80px; }
-.comments-rail-header { display: flex; align-items: center; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 4px 10px; }
+.comments-rail-header { display: flex; align-items: center; gap: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 4px 10px; }
+.comments-rail-header > span:first-child { flex: 1; }
 .comments-count { background: var(--border); color: var(--text); border-radius: 20px; padding: 1px 8px; font-size: 11px; letter-spacing: 0; }
 .comments-empty { color: var(--muted); font-size: 13px; line-height: 1.5; padding: 0 4px; }
 
@@ -550,3 +551,11 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
    colour alone that says a range is commented on. */
 .comment-mark { background: #fdf2c9; box-shadow: inset 0 -1px 0 #e0c56b; cursor: pointer; }
 .comment-mark:hover { background: #fbe9a8; }
+
+/* Collapsed rail: a strip wide enough to say a document has comments, and to
+   click to bring them back. */
+.comments-rail-collapsed { width: 46px; padding: 14px 6px; overflow: visible; }
+.comments-expand { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; background: none; border: 0; padding: 6px 0; border-radius: 7px; font: inherit; cursor: pointer; }
+.comments-expand:hover { background: var(--border); }
+.comments-rail-header .comments-collapse { margin-left: 6px; background: none; border: 0; padding: 0 2px; font: inherit; font-size: 15px; line-height: 1; color: var(--muted); cursor: pointer; }
+.comments-rail-header .comments-collapse:hover { color: var(--text); }

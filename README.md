@@ -296,6 +296,12 @@ name stays on it either way. Deleting the last comment in a thread deletes the
 thread, and takes the highlight with it rather than leaving one that opens
 nothing.
 
+The rail folds away to a strip on the right, which still shows how many threads
+a document has and clicks to bring them back; that choice is remembered per
+browser, not in the document, since folding it on your laptop should not fold it
+on anyone else's screen. Anything with a comment to show unfolds it first —
+pressing 💬 with the rail folded would otherwise look like it had done nothing.
+
 Threads live on the document's own Yjs doc, like the text and the title, so
 commenting is collaborative for the same reason editing is: two people
 commenting at once merge, a reply appears without a reload, and a thread

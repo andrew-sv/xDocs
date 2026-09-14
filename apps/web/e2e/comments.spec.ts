@@ -29,7 +29,7 @@ async function selectFirstWord(page: Page, length = 5) {
 
 async function commentFirstWord(page: Page, text: string) {
   await selectFirstWord(page);
-  await page.getByTitle('Comment').click();
+  await page.getByTestId('tb-comment').click();
   await expect(page.getByTestId('comment-input')).toBeVisible();
   await page.getByTestId('comment-input').fill(text);
   await page.getByTestId('comment-send').click();
@@ -42,7 +42,7 @@ test.describe('comments', () => {
     await expect(page.getByTestId('comments-empty')).toBeVisible();
 
     await selectFirstWord(page);
-    await page.getByTitle('Comment').click();
+    await page.getByTestId('tb-comment').click();
 
     // The composer says whose comment this will be, per the spec.
     await expect(page.getByTestId('comment-composer')).toBeVisible();
@@ -67,7 +67,7 @@ test.describe('comments', () => {
     await typeInBlock(page, 0, 'Alpha beta gamma');
 
     await selectFirstWord(page);
-    await page.getByTitle('Comment').click();
+    await page.getByTestId('tb-comment').click();
     await page.getByTestId('comment-input').fill('never mind');
     await page.getByTestId('comment-cancel').click();
 
@@ -139,6 +139,43 @@ test.describe('comments', () => {
     await expect(page.locator('.comment-mark')).toHaveText('Alpha');
     await page.getByTestId('thread-summary').click();
     await expect(page.getByTestId('comment-text')).toHaveText('Why alpha?');
+  });
+
+  test('the rail folds away, remembers it, and unfolds when there is something to show', async ({ page, doc }) => {
+    await openDocument(page, doc);
+    await typeInBlock(page, 0, 'Alpha beta gamma');
+    await commentFirstWord(page, 'Why alpha?');
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'false');
+
+    await page.getByTestId('comments-toggle').click();
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'true');
+    // Folded, not gone: a document with comments still says how many, and there
+    // is something to click to get them back.
+    await expect(page.getByTestId('comments-count')).toHaveText('1');
+    await expect(page.getByTestId('thread')).toHaveCount(0);
+
+    // It is a preference, so it outlives the page.
+    await page.reload();
+    await expect(page.locator('.status')).toHaveText('Live');
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'true');
+
+    /*
+     * The case that would otherwise fail silently: commenting while the rail is
+     * folded away must unfold it, or pressing 💬 appears to do nothing at all
+     * because the composer is behind the fold.
+     */
+    await selectFirstWord(page, 4);
+    await page.getByTestId('tb-comment').click();
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'false');
+    await expect(page.getByTestId('comment-input')).toBeVisible();
+    await page.getByTestId('comment-cancel').click();
+
+    // So must clicking a highlight in the text.
+    await page.getByTestId('comments-toggle').click();
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'true');
+    await page.locator('.comment-mark').first().click();
+    await expect(page.getByTestId('comments-rail')).toHaveAttribute('data-collapsed', 'false');
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-open', 'true');
   });
 
   /*

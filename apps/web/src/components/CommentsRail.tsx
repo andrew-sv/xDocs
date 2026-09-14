@@ -17,6 +17,8 @@ type Props = {
   onEdit: (threadId: string, commentId: string, text: string) => void;
   onDelete: (threadId: string, commentId: string) => void;
   onResolve: (threadId: string, resolved: boolean) => void;
+  collapsed: boolean;
+  onToggleCollapsed: (collapsed: boolean) => void;
 };
 
 const when = (ms: number) =>
@@ -99,14 +101,55 @@ export function CommentsRail({
   onEdit,
   onDelete,
   onResolve,
+  collapsed,
+  onToggleCollapsed,
 }: Props) {
+  /*
+   * Collapsed, the rail is a strip rather than nothing at all: a document with
+   * comments in it should still say so, and there has to be something to click
+   * to get them back. The count is the whole point of the strip.
+   */
+  if (collapsed) {
+    return (
+      <aside className="comments-rail comments-rail-collapsed" data-testid="comments-rail" data-collapsed="true">
+        <button
+          type="button"
+          className="comments-expand"
+          data-testid="comments-toggle"
+          title={threads.length === 1 ? 'Show 1 comment' : `Show ${threads.length} comments`}
+          aria-label={threads.length === 1 ? 'Show 1 comment' : `Show ${threads.length} comments`}
+          aria-expanded={false}
+          onClick={() => onToggleCollapsed(false)}
+        >
+          <span aria-hidden="true">💬</span>
+          {threads.length > 0 && (
+            <span className="comments-count" data-testid="comments-count">
+              {threads.length}
+            </span>
+          )}
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="comments-rail" data-testid="comments-rail" aria-label="Comments">
+    <aside className="comments-rail" data-testid="comments-rail" data-collapsed="false" aria-label="Comments">
       <header className="comments-rail-header">
         <span>Comments</span>
         <span className="comments-count" data-testid="comments-count">
           {threads.length}
         </span>
+        <button
+          type="button"
+          className="comments-collapse"
+          data-testid="comments-toggle"
+          title="Hide comments"
+          aria-label="Hide comments"
+          aria-expanded
+          onClick={() => onToggleCollapsed(true)}
+        >
+          ›
+        </button>
       </header>
 
       {/* The new thread sits at the top, where the eye goes after pressing 💬. */}
