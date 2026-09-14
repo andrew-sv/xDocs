@@ -462,3 +462,36 @@ button.visibility:disabled { opacity: 0.5; cursor: progress; }
 .doc-move:hover { color: var(--fg); }
 .move-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; border: 0; background: none; padding: 4px 6px; border-radius: 5px; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .move-option:hover { background: #f2efe9; }
+
+/*
+ * A refused action, e.g. an owner-only route answering 403 (#31). Sits where
+ * the toast does, but above it: the two can be on screen together, and this one
+ * is the answer to something the user just tried.
+ */
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 9px 10px 9px 16px;
+  background: #5b1d1f;
+  color: #fdecec;
+  border-radius: 9px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.22);
+  font-size: 13px;
+}
+.notice-close {
+  border: 0;
+  background: none;
+  color: #f0bcbc;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.notice-close:hover { color: #fff; }

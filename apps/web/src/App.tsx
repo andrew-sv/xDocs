@@ -43,6 +43,31 @@ export function App() {
   const [documentsParentId, setDocumentsParentId] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * A refusal of one action, as opposed to `error`, which replaces the editor
+   * because the list itself could not be loaded. An owner-only route answering
+   * 403 lands here: the action did not happen, everything else still works, and
+   * the session is untouched (#31).
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /**
+   * Run an action that the server may refuse, and show the refusal.
+   *
+   * Owner-only routes answer 403 with their own wording — "Only the owner can
+   * delete this document." — which is worth showing verbatim rather than
+   * inventing a message per call site. Without this the rejection was unhandled
+   * and the click simply did nothing.
+   */
+  const attempt = useCallback(async (action: () => Promise<void>) => {
+    try {
+      await action();
+    } catch (e) {
+      if (e instanceof UnauthorizedError || e instanceof ForbiddenError) return; // the gate handles these
+      setNotice(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
   const [locked, setLocked] = useState(false);
 
@@ -95,12 +120,13 @@ export function App() {
   const { data: session } = useSession();
 
   const handleVisibilityChange = useCallback(
-    async (id: string, visibility: DocumentDTO['visibility']) => {
-      const updated = await api.setVisibility(id, visibility);
-      setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
-      setSelected((prev) => (prev?.id === id ? updated : prev));
-    },
-    [],
+    async (id: string, visibility: DocumentDTO['visibility']) =>
+      attempt(async () => {
+        const updated = await api.setVisibility(id, visibility);
+        setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
+        setSelected((prev) => (prev?.id === id ? updated : prev));
+      }),
+    [attempt],
   );
 
   const handleSignOut = useCallback(async () => {
@@ -653,7 +679,7 @@ export function App() {
         trashLoading={trashLoading}
         onOpenTrash={() => void openTrash()}
         onCloseTrash={() => setTrashOpen(false)}
-        onRestoreFromTrash={(entry) => void restoreFromTrash(entry)}
+        onRestoreFromTrash={(entry) => void attempt(() => restoreFromTrash(entry))}
         onPurge={(entry) => setPendingPurge(entry)}
         query={query}
         results={results}
@@ -710,7 +736,7 @@ export function App() {
           onConfirm={() => {
             const doc = pendingDelete;
             setPendingDelete(null);
-            void deleteDocument(doc);
+            void attempt(() => deleteDocument(doc));
           }}
         />
       )}
@@ -724,7 +750,7 @@ export function App() {
           onMove={(parentId) => {
             const doc = pendingMove;
             setPendingMove(null);
-            void moveDocument(doc, parentId);
+            void attempt(() => moveDocument(doc, parentId));
           }}
         />
       )}
@@ -746,9 +772,23 @@ export function App() {
           onConfirm={() => {
             const entry = pendingPurge;
             setPendingPurge(null);
-            void purgeDocument(entry);
+            void attempt(() => purgeDocument(entry));
           }}
         />
+      )}
+      {notice && (
+        <div className="notice" role="alert" data-testid="notice">
+          <span className="notice-message">{notice}</span>
+          <button
+            type="button"
+            className="notice-close"
+            aria-label="Dismiss"
+            data-testid="notice-dismiss"
+            onClick={() => setNotice(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
       {pendingRestore && (
         <Toast
