@@ -80,9 +80,11 @@ type Props = {
   onAttachFile: () => void;
   /** Reported under the block, which outlives this toolbar. */
   onError: (message: string) => void;
+  /** Opens a thread on the selection; the CRDT write lives in DocumentEditor. */
+  onComment: () => void;
 };
 
-export function Toolbar({ editor, onAttachFile, onError }: Props) {
+export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
   const chain = () => editor.chain().focus();
   // The address being typed; null while the link field is closed.
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
@@ -117,6 +119,8 @@ export function Toolbar({ editor, onAttachFile, onError }: Props) {
       orderedList: e.isActive('orderedList'),
       blockquote: e.isActive('blockquote'),
       link: e.isActive('link'),
+      comment: e.isActive('comment'),
+      selectionEmpty: e.state.selection.empty,
     }),
   });
 
@@ -152,6 +156,15 @@ export function Toolbar({ editor, onAttachFile, onError }: Props) {
       },
     },
     { label: '📎', title: 'Attach file', isActive: false, disabled: active.codeBlock, run: onAttachFile },
+    {
+      label: '💬',
+      title: 'Comment',
+      isActive: active.comment,
+      // There has to be something to quote: a thread anchored to an empty
+      // selection would have nothing to highlight and nothing to show.
+      disabled: active.selectionEmpty,
+      run: onComment,
+    },
   ];
 
   const submitLink = () => {

@@ -286,6 +286,29 @@ Pings sent while a socket is down are lost, so a reconnect, and returning to the
 tab, also refetch. List responses carry `x-list-as-of`, the server time they
 were read, and the sidebar never replaces a list with an older one.
 
+### Comments
+
+Select some text, press 💬, and a thread opens in the rail on the right. Threads
+are collapsed to their quote and first line; clicking one expands it, and
+clicking the highlight in the text expands it too. Each comment carries its
+author's name, and its author can edit or delete it — nobody else can, since the
+name stays on it either way. Deleting the last comment in a thread deletes the
+thread, and takes the highlight with it rather than leaving one that opens
+nothing.
+
+Threads live on the document's own Yjs doc, like the text and the title, so
+commenting is collaborative for the same reason editing is: two people
+commenting at once merge, a reply appears without a reload, and a thread
+survives the paragraph around it being rewritten. Nothing goes over REST, which
+is also why a comment is not searchable — `content_text` mirrors the document,
+and a comment is not the document.
+
+The highlight is a mark rather than a decoration, so it is part of the text
+everyone shares rather than something drawn locally in one browser. A thread
+also keeps a copy of the words it quotes: the point of a comment is what the
+text said when somebody objected to it, and that range may since have been
+rewritten or deleted.
+
 ### Who else is here
 
 Each caret carries the name on the account that is typing, and the document
@@ -465,7 +488,9 @@ pooled `DATABASE_URL`, and the API connects over TCP with
 - **Version history.** Yjs keeps enough to undo within a session, and the
   database stores only the current state — there are no snapshots to browse and
   no way back to yesterday's wording.
-- **Comments and suggestions.** No way to annotate text without editing it.
+- **Suggestions.** Comments exist, but there is no way to propose an edit that
+  somebody else accepts or rejects — changing the words is still the only way
+  to change the words.
 - **Tables.** A separate TipTap extension rather than part of StarterKit, and
   nothing here wires one up.
 

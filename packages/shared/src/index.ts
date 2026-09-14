@@ -26,6 +26,22 @@ export const TITLE_KEY = 'title';
  */
 export const ACCOUNT_NOT_ALLOWED = 'account_not_allowed';
 
+/**
+ * Yjs top-level Y.Map of comment threads, keyed by thread id.
+ *
+ * On the document rather than in Postgres for the same reason the text is: a
+ * comment written while someone else is typing has to merge, not overwrite,
+ * and a thread anchored to a range that is being edited only stays anchored if
+ * it travels with the CRDT. It also means no REST route reads or writes
+ * document content, which is the rule the content bridge exists to keep.
+ *
+ * Each thread is a Y.Map, and its `comments` field is a Y.Map keyed by comment
+ * id rather than an array: editing is then a field write on one entry, where an
+ * array would need delete-plus-insert and could duplicate or lose a comment
+ * exactly as reordering blocks can.
+ */
+export const COMMENTS_KEY = 'comments';
+
 /** Y.XmlFragment key bound to a single block's TipTap editor. */
 export function blockFragmentName(blockId: string): string {
   return `block-${blockId}`;
