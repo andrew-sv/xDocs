@@ -45,6 +45,22 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
   const [locked, setLocked] = useState(false);
+
+  /*
+   * Whether this account is on its way out, or already gone.
+   *
+   * Everything fetched here is scoped to the signed-in account, so once sign-out
+   * starts nothing it reads may reach the screen. A ref, not state, because the
+   * fetches that have to see it are already running and hold a stale closure.
+   *
+   * A sequence number compared across the await is NOT enough, and that was the
+   * first attempt at this: a refetch STARTING during sign-out reads the number
+   * after the bump and still carries the token, which is cleared a moment later.
+   * It then agrees with itself and lands. What matters is not which session a
+   * response belongs to but whether any session is still current.
+   */
+  const signedOut = useRef(false);
+
   /*
    * Breadcrumb trail; empty means the top level. Clicking a document both opens
    * it and drills into it, so the trail is also the sidebar's current level.
@@ -88,6 +104,15 @@ export function App() {
   );
 
   const handleSignOut = useCallback(async () => {
+    /*
+     * Set BEFORE anything is awaited, so no list read from here on reaches the
+     * screen — neither one already in flight nor one starting inside the
+     * sign-out itself. Signing out during a full parallel e2e run used to land
+     * such a response a moment later, and applying it called setLocked(false):
+     * the gate never appeared and the sidebar filled back up with the
+     * documents the session that just ended could see (#28).
+     */
+    signedOut.current = true;
     await signOut();
     clearToken();
     setDocuments([]);
@@ -140,8 +165,11 @@ export function App() {
   }, []);
 
   const refreshTrash = useCallback(async () => {
+    if (signedOut.current) return;
     try {
-      setTrash(await api.listTrash());
+      const rows = await api.listTrash();
+      if (signedOut.current) return; // signed out meanwhile
+      setTrash(rows);
     } catch {
       // The count is decoration; a failure here must not blank the sidebar.
     }
@@ -207,9 +235,11 @@ export function App() {
   };
 
   const refresh = useCallback(async () => {
+    if (signedOut.current) return;
     const changesAtStart = changeSeq.current;
     try {
       const { rows, asOf } = await api.listLevel(currentParentId);
+      if (signedOut.current) return; // signed out meanwhile
       if (latestLevel.current !== currentParentId) return; // navigated elsewhere
       if (changeSeq.current !== changesAtStart) return; // fetched before a local change
       const shown = shownList.current;
@@ -323,7 +353,8 @@ export function App() {
    * refetched — pings mostly come from other people, whose changes never touch
    * this user's trash, and every ping reaches every open app.
    */
-  const refreshList = useCallback(() => void refresh(), [refresh]);
+  // Returns its promise so the hook can keep one refetch in flight at a time.
+  const refreshList = useCallback(() => refresh(), [refresh]);
   useDocumentsChanged(!locked, refreshList);
 
   // Backstop for anything the pings missed, e.g. while the laptop slept, and
@@ -590,6 +621,9 @@ export function App() {
       <LoginGate
         deniedReason={deniedReason}
         onSignedIn={() => {
+          // There is a session again, so reads may reach the screen once more.
+          // Without this, signing back in after a sign-out would load nothing.
+          signedOut.current = false;
           setDeniedReason(null);
           void refresh();
           // A link opened while signed out is resolved now.

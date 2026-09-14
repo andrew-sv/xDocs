@@ -41,11 +41,11 @@ test.describe('nested documents', () => {
     // document appears exactly once.
     await expect(page.getByTestId('current-doc')).toHaveCount(0);
     await expect(page.locator(`[data-doc-id="${doc.id}"]`)).toHaveCount(1);
-    // Navigating up refetches the root list; under a full parallel run that
-    // round trip can outlast the default 5s expect timeout.
+    // Navigating up refetches the root list, so this waits on a round trip —
+    // the config's expect timeout covers it.
     await expect(
       page.getByTestId('doc-list').locator(`[data-doc-id="${doc.id}"] [data-testid="doc-haschildren"]`),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible();
   });
 
   test('the breadcrumb walks back up the tree', async ({ page, doc }) => {

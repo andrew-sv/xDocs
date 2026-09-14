@@ -161,7 +161,24 @@ Each of these caused a real bug. Changing them silently breaks things.
   server's read time, `x-list-as-of`, not the order sent: under load the server
   answers out of order, and a list read before a restore landed last and hid the
   restored row. And no fetch may retire another merely by starting — with pings
-  arriving faster than responses, that froze the sidebar entirely.
+  arriving faster than responses, that froze the sidebar entirely. Sign-out
+  latches `signedOut` before it awaits anything, and `refresh()` reads that
+  latch on both sides of its fetch: otherwise a list read by the session that
+  just ended lands, calls `setLocked(false)` and puts that account's documents
+  back on screen under the gate that should have replaced them (#28). It has to
+  be a latch, not a sequence number compared across the await — a refetch
+  *starting* during the sign-out sees the bumped number and still carries the
+  token, which is cleared a moment later, so it agrees with itself and lands.
+  Signing back in clears the latch; without that the gate accepts the password
+  and leaves an empty sidebar, every response dropped.
+- **Only one ping-driven refetch runs at a time** (`useDocumentsChanged`).
+  Pings arriving during one collapse into a single trailing refetch. The 250ms
+  debounce alone does not bound this: a workspace being edited by several
+  people pings faster than the debounce gap, so it fires per gap rather than
+  per burst, and once a fetch outlasts the gap between fetches the requests
+  pile up without bound — a parallel e2e run drove list fetches to eight
+  seconds each. Delaying a fetch is fine; cancelling the one in flight is not,
+  per the bullet above.
 - **Sidebar liveness is a content-free ping (#22).** The documents routes (one
   middleware, every successful non-GET) and the collab store hook (only when a
   title actually changed) call `notifyDocumentsChanged()`, which broadcasts
@@ -267,6 +284,13 @@ dependency upgrade that reintroduces it fails loudly. Do not delete those.
 
 Notes for writing tests here:
 
+- **The browser suite's expect timeout is 15s, not Playwright's 5s**, because
+  its assertions wait on a real round trip — REST to Neon, or a CRDT sync over
+  the collab socket — and a full run puts six workers on one dev server. Do not
+  add a per-assertion `{ timeout }` to buy headroom under load; that was the old
+  habit and it left the suite flaky wherever someone had not got to yet (#28).
+  An explicit timeout is for a wait that is genuinely longer than the default
+  (a reconnect, search indexing) or deliberately shorter than it.
 - **Tests purge what they create.** Both server suites run against the dev
   database, and leftovers showed up in real sidebars. An integration suite
   calls `trackCreatedDocuments()` from `test-cleanup.mjs` before its first
