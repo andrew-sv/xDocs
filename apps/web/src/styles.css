@@ -47,6 +47,13 @@ body {
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 .title-input:hover { background: var(--panel); }
 .title-input:focus { background: #fff; box-shadow: 0 0 0 1px var(--border); }
+/* Who else is in the document. Overlapped slightly, so a crowd stays compact
+   and still reads as a group rather than a row of unrelated badges. */
+.collaborators { display: flex; flex: none; align-items: center; }
+.collaborator { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: -6px; border-radius: 50%; border: 2px solid var(--bg); color: #fff; font-size: 10px; font-weight: 650; letter-spacing: 0.02em; cursor: default; user-select: none; }
+.collaborator:first-child { margin-left: 0; }
+.collaborator-overflow { background: var(--muted); }
+
 .status { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); border: 1px solid var(--border); border-radius: 20px; padding: 2px 9px; }
 .status-connected { color: #12a594; border-color: #a8e0d4; }
 .status-disconnected { color: #e5484d; border-color: #f3aeb0; }
