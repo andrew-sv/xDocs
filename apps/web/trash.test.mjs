@@ -70,10 +70,12 @@ ck('so it appears in the top-level list', (await listIds(owner)).includes(child.
 
 // --- permanent delete -------------------------------------------------------
 await del(owner, child.id);
-const before = (await trash(owner)).length;
+ck('the trashed document is in trash to begin with', (await trash(owner)).some((e) => e.id === child.id));
 const purge = await fetch(`${API}/api/documents/${child.id}/permanent`, { method: 'DELETE', headers: H(owner) });
 ck('permanent delete succeeds for the owner', purge.status === 204);
-ck('it leaves trash', (await trash(owner)).length === before - 1);
+// By id, not by counting: trash is scoped to the account, which other suites
+// running beside this one share.
+ck('it leaves trash', !(await trash(owner)).some((e) => e.id === child.id));
 ck('the document is gone entirely', (await get(owner, child.id)).status === 404);
 ck('its descendants are gone too', (await get(owner, grandchild.id)).status === 404);
 // A live document must never be destroyable — only something already trashed.

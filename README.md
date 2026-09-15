@@ -71,6 +71,8 @@ Three layers, deliberately:
   teardown and keybinding bugs.
 - **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
+  Its eleven suites run concurrently (`scripts/integration.mjs`), since each one
+  creates and purges everything it asserts on; pass suite names to run a subset.
 - **`pnpm e2e`** — Chromium over the real stack: real clicks, real Cmd+Z, real
   HTML5 drag, two browser contexts editing one document. CI runs it as three
   shards on three runners, each with its own database.

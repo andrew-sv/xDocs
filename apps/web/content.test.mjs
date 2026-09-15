@@ -9,6 +9,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
 import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { flushStore } from './test-store.mjs';
 
 // Everything this suite creates is purged when it ends; see test-cleanup.mjs.
 const tracker = trackCreatedDocuments();
@@ -116,7 +117,7 @@ ck('a human edit is visible over REST', afterBoth.blocks[0].text === 'Typed by a
 ck('and the API-written blocks are still there', afterBoth.blocks.map((b) => b.text).includes('Added while connected'));
 
 client.provider.destroy();
-await sleep(3500);
+await flushStore(API, H(owner), doc.id);
 
 // --- persistence and the search mirror --------------------------------------
 const reread = await getContent(owner, doc.id).then((r) => r.json());
@@ -223,7 +224,7 @@ await sleep(600);
 const imageContent = await getContent(owner, imageDoc.id).then((r) => r.json());
 ck('an image block reads back as its filename', imageContent.blocks[0].text === `${imageNeedle}.png`);
 imageClient.provider.destroy();
-await sleep(3500);
+await flushStore(API, H(owner), imageDoc.id);
 const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, { headers: H(owner) }).then((r) => r.json());
 ck('and an image is findable by its filename', imageHits.some((h) => h.document.id === imageDoc.id));
 

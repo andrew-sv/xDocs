@@ -10,6 +10,10 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
+import { trackCreatedDocuments } from './test-cleanup.mjs';
+
+// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+const tracker = trackCreatedDocuments();
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -91,26 +95,37 @@ ck('uploading to a malformed document id is a 404', (await upload(owner, 'nope',
 // --- the storage quota ---------------------------------------------------------
 const usage = (token) => fetch(`${API}/api/attachments/usage`, { headers: H(token) }).then((r) => r.json());
 
-const before = await usage(owner);
+/*
+ * Counted on a brand new account, not the shared test one.
+ *
+ * These are the only assertions in the integration layer that read a number
+ * belonging to a whole user rather than to one document, so on the shared
+ * account they would be at the mercy of anything else uploading at the same
+ * time — another suite here, or a browser worker. A fresh user starts at zero
+ * and nobody else touches it, which also lets the sums be exact instead of
+ * deltas.
+ */
+const counter = (await createDisposableUser(API)).token;
+const before = await usage(counter);
 ck('usage reports a quota', before.quotaBytes > 0);
-ck('and bytes already used', typeof before.usedBytes === 'number' && before.usedBytes >= 0);
+ck('and a new account has used nothing', before.usedBytes === 0);
 
-const quotaDoc = await create(owner, 'Quota test');
-await upload(owner, quotaDoc.id, new Uint8Array(2048), 'counted.bin', 'application/octet-stream');
-const after = await usage(owner);
-ck('an upload adds exactly its size', after.usedBytes === before.usedBytes + 2048);
+const quotaDoc = await create(counter, 'Quota test');
+await upload(counter, quotaDoc.id, new Uint8Array(2048), 'counted.bin', 'application/octet-stream');
+const after = await usage(counter);
+ck('an upload adds exactly its size', after.usedBytes === 2048);
 ck('the quota itself does not move', after.quotaBytes === before.quotaBytes);
 
-// A stranger's files are not counted against this user.
+// Another user's files are not counted against this one.
 const strangerDoc = await create(stranger, 'Their quota');
 await upload(stranger, strangerDoc.id, new Uint8Array(4096), 'theirs.bin', 'application/octet-stream');
-ck('usage is per user', (await usage(owner)).usedBytes === after.usedBytes);
+ck('usage is per user', (await usage(counter)).usedBytes === 2048);
 ck('and each user sees their own', (await usage(stranger)).usedBytes === 4096);
 
 // Destroying the document frees what its files took.
-await fetch(`${API}/api/documents/${quotaDoc.id}`, { method: 'DELETE', headers: H(owner) });
-await fetch(`${API}/api/documents/${quotaDoc.id}/permanent`, { method: 'DELETE', headers: H(owner) });
-ck('deleting for good frees the space', (await usage(owner)).usedBytes === before.usedBytes);
+await fetch(`${API}/api/documents/${quotaDoc.id}`, { method: 'DELETE', headers: H(counter) });
+await fetch(`${API}/api/documents/${quotaDoc.id}/permanent`, { method: 'DELETE', headers: H(counter) });
+ck('deleting for good frees the space', (await usage(counter)).usedBytes === 0);
 
 ck('usage needs a credential', (await fetch(`${API}/api/attachments/usage`)).status === 401);
 // "usage" must not be read as an attachment id by the route below it.
@@ -201,5 +216,6 @@ const restoreAfter = await fetch(`${API}/api/documents/${doc.id}/restore`, { met
 ck('a purged document cannot be restored', restoreAfter.status === 404 || restoreAfter.status === 403);
 ck('and its files are gone with it', (await download(owner, attached.id)).status === 404);
 
+await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

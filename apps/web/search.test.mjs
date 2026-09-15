@@ -10,6 +10,7 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
 import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { flushStore } from './test-store.mjs';
 
 // Everything this suite creates is purged when it ends; see test-cleanup.mjs.
 const tracker = trackCreatedDocuments();
@@ -58,9 +59,9 @@ async function writeBody(docId, text) {
   fragment.insert(fragment.length, [p]);
   await sleep(400);
   provider.destroy();
-  // The Database extension stores on a debounce; this is the flush window the
-  // persistence suite uses too.
-  await sleep(3500);
+  // Nothing is searchable until the store hook mirrors the block text into
+  // `content_text`, so make that happen rather than waiting out its debounce.
+  await flushStore(API, H(owner), docId);
 }
 
 // A nonsense word, so a match proves this document was found and not another.

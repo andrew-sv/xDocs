@@ -4,6 +4,7 @@ import { resolveMove, applyMove } from './src/lib/reorder.ts';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { authHeaders, signInForTests } from './test-auth.mjs';
 import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { flushStore } from './test-store.mjs';
 
 // Everything this suite creates is purged when it ends; see test-cleanup.mjs.
 const tracker = trackCreatedDocuments();
@@ -149,9 +150,10 @@ await sleep(600);
 check('undo after redo restores again', A.doc.getArray(BLOCKS_KEY).length === 3);
 undoA.destroy();
 
-// 5. Disconnect everything, let Hocuspocus flush to Postgres
+// 5. Disconnect everything and flush to Postgres, so step 6 really is a load
+// from the database rather than a read of what is still in memory.
 A.provider.destroy(); B.provider.destroy();
-await sleep(3500);
+await flushStore(API, H(), id);
 
 // 6. Fresh client loads purely from Postgres
 const C = connect(id);

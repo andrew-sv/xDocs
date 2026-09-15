@@ -18,7 +18,7 @@ Tests — see **Test layers** below for what each one actually covers:
 
 ```bash
 pnpm test          # jsdom + pure-logic suites (apps/web/*.test.mjs)
-pnpm integration   # server integration (apps/web/integration.test.mjs)
+pnpm integration   # server integration, all suites at once (scripts/integration.mjs)
 pnpm e2e           # Playwright, real Chromium (apps/web/e2e/)
 ```
 
@@ -28,6 +28,16 @@ imported straight from `.mjs` via Node 24 type stripping. To run one:
 
 ```bash
 cd apps/web && node undo.test.mjs
+```
+
+`pnpm integration` runs its suites concurrently through
+`scripts/integration.mjs`, which is also where the list of them lives — adding
+a suite means adding a line there, not to a package script. It takes suite
+names to run a subset:
+
+```bash
+node scripts/integration.mjs search content
+INTEGRATION_CONCURRENCY=1 node scripts/integration.mjs   # one at a time
 ```
 
 For a single browser spec or test:
@@ -318,6 +328,31 @@ Each of these caused a real bug. Changing them silently breaks things.
 `pnpm integration` and `pnpm e2e` both need the stack running (`pnpm dev`);
 Playwright will start it itself if it is not, and reuses it if it is.
 
+**The integration suites run at the same time as each other** (#32) — they are
+almost entirely waiting, on Neon, on the collab store, on an MCP subprocess
+starting, so overlapping that waiting took the run from about four minutes to
+one. This works only because each suite creates everything it asserts on, the
+same property the browser suite needs to shard. **So a new suite must assert on
+its own documents by id, never on a count or a total of something the shared
+test account owns** — `trash.test.mjs` once checked that a purge left the trash
+list one shorter, which another suite emptying its own trash breaks.
+
+One suite is marked `alone` in `scripts/integration.mjs` and runs by itself:
+`live.test.mjs` counts pings on the `workspace` channel, which every signed-in
+user shares, and three of its assertions are that nothing pinged. Every
+successful non-GET on the documents routes pings, so anything running beside it
+fails those three — and it cannot be fixed by filtering, because the ping
+deliberately carries no way to tell whose change it was.
+
+`attachments.test.mjs` was the other one, until its quota assertions moved to
+their own `createDisposableUser`: a per-user total moves under a suite when
+anything else uploads as that user, and a throwaway account starts at zero and
+belongs to nobody else. Prefer that to marking a suite `alone` — a solitary
+suite is dead time for every other one.
+
+When something fails, the runner reprints the failing suites at the end;
+`INTEGRATION_CONCURRENCY=1` reproduces serially if you suspect interference.
+
 **CI runs the browser suite as three `--shard`s, one runner each.** Each shard
 brings up its own Postgres and its own stack, so they share nothing: a spec may
 not depend on data another spec made, and must create what it asserts on.
@@ -358,6 +393,16 @@ Notes for writing tests here:
   suite the `doc` and `page` fixtures do it. Do not sweep "everything the test
   account owns" instead: e2e and integration share that account and can run at
   once.
+- **To see persisted state, call `flushStore()` from `test-store.mjs` — never
+  sleep out the store debounce.** Hocuspocus writes on a 2s debounce, so suites
+  used to `sleep(3500)` and hope, which is both slow and a guess. A direct
+  connection disconnecting instead runs the store hook with a debounce of zero
+  and awaits it, then unloads the document — and `withDocument()` opens exactly
+  such a connection for every route under `/documents/:id/content`. So a plain
+  READ of that route flushes the CRDT to Postgres as a side effect, which is
+  all the helper does. It leaves the document out of memory too, so a fresh
+  client afterwards really does load from the database, which is the only
+  version of a persistence check worth having.
 - `Y.UndoManager` merges changes within its 500ms `captureTimeout` into one
   stack item — call `clear()` after setup, or stack-depth assertions mislead.
 - In Playwright, wait for the new block to be focused before typing
