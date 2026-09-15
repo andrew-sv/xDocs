@@ -403,6 +403,26 @@ Notes for writing tests here:
   all the helper does. It leaves the document out of memory too, so a fresh
   client afterwards really does load from the database, which is the only
   version of a persistence check worth having.
+- **Click a sidebar row by `data-doc-id`, never by its title (#29).** The
+  sidebar shows every public document in the workspace, real people's
+  included, and a title typed a moment ago is client-side state until the
+  collab server's debounced save — so a title-filtered row can match nothing,
+  or the wrong row, for as long as that save takes. Three runs of
+  `search.spec.ts` once added their sub-documents to a stranger's document
+  that way, owned by disposable users nobody could delete them as; they had to
+  be removed with SQL. A spec that creates through the UI gets the id from the
+  create response with `createsDocument()` in `e2e/fixtures.ts`, and reaches
+  the row with `docRow()`.
+- **Before "+ Add document", assert the parent is the OPEN document**
+  (`toHaveValue`). "+ Add document" acts on whatever is open, so without this
+  a misdirected click does not fail the spec — it writes a sub-document into
+  somebody else's document and the spec fails later, somewhere else. The
+  assertion is what makes the failure harmless and local.
+- **`doc-list-loading` is not a "sidebar has loaded" signal.** It renders only
+  while the loaded level differs from the open one, which at the top level is
+  false before the first fetch has even been sent — so asserting it is absent
+  passes instantly and waits for nothing. Wait for the `GET /api/documents`
+  response instead.
 - `Y.UndoManager` merges changes within its 500ms `captureTimeout` into one
   stack item — call `clear()` after setup, or stack-depth assertions mislead.
 - In Playwright, wait for the new block to be focused before typing

@@ -1,4 +1,4 @@
-import { blocks, expect, openDocument, seedDisposableSession, test } from './fixtures';
+import { blocks, createsDocument, docRow, expect, openDocument, seedDisposableSession, test } from './fixtures';
 import type { Page } from '@playwright/test';
 
 /**
@@ -57,19 +57,42 @@ test.describe('search', () => {
 
   test('a nested result shows the path it lives under', async ({ page }) => {
     await seedDisposableSession(page);
-    await page.goto('/');
-    await expect(page.getByTestId('doc-list-loading')).toHaveCount(0);
+    // The real "sidebar is ready" signal. `doc-list-loading` is not: it renders
+    // only while the loaded level differs from the open one, which at the top
+    // level is false before the first fetch has even been sent.
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/documents',
+      ),
+      page.goto('/'),
+    ]);
 
-    await page.getByTestId('new-document').click();
+    const parentDoc = await createsDocument(page, () => page.getByTestId('new-document').click());
     await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     const parent = `parent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await page.getByTestId('title-input').fill(parent);
 
-    // By title, not .first(): every signed-in user sees every public document,
-    // so the top of the list is not necessarily the one just created.
-    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: parent })
-      .getByTestId('doc-open').click();
-    await page.getByTestId('add-document').click();
+    /*
+     * By id, never by title (#29).
+     *
+     * This sidebar holds every public document in the workspace, including
+     * real people's, and the title just typed is client-side state until the
+     * collab server's debounced save — so a title-filtered row can match
+     * nothing, or the wrong thing, for as long as that save takes. Three runs
+     * of this spec once added their children to a stranger's document that
+     * way, owned by a disposable user nobody could delete them as.
+     */
+    await docRow(page, parentDoc.id).getByTestId('doc-open').click();
+
+    /*
+     * And the parent must be the OPEN document before a child goes under it.
+     * This is the assertion that makes a misdirected click fail here, harmless,
+     * instead of somewhere else's document a moment later.
+     */
+    await expect(page.getByTestId('title-input')).toHaveValue(parent);
+
+    const childDoc = await createsDocument(page, () => page.getByTestId('add-document').click());
+    expect(childDoc.parentId).toBe(parentDoc.id);
     await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     const child = `child-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     await page.getByTestId('title-input').fill(child);

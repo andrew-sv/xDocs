@@ -112,6 +112,40 @@ export const test = base.extend<{ doc: TestDocument }>({
 
 export { expect };
 
+/**
+ * Run something that creates a document, and return the document it made.
+ *
+ * A spec that creates through the UI ("+ New", "+ Add document") otherwise has
+ * no id to work with, and is left finding its own row by title — which is the
+ * one thing about a row that is NOT reliable. The title is client-side state
+ * until Hocuspocus's debounced save, the sidebar holds every public document
+ * in the workspace beside it, and a ping refetches the list at any moment. A
+ * spec that picks the wrong row there does not just fail: it adds its
+ * sub-documents to somebody's real document (#29).
+ *
+ * The id from the create response is immune to all of that. Click rows by
+ * `[data-doc-id="..."]`, as `openDocument()` below does.
+ */
+export async function createsDocument(
+  page: Page,
+  action: () => Promise<void>,
+): Promise<{ id: string; parentId: string | null; title: string }> {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === 'POST' &&
+        new URL(r.url()).pathname === '/api/documents' &&
+        r.status() === 201,
+    ),
+    action(),
+  ]);
+  return response.json();
+}
+
+/** The sidebar's own row for a document, by id rather than by title. */
+export const docRow = (page: Page, id: string) =>
+  page.getByTestId('doc-list').locator(`[data-doc-id="${id}"]`);
+
 /** Open a document from the sidebar and wait until the CRDT has synced. */
 export async function openDocument(page: Page, doc: TestDocument) {
   await page.goto('/');

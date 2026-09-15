@@ -73,6 +73,12 @@ test.describe('moving documents', () => {
     const parent = await newDocument(page, 'cycleparent');
     await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: parent })
       .getByTestId('doc-open').click();
+    /*
+     * The parent must be the OPEN document before a child goes under it — a
+     * misdirected row click otherwise adds one to somebody's real document
+     * rather than failing here (#29).
+     */
+    await expect(page.getByTestId('title-input')).toHaveValue(parent);
     await page.getByTestId('add-document').click();
     await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     const child = `cyclechild-${Date.now()}`;
