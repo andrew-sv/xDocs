@@ -12,7 +12,8 @@
     "db:migrate": "dotenv -e ../../.env.local -- drizzle-kit migrate",
     "db:check": "dotenv -e ../../.env.local -- drizzle-kit check",
     "db:check-destructive": "dotenv -e ../../.env.local -- node scripts/check-migrations.mjs",
-    "backfill:search": "dotenv -e ../../.env.local -- node scripts/backfill-search.mjs"
+    "backfill:search": "dotenv -e ../../.env.local -- node scripts/backfill-search.mjs",
+    "cleanup:test-users": "dotenv -e ../../.env.local -- node scripts/cleanup-test-users.mjs"
   },
   "dependencies": {
     "@hocuspocus/extension-database": "^4.6.0",

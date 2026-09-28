@@ -111,9 +111,17 @@ existed are filled by `pnpm --filter @xdocs/api backfill:search`.
 once — in the creation response. Revocation is soft (`revoked_at`), and the
 lookup filters on it, so a revoked key stops working on the next request.
 
-`DELETE /documents/:id/permanent` is the only hard delete in the codebase. Its
+`DELETE /documents/:id/permanent` is the only hard delete the app performs. Its
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
+
+The one other is `pnpm --filter @xdocs/api cleanup:test-users` (#30), which
+deletes `disposable-%@xdocs.test` users older than a cutoff (24h default,
+`--older-than <hours>`, `--dry-run`) and their documents. It deletes documents
+before the user, because `created_by` is `ON DELETE SET NULL` and would leave
+them ownerless, and moves anyone else's sub-documents under them to the top
+level. It refuses to run unless `ALLOW_PASSWORD_LOGIN=true`, which staging never
+sets.
 
 `attachments` holds uploaded files as bytea, capped per file at
 `MAX_ATTACHMENT_BYTES` and per user at `ATTACHMENT_QUOTA_BYTES`
