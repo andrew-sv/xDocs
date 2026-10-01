@@ -35,6 +35,7 @@ import { Collaborators } from './Collaborators';
 import { CommentsRail } from './CommentsRail';
 import { DocumentFiles } from './DocumentFiles';
 import { TitleEditor } from './TitleEditor';
+import { VersionHistory } from './VersionHistory';
 import { VisibilityToggle } from './VisibilityToggle';
 import { Toast } from './Toast';
 
@@ -136,6 +137,8 @@ export function DocumentEditor({
   const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
   /** Bumped when a block uploads a file, so the file list picks it up. */
   const [filesKey, setFilesKey] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
 
   useEffect(() => {
     // One Y.Doc + one socket per open document. Every block is a fragment on
@@ -171,6 +174,7 @@ export function DocumentEditor({
 
     setProvider(next);
     setUndoManager(undo);
+    setHistoryOpen(false);
     setStatus('connecting');
     setSynced(false);
     setToast(null);
@@ -503,6 +507,15 @@ export function DocumentEditor({
           onChange={(next) => onVisibilityChange(doc.id, next)}
         />
         <Collaborators people={others} />
+        <button
+          type="button"
+          className="header-button"
+          data-testid="history-open"
+          title="Earlier versions of this document"
+          onClick={() => setHistoryOpen(true)}
+        >
+          History
+        </button>
         <span className={`status status-${status}`}>
           {status === 'connected' && synced ? 'Live' : status === 'connected' ? 'Syncing…' : status}
         </span>
@@ -596,6 +609,7 @@ export function DocumentEditor({
       )}
 
       {toast && <Toast message={toast.message} onUndo={runUndo} onDismiss={dismissToast} />}
+      {historyOpen && <VersionHistory documentId={doc.id} onClose={closeHistory} />}
     </main>
 
     {synced && (

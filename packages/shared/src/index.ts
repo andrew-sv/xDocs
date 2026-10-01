@@ -193,6 +193,34 @@ export const documentContentSchema = z.object({
 export type DocumentContentDTO = z.infer<typeof documentContentSchema>;
 
 /**
+ * Why a version exists; see `document_versions.reason`. `auto` versions are
+ * archived by the collab store as editing goes on, the rest are taken on
+ * request or just before something rewrites the whole document.
+ */
+export const versionReasonSchema = z.enum(['auto', 'manual', 'before-restore', 'before-replace']);
+export type VersionReason = z.infer<typeof versionReasonSchema>;
+
+/** One entry in a document's history. Never carries the content itself. */
+export const documentVersionSchema = z.object({
+  id: z.uuid(),
+  documentId: z.uuid(),
+  title: z.string(),
+  reason: versionReasonSchema,
+  /** Whoever asked for it; null for automatic versions and deleted accounts. */
+  author: z.object({ id: z.string(), name: z.string() }).nullable(),
+  /** When the document was in this state. */
+  savedAt: z.iso.datetime(),
+});
+export type DocumentVersionDTO = z.infer<typeof documentVersionSchema>;
+
+/** A version with its content, in the same shape as a content read. */
+export const documentVersionContentSchema = z.object({
+  version: documentVersionSchema,
+  content: documentContentSchema,
+});
+export type DocumentVersionContentDTO = z.infer<typeof documentVersionContentSchema>;
+
+/**
  * One block to write.
  *
  * A bare string is a paragraph, and a newline in it starts another paragraph

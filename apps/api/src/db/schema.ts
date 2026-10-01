@@ -147,3 +147,48 @@ export const attachments = pgTable(
   },
   (table) => [index('attachments_document_idx').on(table.documentId)],
 );
+
+/**
+ * Earlier states of a document, for version history (#49).
+ *
+ * `documents.ystate` only ever holds the latest state, and Yjs's own history is
+ * the in-memory undo stack of one session — so without this there was no way
+ * back to yesterday's wording. Each row is a full, self-contained Yjs update:
+ * decoding one needs nothing but itself, so a version survives any amount of
+ * later editing, and restoring never depends on garbage collection having kept
+ * deleted items around (Hocuspocus's documents collect them).
+ *
+ * ON DELETE CASCADE, like attachments: versions go with a permanent delete and
+ * survive a soft one, so a restored document keeps its history.
+ */
+export const documentVersions = pgTable(
+  'document_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    ystate: bytea('ystate').notNull(),
+    /** The title as it was, so a list of versions can be read without decoding any. */
+    title: text('title').notNull(),
+    /*
+     * Why this version exists:
+     *  - auto: the store hook archived the previous state before overwriting it
+     *  - manual: someone asked to keep the state as it stands
+     *  - before-restore / before-replace: the state an operation that rewrites
+     *    the whole document was about to discard
+     */
+    reason: text('reason', { enum: ['auto', 'manual', 'before-restore', 'before-replace'] }).notNull(),
+    /** Who asked for it; null for automatic versions, which have no one author. */
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    /**
+     * When the document was in this state — what a person browsing history
+     * means by "the version from 3pm". For an auto version that is the previous
+     * save, which can be long before the row was written.
+     */
+    savedAt: timestamp('saved_at', { withTimezone: true }).notNull(),
+    /** When the row was written. Throttles automatic versions; never shown. */
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('document_versions_document_idx').on(table.documentId, table.savedAt)],
+);
