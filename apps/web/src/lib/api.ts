@@ -3,6 +3,9 @@ import type {
   AttachmentDTO,
   AttachmentUsageDTO,
   DocumentAttachmentDTO,
+  DocumentContentDTO,
+  DocumentVersionContentDTO,
+  DocumentVersionDTO,
   CreatedApiKeyDTO,
   DocumentDTO,
   SearchResultDTO,
@@ -139,6 +142,16 @@ export const api = {
     if (!res.ok) throw await failure(res, 'Upload failed');
     return (await res.json()) as AttachmentDTO;
   },
+  /** Newest first. Content is fetched per version, never for the whole list. */
+  listVersions: (documentId: string) => request<DocumentVersionDTO[]>(`/documents/${documentId}/versions`),
+  getVersion: (documentId: string, versionId: string) =>
+    request<DocumentVersionContentDTO>(`/documents/${documentId}/versions/${versionId}`),
+  /** Keep the document as it stands right now. */
+  saveVersion: (documentId: string) =>
+    request<DocumentVersionDTO>(`/documents/${documentId}/versions`, { method: 'POST' }),
+  /** A CRDT edit on the server; open editors receive it over the socket. */
+  restoreVersion: (documentId: string, versionId: string) =>
+    request<DocumentContentDTO>(`/documents/${documentId}/versions/${versionId}/restore`, { method: 'POST' }),
   attachmentUsage: () => request<AttachmentUsageDTO>('/attachments/usage'),
   listAttachments: (documentId: string) =>
     request<DocumentAttachmentDTO[]>(`/documents/${documentId}/attachments`),

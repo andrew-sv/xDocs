@@ -17,6 +17,7 @@ import { collabConfiguration, setCollabServer } from './collab.js';
 import { attachmentsRoute } from './routes/attachments.js';
 import { documentsRoute } from './routes/documents.js';
 import { keysRoute } from './routes/keys.js';
+import { versionsRoute } from './routes/versions.js';
 
 /**
  * Set by the guard so routes know who is asking, and how.
@@ -84,6 +85,8 @@ const app = new Hono<{ Variables: Variables }>()
     return next();
   })
   .route('/api/documents', documentsRoute)
+  // /documents/:id/versions — history (#49), its own module to keep that one sane.
+  .route('/api/documents', versionsRoute)
   .route('/api/keys', keysRoute)
   // Spans two prefixes: uploads under /documents/:id, downloads by their own id.
   .route('/api', attachmentsRoute);

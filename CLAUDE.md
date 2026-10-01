@@ -123,6 +123,18 @@ them ownerless, and moves anyone else's sub-documents under them to the top
 level. It refuses to run unless `ALLOW_PASSWORD_LOGIN=true`, which staging never
 sets.
 
+`document_versions` (#49) holds earlier states as full Yjs updates, cascading
+with the document like `attachments`. The store hook archives the state it is
+about to overwrite — inside its own transaction, at most once per
+`VERSION_INTERVAL_MINUTES` (10), dated by that state's `updated_at` — so the
+first save of a session keeps how the last one ended. `PUT /content` and a
+restore record the live state first (`before-replace`, `before-restore`)
+through the same direct connection that then rewrites it. A restore writes
+through the CRDT like any content route, copying each block under a NEW id
+with `clone()`; it leaves comment threads alone and strips only marks whose
+thread is gone. Reading a version over REST does not break the "no content over
+HTTP" rule: a version is immutable, so there is nothing to clobber.
+
 `attachments` holds uploaded files as bytea, capped per file at
 `MAX_ATTACHMENT_BYTES` and per user at `ATTACHMENT_QUOTA_BYTES`
 (`DEFAULT_ATTACHMENT_QUOTA_BYTES` when unset) — `/attachments/usage` is

@@ -198,6 +198,10 @@ turn one leaked credential into access that revoking the original does not undo.
 | `GET /api/documents/:id/content` | title and block text |
 | `PUT /api/documents/:id/content` | replace blocks, optionally the title |
 | `POST /api/documents/:id/content` | append blocks |
+| `GET /api/documents/:id/versions` | its history, newest first, without content |
+| `POST /api/documents/:id/versions` | keep the document as it stands now |
+| `GET /api/documents/:id/versions/:versionId` | one version and its content, shaped like a content read |
+| `POST /api/documents/:id/versions/:versionId/restore` | make the document read as that version did |
 | `PATCH /api/documents/:id/parent` | move it, `null` for the top level |
 | `PATCH /api/documents/:id/visibility` | owner only |
 | `DELETE /api/documents/:id` | soft delete, cascading |
@@ -388,6 +392,38 @@ and its `ystate`, which is the entire content. It is confirmation-gated, worded
 as irreversible because it is, and refused (403) on a document that is not
 already in the trash — so nothing live can be destroyed in one step.
 
+### Version history
+
+**History** in the document header lists earlier versions of the document,
+previews the one you pick, and restores it (#49). `documents.ystate` only ever
+holds the latest state and Yjs's undo stack lives and dies with one session, so
+earlier states are copied into `document_versions`, each a full Yjs update that
+decodes on its own. Three things write one:
+
+- **The collab store hook, automatically.** Before it overwrites the stored
+  state it archives that state — at most once every ten minutes
+  (`VERSION_INTERVAL_MINUTES`). Archiving what is about to be overwritten, not
+  what is being written, is what makes the first save of a session keep exactly
+  the wording the last session ended with. A document never saved since it was
+  created has nothing worth archiving and is skipped.
+- **Save version now**, which reads the live document, so it includes typing
+  the store has not saved yet.
+- **Anything that rewrites the whole document**: a restore, and
+  `PUT /content`. The likeliest caller of a replace is a script or an MCP
+  client, and the automatic versions alone could be ten minutes stale.
+
+Restoring is an edit, not a rollback: it goes through a direct connection like
+every REST content write, lands in everyone's open editor, and keeps what it
+replaced as a version first — so a wrong restore is one more restore away. Each
+block comes back under a new id, leaving the old fragments as recoverable as a
+deleted block's. Comment threads are live discussion rather than wording, so a
+restore leaves them alone and only drops highlights whose thread has since been
+deleted, which would otherwise open nothing.
+
+Access is the document's: anyone who can open it can read and restore its
+history. Versions go with a permanent delete and survive a soft one. Nothing
+prunes them yet.
+
 ### Moving documents
 
 `⇄` on a sidebar row reparents a document; its sub-documents go with it.
@@ -493,9 +529,6 @@ pooled `DATABASE_URL`, and the API connects over TCP with
 
 ## Not built yet
 
-- **Version history.** Yjs keeps enough to undo within a session, and the
-  database stores only the current state — there are no snapshots to browse and
-  no way back to yesterday's wording.
 - **Suggestions.** Comments exist, but there is no way to propose an edit that
   somebody else accepts or rejects — changing the words is still the only way
   to change the words.

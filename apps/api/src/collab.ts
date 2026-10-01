@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import { canAccessDocument } from './db/access.js';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
+import { archivePreviousState } from './versions.js';
 
 /*
  * The running Hocuspocus server, for editing a document from the REST side.
@@ -27,15 +28,23 @@ export function setCollabServer(server: Server): void {
   collabServer = server;
 }
 
+/** One step against the live document; see withDirectConnection. */
+export type Transact = <T>(transaction: (doc: Y.Doc) => T) => Promise<T>;
+
 /**
- * Run a transaction against the live document.
+ * Join the live document as a participant for as long as `run` takes.
+ *
+ * For work that has to interleave the document with something asynchronous —
+ * restoring a version reads the document, stores what it read, and only then
+ * rewrites it, all on one connection so the document cannot be unloaded and
+ * reloaded between the steps.
  *
  * The connection is always closed, including on failure: a leaked direct
  * connection keeps the document loaded in memory for the life of the process.
  */
-export async function withDocument<T>(
+export async function withDirectConnection<T>(
   documentId: string,
-  transaction: (doc: Y.Doc) => T,
+  run: (transact: Transact) => Promise<T>,
 ): Promise<T> {
   if (!collabServer) throw new Error('Collaboration server is not running');
   // `Server` is the transport; `hocuspocus` is the document layer that can open
@@ -43,15 +52,23 @@ export async function withDocument<T>(
   const connection = await collabServer.hocuspocus.openDirectConnection(
     collabDocName(documentId),
   );
-  let result!: T;
-  try {
+  const transact: Transact = async (transaction) => {
+    let result!: ReturnType<typeof transaction>;
     await connection.transact((doc: { getArray: Y.Doc['getArray'] }) => {
       result = transaction(doc as unknown as Y.Doc);
     });
+    return result;
+  };
+  try {
+    return await run(transact);
   } finally {
     await connection.disconnect();
   }
-  return result;
+}
+
+/** Run one transaction against the live document. */
+export function withDocument<T>(documentId: string, transaction: (doc: Y.Doc) => T): Promise<T> {
+  return withDirectConnection(documentId, (transact) => transact(transaction));
 }
 
 /**
@@ -80,7 +97,7 @@ function documentIdFrom(documentName: string): string | null {
  * The title is authored in the CRDT; this mirrors it into the `title` column so
  * the document list can be served over REST without loading each Yjs doc.
  */
-function readTitle(doc: Y.Doc): string {
+export function readTitle(doc: Y.Doc): string {
   const title = doc.getText(TITLE_KEY).toString().trim();
   return title.length > 0 ? title.slice(0, 200) : 'Untitled';
 }
@@ -112,17 +129,22 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
         const id = documentIdFrom(documentName);
         if (!id) return;
         const title = readTitle(document);
-        await getDb()
-          .update(documents)
-          .set({
-            ystate: Buffer.from(state),
-            title,
-            // Mirrored for search, exactly like the title and for the same
-            // reason: `ystate` is opaque to Postgres.
-            contentText: readContentText(document),
-            updatedAt: new Date(),
-          })
-          .where(eq(documents.id, id));
+        await getDb().transaction(async (tx) => {
+          // The state about to be overwritten becomes a version first, at
+          // most once per interval — see archivePreviousState (#49).
+          await archivePreviousState(tx, id);
+          await tx
+            .update(documents)
+            .set({
+              ystate: Buffer.from(state),
+              title,
+              // Mirrored for search, exactly like the title and for the same
+              // reason: `ystate` is opaque to Postgres.
+              contentText: readContentText(document),
+              updatedAt: new Date(),
+            })
+            .where(eq(documents.id, id));
+        });
         // Renaming is typing, not a REST call, so the routes never see it.
         // Every save lands here, though — ping only when the title moved.
         if (storedTitles.get(documentName) !== title) {

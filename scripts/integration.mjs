@@ -35,6 +35,7 @@ const mcp = resolve(root, 'apps/mcp');
 const SUITES = [
   { name: 'attachments', cwd: web, file: 'attachments.test.mjs' },
   { name: 'content', cwd: web, file: 'content.test.mjs' },
+  { name: 'versions', cwd: web, file: 'versions.test.mjs' },
   { name: 'nested', cwd: web, file: 'nested.test.mjs' },
   { name: 'mcp', cwd: mcp, file: 'mcp.test.mjs' },
   { name: 'move', cwd: web, file: 'move.test.mjs' },
