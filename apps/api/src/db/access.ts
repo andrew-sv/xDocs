@@ -48,16 +48,23 @@ export async function canAccessDocument(userId: string, documentId: string): Pro
   return rows.length > 0;
 }
 
+/** The pool, or a transaction on it — anything that can run a statement. */
+type Executor = Pick<ReturnType<typeof getDb>, 'execute'>;
+
 /**
  * The document plus all of its descendants, for cascading a delete.
  * Walks downward regardless of visibility — the caller has already proven
  * ownership of the root.
+ *
+ * UNION, not UNION ALL: it drops rows already seen, so the walk ends even on
+ * a parent cycle (#55). UNION ALL would spin forever on one, holding a pooled
+ * connection while Postgres burns CPU.
  */
-export async function subtreeIds(documentId: string): Promise<string[]> {
-  const result = await getDb().execute(sql`
+export async function subtreeIds(documentId: string, db: Executor = getDb()): Promise<string[]> {
+  const result = await db.execute(sql`
     WITH RECURSIVE subtree AS (
       SELECT id FROM documents WHERE id = ${documentId}
-      UNION ALL
+      UNION
       SELECT d.id FROM documents d JOIN subtree s ON d.parent_id = s.id
     )
     SELECT id FROM subtree
@@ -71,8 +78,12 @@ export async function subtreeIds(documentId: string): Promise<string[]> {
  * Impossible through the UI, but a hand-made request could otherwise detach a
  * subtree into a loop that the recursive queries would never terminate on.
  */
-export async function wouldCreateCycle(documentId: string, parentId: string): Promise<boolean> {
+export async function wouldCreateCycle(
+  documentId: string,
+  parentId: string,
+  db: Executor = getDb(),
+): Promise<boolean> {
   if (documentId === parentId) return true;
-  const descendants = await subtreeIds(documentId);
+  const descendants = await subtreeIds(documentId, db);
   return descendants.includes(parentId);
 }
