@@ -1,9 +1,9 @@
 import { useEditorState, type Editor } from '@tiptap/react';
 import { followLink } from '../lib/attachments';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 type Action = {
-  label: string;
+  label: ReactNode;
   title: string;
   isActive: boolean;
   disabled?: boolean;
@@ -120,6 +120,7 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
       blockquote: e.isActive('blockquote'),
       link: e.isActive('link'),
       comment: e.isActive('comment'),
+      table: e.isActive('table'),
       selectionEmpty: e.state.selection.empty,
     }),
   });
@@ -156,6 +157,19 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
       },
     },
     { label: '📎', title: 'Attach file', isActive: false, disabled: active.codeBlock, run: onAttachFile },
+    // Replaced by the table's own controls while the caret is in one: tables
+    // do not nest, and the group needs the room (see TableIcon).
+    ...(active.table
+      ? []
+      : [
+          {
+            label: <TableIcon edit="insert" />,
+            title: 'Table',
+            isActive: false,
+            disabled: active.codeBlock,
+            run: () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+          },
+        ]),
     {
       label: '💬',
       title: 'Comment',
@@ -166,6 +180,20 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
       run: onComment,
     },
   ];
+
+  /*
+   * Shown only while the caret is in a table, in the right-hand group for the
+   * same reason as the rest of it: the left group may not grow.
+   */
+  const table: Action[] = active.table
+    ? [
+        { label: <TableIcon edit="add-row" />, title: 'Add row', isActive: false, run: () => chain().addRowAfter().run() },
+        { label: <TableIcon edit="add-column" />, title: 'Add column', isActive: false, run: () => chain().addColumnAfter().run() },
+        { label: <TableIcon edit="delete-row" />, title: 'Delete row', isActive: false, run: () => chain().deleteRow().run() },
+        { label: <TableIcon edit="delete-column" />, title: 'Delete column', isActive: false, run: () => chain().deleteColumn().run() },
+        { label: <TableIcon edit="delete-table" />, title: 'Delete table', isActive: false, run: () => chain().deleteTable().run() },
+      ]
+    : [];
 
   const submitLink = () => {
     if (linkDraft === null) return;
@@ -183,7 +211,11 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
     <>
       <div className="toolbar">{format.map(renderButton)}</div>
       {linkDraft === null ? (
-        <div className="toolbar toolbar-insert">{insert.map(renderButton)}</div>
+        <div className="toolbar toolbar-insert">
+          {insert.map(renderButton)}
+          {table.length > 0 && <span className="tb-sep" aria-hidden="true" />}
+          {table.map(renderButton)}
+        </div>
       ) : (
         <div className="toolbar toolbar-insert toolbar-link">
           <input
@@ -238,6 +270,48 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
         </div>
       )}
     </>
+  );
+}
+
+/*
+ * Icons rather than words: the right-hand group grows leftward, and with "+ Row"
+ * and the like it reached past the middle of the block above (tables.spec.ts).
+ * The title on each button says what it does.
+ */
+function TableIcon({
+  edit,
+}: {
+  edit: 'insert' | 'add-row' | 'add-column' | 'delete-row' | 'delete-column' | 'delete-table';
+}) {
+  const rows = edit === 'add-row' || edit === 'delete-row';
+  const shape =
+    edit === 'insert' ? (
+      <>
+        <rect x="2" y="2.5" width="12" height="11" rx="1" />
+        <path d="M2 6.2h12M2 9.8h12M6 2.5v11M10 2.5v11" />
+      </>
+    ) : edit === 'delete-table' ? (
+      <>
+        <rect x="2" y="2" width="12" height="12" rx="1" />
+        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+      </>
+    ) : rows ? (
+      <>
+        <rect x="2" y="2" width="12" height="7" rx="1" />
+        <path d="M2 5.5h12M6 2v7M10 2v7" />
+        <path d={edit === 'add-row' ? 'M8 10.5v5M5.5 13h5' : 'M5.5 13h5'} />
+      </>
+    ) : (
+      <>
+        <rect x="2" y="2" width="7" height="12" rx="1" />
+        <path d="M5.5 2v12M2 6h7M2 10h7" />
+        <path d={edit === 'add-column' ? 'M13 5.5v5M10.5 8h5' : 'M10.5 8h5'} />
+      </>
+    );
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
+      {shape}
+    </svg>
   );
 }
 

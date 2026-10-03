@@ -1,5 +1,6 @@
 import type { WriteBlockInput } from '@xdocs/shared';
 import * as Y from 'yjs';
+import { TABLE_CELL_SEPARATOR, TABLE_ROW } from './contentText.js';
 
 /**
  * Links in block text over REST, written the Markdown way: `[label](href)`.
@@ -102,6 +103,17 @@ export function runsOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText): TextRun[
   if (node instanceof Y.XmlElement && node.nodeName === 'image') {
     const alt = node.getAttribute('alt');
     return alt ? [{ text: alt }] : [];
+  }
+  // A row is one line, as in contentText.ts, so its cells cannot break it.
+  if (node instanceof Y.XmlElement && node.nodeName === TABLE_ROW) {
+    const runs: TextRun[] = [];
+    for (let i = 0; i < node.length; i++) {
+      if (i > 0) runs.push({ text: TABLE_CELL_SEPARATOR });
+      for (const run of runsOf(node.get(i) as Y.XmlElement)) {
+        runs.push(run.text === '\n' ? { text: ' ' } : run);
+      }
+    }
+    return runs;
   }
   const runs: TextRun[] = [];
   for (let i = 0; i < node.length; i++) {

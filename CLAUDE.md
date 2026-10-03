@@ -304,7 +304,11 @@ Each of these caused a real bug. Changing them silently breaks things.
   still does because the toolbar starts at the block's outer edge (`left: 0`,
   in the drag-handle gutter) rather than at its text. Narrowing the column, or
   adding buttons to the left group, spends that margin — measure it rather than
-  assuming, as the numbers are not obvious from the CSS.
+  assuming, as the numbers are not obvious from the CSS. The right-hand group
+  grows leftward toward the same midpoint: with the caret in a table it holds
+  the table's row/column controls (#50) and ends 32px clear, which is why they
+  are icons and why the Table button gives way to them there.
+  `e2e/tables.spec.ts` asserts it.
 - **API keys are recognised by their `xdk_` prefix before Better Auth sees the
   request**, and resolve to a plain userId — so ownership and visibility rules
   need no notion of "a key did this". `/api/keys` is session-only for the same

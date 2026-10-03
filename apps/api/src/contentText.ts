@@ -32,6 +32,18 @@ export function readContentText(doc: Y.Doc): string {
   return parts.join('\n').slice(0, MAX_CHARS);
 }
 
+/** TipTap's node name for a table row; see TABLE_CELL_SEPARATOR. */
+export const TABLE_ROW = 'tableRow';
+
+/**
+ * How a table reads as text: a line per row, its cells joined by this.
+ *
+ * Without it every cell came out on a line of its own, and a table read over
+ * REST was a column of words with nothing to say which belonged together. A
+ * cell holding several paragraphs is folded onto one line for the same reason.
+ */
+export const TABLE_CELL_SEPARATOR = ' | ';
+
 /**
  * Walk a fragment for its characters only.
  *
@@ -53,6 +65,14 @@ export function textOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText | Y.XmlHoo
    */
   if (node instanceof Y.XmlElement && node.nodeName === 'image') {
     return node.getAttribute('alt') ?? '';
+  }
+  // One line per row, cells beside each other; see TABLE_CELL_SEPARATOR.
+  if (node instanceof Y.XmlElement && node.nodeName === TABLE_ROW) {
+    const cells: string[] = [];
+    for (let i = 0; i < node.length; i++) {
+      cells.push(textOf(node.get(i) as Y.XmlElement).replace(/\n+/g, ' '));
+    }
+    return cells.join(TABLE_CELL_SEPARATOR);
   }
   if (node instanceof Y.XmlFragment || node instanceof Y.XmlElement) {
     const children: string[] = [];
