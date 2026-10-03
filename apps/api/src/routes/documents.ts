@@ -581,25 +581,35 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       if (!(await canAccessDocument(userId, parentId))) {
         return c.json({ error: 'Destination not found' }, 404);
       }
-      /*
-       * A cycle is unreachable through the UI but trivial over the API, and it
-       * would be permanent: every recursive query here walks parent links, so a
-       * loop would spin rather than return, taking the listing and the access
-       * check down with it.
-       */
-      if (await wouldCreateCycle(id, parentId)) {
-        return c.json({ error: 'A document cannot be moved inside itself' }, 400);
-      }
     }
 
-    const [moved] = await getDb()
-      .update(documents)
-      .set({ parentId, updatedAt: new Date() })
-      .where(eq(documents.id, id))
-      .returning(columns);
+    /*
+     * A cycle is unreachable through the UI but trivial over the API, and it
+     * would be permanent: the visibility walk starts from top-level documents,
+     * so a loop and everything under it vanishes for everyone.
+     *
+     * The check and the write share one transaction behind one lock (#55).
+     * Apart, "A under B" and "B under A" sent together each passed a check
+     * that ran before the other's write, and both landed. The lock is global
+     * rather than per document because the conflicting moves touch different
+     * rows; moves are rare enough that serialising all of them costs nothing.
+     * Under READ COMMITTED each statement after the lock sees the move that
+     * held it before.
+     */
+    const moved = await getDb().transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('xdocs:documents.parent_id'))`);
+      if (parentId && (await wouldCreateCycle(id, parentId, tx))) return null;
+      const [row] = await tx
+        .update(documents)
+        .set({ parentId, updatedAt: new Date() })
+        .where(eq(documents.id, id))
+        .returning(columns);
+      return row!;
+    });
+    if (!moved) return c.json({ error: 'A document cannot be moved inside itself' }, 400);
 
     const withChildren = await childBearing([id]);
-    return c.json(toDTO(moved!, userId, withChildren.has(id)));
+    return c.json(toDTO(moved, userId, withChildren.has(id)));
   })
 
   .patch('/:id/visibility', async (c) => {

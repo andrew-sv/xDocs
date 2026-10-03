@@ -99,6 +99,31 @@ ck(
   })).status === 400,
 );
 
+// --- concurrent moves into each other (#55) ----------------------------------
+// Sent together, "A under B" and "B under A" each used to pass a cycle check
+// that ran before the other's write, and both landed: a loop with no top-level
+// document, invisible to everyone. One pair can miss the window by luck, so
+// several race at once.
+const pairs = await Promise.all(
+  Array.from({ length: 8 }, async (_, i) => [
+    await create(owner, `Race A ${i}`),
+    await create(owner, `Race B ${i}`),
+  ]),
+);
+const raced = await Promise.all(
+  pairs.map(([a, b]) => Promise.all([move(owner, a.id, b.id), move(owner, b.id, a.id)])),
+);
+const statuses = raced.map((pair) => pair.map((r) => r.status).sort().join(','));
+ck(
+  `of each racing pair exactly one move lands and the other is refused (${statuses.join(' ')})`,
+  statuses.every((s) => s === '200,400'),
+);
+const reachable = await listIds(owner);
+ck(
+  'and both documents of every pair are still reachable',
+  pairs.every(([a, b]) => reachable.includes(a.id) && reachable.includes(b.id)),
+);
+
 await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);
