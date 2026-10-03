@@ -8,12 +8,18 @@ import type { Page } from '@playwright/test';
  * debounce, so anything typed in the browser is searchable a second or two
  * later — not immediately. Retrying has to clear the box first: re-filling the
  * same value fires no change event, so the query would never be re-sent.
+ *
+ * The inner wait is deliberately short. It only has to outlast one search
+ * round trip; the save is what takes time, and `toPass` is what waits for it.
+ * At the 15s default, the first attempt — always sent before the save — sat
+ * out the whole 15s before retrying, which made each caller ~17s and these
+ * the two slowest tests in the suite.
  */
 async function searchUntilFound(page: Page, query: string, text: string) {
   await expect(async () => {
     await page.getByTestId('search-input').fill('');
     await page.getByTestId('search-input').fill(query);
-    await expect(page.getByTestId('search-row').filter({ hasText: text })).toHaveCount(1);
+    await expect(page.getByTestId('search-row').filter({ hasText: text })).toHaveCount(1, { timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 }
 

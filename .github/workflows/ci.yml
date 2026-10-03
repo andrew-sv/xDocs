@@ -49,11 +49,15 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: xdocs
         ports: ['5432:5432']
+        # Polled every 2s: the job waits on this check before its first step,
+        # and at 10s it could sit out most of an interval after Postgres was
+        # already up ("Initialize containers" took ~25s). 25 retries keeps the
+        # old ~50s ceiling.
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -114,9 +118,9 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 25
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
