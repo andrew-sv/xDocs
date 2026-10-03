@@ -1,6 +1,7 @@
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import { TableKit } from '@tiptap/extension-table';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { blockFragmentName, type BlockMeta } from '@xdocs/shared';
@@ -179,6 +180,11 @@ export function BlockEditor({
         LinkClicks.configure({ onError: (text) => setNote({ kind: 'error', text }) }),
         CommentMark.configure({ onActivate: (id) => onActivateThreadRef.current(id) }),
         AttachmentImage,
+        // Node names are TipTap's own (table, tableRow, tableCell, tableHeader):
+        // y-tiptap deletes an element a client's schema does not know, so they
+        // must match on every client. Columns share the width evenly; there
+        // are no resize handles.
+        TableKit.configure({ table: { resizable: false } }),
         ImageDrop.configure({ onFiles: (files) => void handleFiles(files) }),
       ],
     },

@@ -228,6 +228,53 @@ await flushStore(API, H(owner), imageDoc.id);
 const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, { headers: H(owner) }).then((r) => r.json());
 ck('and an image is findable by its filename', imageHits.some((h) => h.document.id === imageDoc.id));
 
+// --- tables: a row reads as one line, its cells side by side (#50) --------------
+const tableDoc = await create(owner, 'Table test');
+const tableClient = connect(tableDoc.id, owner);
+await tableClient.synced;
+await sleep(300);
+const tableBlockId = tableClient.doc.getArray('blocks').get(0).id;
+const tableFragment = tableClient.doc.getXmlFragment(`block-${tableBlockId}`);
+const tableNeedle = `quillok${Date.now()}`;
+// Cells as the editor writes them: each holds paragraphs, a header row first.
+const rows = [
+  ['tableHeader', ['Name', 'Role']],
+  ['tableCell', ['Ada', tableNeedle]],
+  ['tableCell', ['Grace', 'two\nparagraphs']],
+];
+const texts = [];
+const table = new Y.XmlElement('table');
+table.insert(0, rows.map(([cellName, cells]) => {
+  const row = new Y.XmlElement('tableRow');
+  row.insert(0, cells.map((cellText) => {
+    const cell = new Y.XmlElement(cellName);
+    cell.insert(0, cellText.split('\n').map((line) => {
+      const paragraph = new Y.XmlElement('paragraph');
+      const text = new Y.XmlText();
+      paragraph.insert(0, [text]);
+      texts.push([text, line]);
+      return paragraph;
+    }));
+    return cell;
+  }));
+  return row;
+}));
+tableFragment.delete(0, tableFragment.length);
+tableFragment.insert(0, [table]);
+// Only once attached: a detached Y.XmlText queues what it is given (#25).
+for (const [text, line] of texts) text.insert(0, line);
+await sleep(600);
+
+const tableContent = await getContent(owner, tableDoc.id).then((r) => r.json());
+ck(
+  `a table reads back a line per row (${JSON.stringify(tableContent.blocks[0].text)})`,
+  tableContent.blocks[0].text === `Name | Role\nAda | ${tableNeedle}\nGrace | two paragraphs`,
+);
+tableClient.provider.destroy();
+await flushStore(API, H(owner), tableDoc.id);
+const tableHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(tableNeedle)}`, { headers: H(owner) }).then((r) => r.json());
+ck('and the words in its cells are searchable', tableHits.some((h) => h.document.id === tableDoc.id));
+
 // --- links ----------------------------------------------------------------------
 const linkDoc = await create(owner, 'Link test');
 const linkWritten = await putContent(owner, linkDoc.id, {
