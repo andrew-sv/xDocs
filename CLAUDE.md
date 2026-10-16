@@ -466,17 +466,36 @@ Notes for writing tests here:
 Hocuspocus holds authoritative in-memory state per document, so it needs a
 **single persistent process**. Vercel Functions support WebSockets, but multiple
 instances would split-brain the document — hence SPA on Vercel (`vercel.json`),
-backend on Railway (`railway.json`), Neon for data.
+backend on Railway, Neon for data. Railway is configured in its dashboard, with
+no config file in the repo, on purpose — see README "Staging".
 
 Server env: `PORT` (injected by the host), `DATABASE_URL`, `WEB_ORIGIN` (the CORS
-origin — pinned to one, so Vercel preview URLs will not work unless added), and
-`ACCESS_PASSWORD`.
+origin — pinned to one, so Vercel preview URLs will not work unless added),
+`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`, and for staging
+`ALLOWED_EMAILS` and `DISABLE_SIGNUP=true`. Optional: `ALLOW_PASSWORD_LOGIN`
+(dev and CI only), `ATTACHMENT_QUOTA_BYTES`, `VERSION_INTERVAL_MINUTES`.
 
 Authentication is **Better Auth**, mounted on Hono at `/api/auth/*` with a
 Drizzle adapter over the same Neon database. Google is the only sign-in method
-in staging. Access is a **shared workspace**: every signed-in user sees and
-edits every document. `documents.createdBy` records provenance and is
-deliberately **not** used to scope access.
+in staging. Who may sign in at all is `ALLOWED_EMAILS`; its refusal is the one
+403 carrying `ACCOUNT_NOT_ALLOWED` (see the 404-not-403 bullet).
+
+**Access is per document, not a shared workspace.** `documents.created_by` is
+the owner and `visibility` is `private` (the default) or `public`:
+
+- A document is reachable when it AND EVERY ANCESTOR is live and either public
+  or the caller's own — `admits()` in `src/db/access.ts`. A public child under a
+  private parent is unreachable, so making a parent private hides its whole
+  subtree from everyone else without touching the children.
+- That file is the whole boundary: REST, the sidebar listing and the collab
+  handshake (`onAuthenticate`) all go through it. A new route that reaches a
+  document must call `canAccessDocument`, and answer 404 when it fails.
+- Public means **edit**, not read-only: anyone who can reach a document can
+  type in it, which is what keeps live collaboration working.
+- Owner-only, answered with 403: changing visibility, moving, deleting,
+  restoring and purging. A new sub-document copies its parent's visibility at
+  creation; changing a parent later does not touch existing children.
+- An API key acts as its owner, so all of this applies to it unchanged.
 
 Two choices that are load-bearing:
 
