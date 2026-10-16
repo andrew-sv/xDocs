@@ -18,6 +18,7 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
 import {
+  admittedRow,
   canAccessDocument,
   subtreeIds,
   visibleDocumentIds,
@@ -226,13 +227,9 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
      */
     c.header('x-list-as-of', String(Date.now()));
 
-    // The visible set is ancestor-gated, so a child under a private parent is
-    // absent even when the child itself is public.
-    const visible = await visibleDocumentIds(userId);
-    if (parent && !visible.has(parent)) return c.json([]);
-
     if (flat) {
-      const ids = [...visible];
+      // The one caller that wants the whole visible set, so it pays for it.
+      const ids = [...(await visibleDocumentIds(userId))];
       if (ids.length === 0) return c.json([]);
       const all = await getDb()
         .select(columns)
@@ -243,18 +240,28 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       return c.json(all.map((row) => toDTO(row, userId, parents.has(row.id))));
     }
 
-    const rows = await getDb()
+    /*
+     * One level: the parent is checked once, and its rows are filtered by the
+     * same rule, rather than computing everything the user can see (#62).
+     * Ancestor-gated still — a public child under a private parent is absent,
+     * because its parent fails the check. An unreachable parent lists as
+     * empty rather than 404, as it always has.
+     */
+    if (parent && !(UUID.test(parent) && (await canAccessDocument(userId, parent)))) {
+      return c.json([]);
+    }
+
+    const allowed = await getDb()
       .select(columns)
       .from(documents)
       .where(
         and(
-          isNull(documents.deletedAt),
+          admittedRow(userId),
           parent ? eq(documents.parentId, parent) : isNull(documents.parentId),
         ),
       )
       .orderBy(desc(documents.updatedAt));
 
-    const allowed = rows.filter((row) => visible.has(row.id));
     const withChildren = await childBearing(allowed.map((row) => row.id));
     return c.json(allowed.map((row) => toDTO(row, userId, withChildren.has(row.id))));
   })
