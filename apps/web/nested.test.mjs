@@ -139,6 +139,45 @@ await setVisibility(owner, secretParent.id, 'public');
 ck('once the whole chain is public, the stranger gets the path',
   JSON.stringify(await titles(await pathOf(stranger, publicChild.id))) === JSON.stringify(['Secret parent']));
 
+/*
+ * Gating is by EVERY ancestor, not just the parent (#62).
+ *
+ * Access walks up from the document, so a walk that stopped one level short —
+ * checking the parent but not the grandparent — would pass every check above,
+ * where the private node is always the direct parent. Here it is two levels up,
+ * then in the middle.
+ */
+const root = await create(owner, 'Deep root');
+const mid = await create(owner, 'Deep mid', root.id);
+const leaf = await create(owner, 'Deep leaf', mid.id);
+await setVisibility(owner, mid.id, 'public');
+await setVisibility(owner, leaf.id, 'public');
+const fetchAs = (token, id) => fetch(`${API}/api/documents/${id}`, { headers: H(token) });
+
+ck('public leaf under public mid under PRIVATE root 404s by id', (await fetchAs(stranger, leaf.id)).status === 404);
+ck('and is refused on the websocket', !(await canConnect(stranger, leaf.id)));
+ck('and the public mid level lists nothing for the stranger', (await listIds(stranger, mid.id)).length === 0);
+ck('the owner still reaches the leaf', (await fetchAs(owner, leaf.id)).status === 200);
+ck('and sees it listed under mid', (await listIds(owner, mid.id)).includes(leaf.id));
+
+await setVisibility(owner, root.id, 'public');
+ck('once the root is public, the stranger reaches the leaf', (await fetchAs(stranger, leaf.id)).status === 200);
+ck('and sees it listed under mid', (await listIds(stranger, mid.id)).includes(leaf.id));
+ck('and may open its websocket', await canConnect(stranger, leaf.id));
+
+await setVisibility(owner, mid.id, 'private');
+ck('a private MIDDLE ancestor hides the leaf again', (await fetchAs(stranger, leaf.id)).status === 404);
+ck('mid is not listed under the public root', !(await listIds(stranger, root.id)).includes(mid.id));
+ck('and its level lists nothing', (await listIds(stranger, mid.id)).length === 0);
+ck('the websocket is refused again', !(await canConnect(stranger, leaf.id)));
+
+const malformed = await fetch(`${API}/api/documents?parent=not-a-uuid`, { headers: H(owner) });
+ck('a malformed ?parent= lists nothing rather than failing',
+  malformed.status === 200 && (await malformed.json()).length === 0);
+
+await fetch(`${API}/api/documents/${root.id}`, { method: 'DELETE', headers: H(owner) });
+ck('a deleted root takes its leaf out of reach', (await fetchAs(owner, leaf.id)).status === 404);
+
 await fetch(`${API}/api/documents/${parent.id}`, { method: 'DELETE', headers: H(owner) });
 ck('a deleted document has no path (404)', (await pathOf(owner, grandchild.id)).status === 404);
 await tracker.purge();
