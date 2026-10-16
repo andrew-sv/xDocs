@@ -495,8 +495,9 @@ it is an accepted tradeoff here. Ordinary concurrent editing is unaffected.
 | API + collab | https://xdocs-api-production.up.railway.app |
 | Database | Neon (`xdocs-db`) |
 
-Sign in with Google. Access is a shared workspace: every signed-in user sees and
-edits every document.
+Sign in with Google; only addresses in `ALLOWED_EMAILS` get in. A new document
+is private to you until you make it public, after which any signed-in user can
+open and edit it — as long as every document above it is public too.
 
 `pnpm smoke <url>` checks a deployment's negative path: health is public, REST
 401s without a session, and the websocket refuses a forged one. Run it after any
