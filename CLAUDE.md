@@ -141,6 +141,10 @@ HTTP" rule: a version is immutable, so there is nothing to clobber.
 `MAX_ATTACHMENT_BYTES` and per user at `ATTACHMENT_QUOTA_BYTES`
 (`DEFAULT_ATTACHMENT_QUOTA_BYTES` when unset) — `/attachments/usage` is
 registered before `/attachments/:id`, which would otherwise match "usage".
+The quota check and the insert run in one transaction behind a per-user
+advisory lock (#65): as two statements, uploads sent together all passed and
+went past the quota. The file is read before the lock, so it is never held
+while bytes arrive.
 Its `document_id` FK is `ON DELETE CASCADE` — the opposite of `parent_id` — so
 files go with a permanent delete and survive a soft one. Access is exactly the
 document's (`canAccessDocument`); there is no separate file permission.
@@ -375,6 +379,11 @@ their own `createDisposableUser`: a per-user total moves under a suite when
 anything else uploads as that user, and a throwaway account starts at zero and
 belongs to nobody else. Prefer that to marking a suite `alone` — a solitary
 suite is dead time for every other one.
+
+When a suite needs server configuration the shared stack does not have,
+start a server of its own instead: `quota-race.test.mjs` runs a second API on
+:3011 with a 1 MB quota against the same database, which provokes the race in
+six uploads rather than ~190 MB of setup.
 
 When something fails, the runner reprints the failing suites at the end;
 `INTEGRATION_CONCURRENCY=1` reproduces serially if you suspect interference.
