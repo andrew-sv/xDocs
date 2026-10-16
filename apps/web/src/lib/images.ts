@@ -127,7 +127,7 @@ export const ImageDrop = Extension.create<{ onFiles: (files: File[]) => void }>(
         key: new PluginKey('imageDrop'),
         props: {
           handlePaste: (_view, event) => handle(event.clipboardData?.files),
-          handleDrop: (_view, event) => handle((event as DragEvent).dataTransfer?.files),
+          handleDrop: (_view, event) => handle(event.dataTransfer?.files),
         },
       }),
     ];

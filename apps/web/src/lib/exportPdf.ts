@@ -43,8 +43,8 @@ export async function exportDocumentToPdf(title: string, blockHtml: string[]): P
     import('pdfmake/build/vfs_fonts'),
   ]);
 
-  const pdfMake = (pdfMakeModule as { default?: unknown }).default ?? pdfMakeModule;
-  const fonts = (pdfFontsModule as { default?: unknown }).default ?? pdfFontsModule;
+  const pdfMake = pdfMakeModule.default ?? pdfMakeModule;
+  const fonts = pdfFontsModule.default ?? pdfFontsModule;
 
   /*
    * pdfmake 0.3 registers fonts through addVirtualFileSystem(); assigning

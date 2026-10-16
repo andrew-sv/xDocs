@@ -60,7 +60,7 @@ test.describe('inline images', () => {
     await blockEditor(page, 0).click();
 
     // A paste carrying a file, which ProseMirror itself ignores.
-    await page.evaluate(async (bytes) => {
+    await page.evaluate((bytes) => {
       const file = new File([new Uint8Array(bytes)], 'pasted.png', { type: 'image/png' });
       const data = new DataTransfer();
       data.items.add(file);

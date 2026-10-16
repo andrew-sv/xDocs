@@ -168,7 +168,7 @@ export function App() {
       return;
     }
     setSearching(true);
-    const timer = setTimeout(async () => {
+    const search = async () => {
       try {
         const hits = await api.search(trimmed);
         if (latestQuery.current !== trimmed) return;
@@ -178,7 +178,8 @@ export function App() {
       } finally {
         if (latestQuery.current === trimmed) setSearching(false);
       }
-    }, 180);
+    };
+    const timer = setTimeout(() => void search(), 180);
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -500,7 +501,7 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [selectedId, childrenAreSidebarLevel]);
+  }, [selectedId, childrenAreSidebarLevel, withUnsavedTitles]);
   const subDocuments = childrenAreSidebarLevel
     ? documentsParentId === currentParentId
       ? documents
@@ -613,7 +614,7 @@ export function App() {
     // Usually still the level on screen, but the undo stays offered for seven
     // seconds and the user may have navigated away in that time.
     await openRestored(restored);
-  }, [pendingRestore, openRestored]);
+  }, [pendingRestore, openRestored, refreshTrash]);
 
   /*
    * Cmd/Ctrl+Z for an undoable document deletion.
