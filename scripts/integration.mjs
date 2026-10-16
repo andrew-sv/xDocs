@@ -34,6 +34,11 @@ const mcp = resolve(root, 'apps/mcp');
  */
 const SUITES = [
   { name: 'attachments', cwd: web, file: 'attachments.test.mjs' },
+  /*
+   * Starts its own API on :3011 with a 1 MB quota, so it needs nothing from
+   * the shared server and can overlap everything else.
+   */
+  { name: 'quota-race', cwd: web, file: 'quota-race.test.mjs' },
   { name: 'content', cwd: web, file: 'content.test.mjs' },
   { name: 'versions', cwd: web, file: 'versions.test.mjs' },
   { name: 'nested', cwd: web, file: 'nested.test.mjs' },

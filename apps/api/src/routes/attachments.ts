@@ -39,9 +39,12 @@ const QUOTA_BYTES =
     ? Number(process.env.ATTACHMENT_QUOTA_BYTES)
     : DEFAULT_ATTACHMENT_QUOTA_BYTES;
 
+/** The pool, or a transaction on it. */
+type Executor = Pick<ReturnType<typeof getDb>, 'select'>;
+
 /** Bytes this user's files take up, across every document. */
-async function usedBytes(userId: string): Promise<number> {
-  const [row] = await getDb()
+async function usedBytes(userId: string, db: Executor = getDb()): Promise<number> {
+  const [row] = await db
     .select({ total: sql<string>`coalesce(sum(${attachments.size}), 0)` })
     .from(attachments)
     .where(eq(attachments.createdBy, userId));
@@ -151,30 +154,44 @@ export const attachmentsRoute = new Hono<{ Variables: Variables }>()
         return c.json({ error: 'Expected a multipart form with a "file" field.' }, 400);
       }
       if (file.size > MAX_ATTACHMENT_BYTES) return c.json({ error: TOO_LARGE }, 413);
-      // Checked per user, not per document: a document is not a container
-      // anyone owns, and files follow whoever uploaded them.
-      const refusal = quotaRefusal(await usedBytes(userId), file.size, QUOTA_BYTES);
-      if (refusal) return c.json({ error: refusal }, 413);
+      // Read before the lock below, so it is never held while bytes arrive.
+      const data = Buffer.from(await file.arrayBuffer());
 
-      const [row] = await getDb()
-        .insert(attachments)
-        .values({
-          documentId: id,
-          filename: cleanFilename(file.name),
-          contentType: cleanContentType(file.type),
-          size: file.size,
-          data: Buffer.from(await file.arrayBuffer()),
-          createdBy: userId,
-        })
-        .returning({
-          id: attachments.id,
-          documentId: attachments.documentId,
-          filename: attachments.filename,
-          contentType: attachments.contentType,
-          size: attachments.size,
-          createdAt: attachments.createdAt,
-        });
-      return c.json(toDTO(row!), 201);
+      /*
+       * The check and the insert share one transaction behind one per-user
+       * lock (#65). As two statements, uploads sent together all read the
+       * same total, all passed, and together went past the quota. The lock is
+       * per user because the quota is: one person's uploads queue behind each
+       * other, nobody else's do. Same pattern as the move route (#55).
+       */
+      const result = await getDb().transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`xdocs:quota:${userId}`}))`);
+        // Checked per user, not per document: a document is not a container
+        // anyone owns, and files follow whoever uploaded them.
+        const refusal = quotaRefusal(await usedBytes(userId, tx), file.size, QUOTA_BYTES);
+        if (refusal) return { refusal };
+        const [row] = await tx
+          .insert(attachments)
+          .values({
+            documentId: id,
+            filename: cleanFilename(file.name),
+            contentType: cleanContentType(file.type),
+            size: file.size,
+            data,
+            createdBy: userId,
+          })
+          .returning({
+            id: attachments.id,
+            documentId: attachments.documentId,
+            filename: attachments.filename,
+            contentType: attachments.contentType,
+            size: attachments.size,
+            createdAt: attachments.createdAt,
+          });
+        return { row: row! };
+      });
+      if ('refusal' in result) return c.json({ error: result.refusal }, 413);
+      return c.json(toDTO(result.row), 201);
     },
   )
 
