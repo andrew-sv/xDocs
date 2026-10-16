@@ -155,8 +155,9 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
     }),
   ],
 
-  afterUnloadDocument: async ({ documentName }) => {
+  afterUnloadDocument: ({ documentName }) => {
     storedTitles.delete(documentName);
+    return Promise.resolve();
   },
 
   /*

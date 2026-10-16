@@ -109,7 +109,7 @@ export function runsOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText): TextRun[
     const runs: TextRun[] = [];
     for (let i = 0; i < node.length; i++) {
       if (i > 0) runs.push({ text: TABLE_CELL_SEPARATOR });
-      for (const run of runsOf(node.get(i) as Y.XmlElement)) {
+      for (const run of runsOf(node.get(i))) {
         runs.push(run.text === '\n' ? { text: ' ' } : run);
       }
     }

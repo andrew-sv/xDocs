@@ -51,6 +51,8 @@ async function usedBytes(userId: string): Promise<number> {
 /** Only ever a display name and a download suggestion, never a path. */
 function cleanFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? '';
+  // Control characters are exactly what this strips.
+  // eslint-disable-next-line no-control-regex
   const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255);
   return cleaned || 'file';
 }
@@ -107,7 +109,7 @@ function linkedAttachments(doc: Y.Doc): Set<string> {
       return;
     }
     if (node instanceof Y.XmlElement) add(node.getAttribute('src'));
-    for (let i = 0; i < node.length; i++) walk(node.get(i) as Y.XmlElement);
+    for (let i = 0; i < node.length; i++) walk(node.get(i));
   };
 
   for (const block of doc.getArray<BlockMeta>(BLOCKS_KEY).toArray()) {

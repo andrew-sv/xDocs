@@ -1,9 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { blockEditor, expect, mod, openDocument, test } from './fixtures';
 
-/** Playwright spells click modifiers the same way as keys. */
-const MOD = mod as 'Meta' | 'Control';
-
 const ATTACHMENT_HREF = /^\/api\/attachments\/[0-9a-f-]{36}$/;
 
 test.describe('toolbar links', () => {
@@ -132,7 +129,7 @@ test.describe('toolbar links', () => {
     await page.keyboard.press('Enter');
 
     const opening = context.waitForEvent('page');
-    await blockEditor(page, 0).locator('a').click({ modifiers: [MOD] });
+    await blockEditor(page, 0).locator('a').click({ modifiers: [mod] });
     const opened = await opening;
 
     expect(opened.url()).toBe('http://localhost:5173/');
@@ -203,13 +200,13 @@ test.describe('attachments', () => {
     await expect(link).toHaveAttribute('href', ATTACHMENT_HREF);
 
     const downloading = page.waitForEvent('download');
-    await link.click({ modifiers: [MOD] });
+    await link.click({ modifiers: [mod] });
     const download = await downloading;
 
     // Fetched with the session's token: a plain navigation would carry none
     // and land on the SPA instead.
     expect(download.suggestedFilename()).toBe('Звіт Q3.txt');
-    expect(await readFile((await download.path())!, 'utf8')).toBe('quarterly numbers');
+    expect(await readFile(await download.path(), 'utf8')).toBe('quarterly numbers');
     expect(page.context().pages()).toHaveLength(1);
   });
 

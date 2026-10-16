@@ -8,7 +8,6 @@ import {
   seedDisposableSession,
   test,
   typeInBlock,
-  type TestDocument,
 } from './fixtures';
 
 const API = 'http://localhost:3001';
@@ -195,7 +194,7 @@ test.describe('comments', () => {
     const other = await context.newPage();
     try {
       const guest = await seedDisposableSession(other);
-      await openDocument(other, doc as TestDocument);
+      await openDocument(other, doc);
 
       await commentFirstWord(page, 'Why alpha?');
 

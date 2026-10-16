@@ -37,7 +37,7 @@ export function attachmentIdsIn(ydoc: Y.Doc): string[] {
       return;
     }
     if (node instanceof Y.XmlElement) add(node.getAttribute('src'));
-    for (let i = 0; i < node.length; i++) walk(node.get(i) as Y.XmlElement);
+    for (let i = 0; i < node.length; i++) walk(node.get(i));
   };
 
   for (const block of ydoc.getArray<BlockMeta>(BLOCKS_KEY).toArray()) {

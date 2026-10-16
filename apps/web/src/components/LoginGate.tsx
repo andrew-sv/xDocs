@@ -75,13 +75,10 @@ export function LoginGate({ onSignedIn, deniedReason = null }: LoginGateProps) {
           client_id: GOOGLE_CLIENT_ID,
           // Google hands back an ID token; Better Auth exchanges it for a
           // session without any redirect, so no cross-site cookie is involved.
-          callback: async ({ credential }) => {
-            try {
-              await signInWithGoogleIdToken(credential);
-              onSignedInRef.current();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : String(e));
-            }
+          callback: ({ credential }) => {
+            void signInWithGoogleIdToken(credential)
+              .then(() => onSignedInRef.current())
+              .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
           },
         });
         window.google.accounts.id.renderButton(googleButtonRef.current, {

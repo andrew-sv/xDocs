@@ -105,10 +105,13 @@ const server = new Server({
   port,
   ...collabConfiguration,
 
-  onRequest: async ({ request, response }) => {
-    handleHttp(request, response);
+  onRequest: ({ request, response }) => {
+    // Not awaited: the listener writes the response itself and turns a
+    // route's error into a 500, so there is nothing here to wait for.
+    void handleHttp(request, response);
     // Hocuspocus's requestHandler rethrows only TRUTHY errors, so rejecting
     // with null means "already handled" and suppresses its default response.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
     return Promise.reject(null);
   },
 });

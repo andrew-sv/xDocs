@@ -334,7 +334,7 @@ export function BlockEditor({
          */
         onFocus={() => setFocused(true)}
         onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+          if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
       >
         {editor && focused && (

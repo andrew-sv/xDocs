@@ -40,6 +40,7 @@ export class XdocsClient {
       // cause ("fetch failed") says nothing about which server or why.
       throw new XdocsError(
         `Could not reach the xDocs API at ${this.options.baseUrl}. Is it running?`,
+        { cause },
       );
     }
 

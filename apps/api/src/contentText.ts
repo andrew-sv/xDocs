@@ -70,14 +70,14 @@ export function textOf(node: Y.XmlFragment | Y.XmlElement | Y.XmlText | Y.XmlHoo
   if (node instanceof Y.XmlElement && node.nodeName === TABLE_ROW) {
     const cells: string[] = [];
     for (let i = 0; i < node.length; i++) {
-      cells.push(textOf(node.get(i) as Y.XmlElement).replace(/\n+/g, ' '));
+      cells.push(textOf(node.get(i)).replace(/\n+/g, ' '));
     }
     return cells.join(TABLE_CELL_SEPARATOR);
   }
   if (node instanceof Y.XmlFragment || node instanceof Y.XmlElement) {
     const children: string[] = [];
     for (let i = 0; i < node.length; i++) {
-      children.push(textOf(node.get(i) as Y.XmlElement));
+      children.push(textOf(node.get(i)));
     }
     // Block-level children (list items, code lines) are separate lines; inline
     // marks are not, and they arrive as XmlText handled above.

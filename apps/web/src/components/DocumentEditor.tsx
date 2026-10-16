@@ -151,7 +151,7 @@ export function DocumentEditor({
       // Read lazily so a reconnect picks up the current token. Harmless when
       // the server has no password configured: it simply ignores it.
       token: () => getToken() ?? '',
-      onStatus: ({ status }) => setStatus(status as Status),
+      onStatus: ({ status }) => setStatus(status),
       onSynced: () => setSynced(true),
     });
 
@@ -300,7 +300,7 @@ export function DocumentEditor({
       setPendingThread(null);
       showInRail(threadId);
     },
-    [provider, me, pendingThread],
+    [provider, me, pendingThread, showInRail],
   );
 
   const replyToThread = useCallback(

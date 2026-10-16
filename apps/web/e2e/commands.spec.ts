@@ -58,7 +58,7 @@ test.describe('command palette', () => {
 
     // Prove it is genuinely a PDF, not an empty or HTML file.
     const path = await download.path();
-    const bytes = readFileSync(path!);
+    const bytes = readFileSync(path);
     expect(bytes.subarray(0, 5).toString()).toBe('%PDF-');
     expect(bytes.byteLength).toBeGreaterThan(1000);
   });

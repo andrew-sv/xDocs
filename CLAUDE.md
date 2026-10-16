@@ -10,7 +10,8 @@ vercel env pull .env.local     # DATABASE_URL + DATABASE_URL_UNPOOLED (Neon)
 pnpm db:generate               # create a migration after editing schema.ts
 pnpm db:migrate                # apply pending migrations
 pnpm dev                       # api+collab :3001, web :5173
-pnpm typecheck                 # all three packages
+pnpm typecheck                 # all packages, plus the e2e specs
+pnpm lint                      # ESLint, type-aware; CI runs it
 pnpm build
 ```
 
