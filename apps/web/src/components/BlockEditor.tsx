@@ -60,9 +60,12 @@ type Props = {
 function DragDots() {
   return (
     <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-      <circle cx="2.5" cy="3" r="1.2" /><circle cx="7.5" cy="3" r="1.2" />
-      <circle cx="2.5" cy="8" r="1.2" /><circle cx="7.5" cy="8" r="1.2" />
-      <circle cx="2.5" cy="13" r="1.2" /><circle cx="7.5" cy="13" r="1.2" />
+      <circle cx="2.5" cy="3" r="1.2" />
+      <circle cx="7.5" cy="3" r="1.2" />
+      <circle cx="2.5" cy="8" r="1.2" />
+      <circle cx="7.5" cy="8" r="1.2" />
+      <circle cx="2.5" cy="13" r="1.2" />
+      <circle cx="7.5" cy="13" r="1.2" />
     </svg>
   );
 }
@@ -158,7 +161,11 @@ export function BlockEditor({
         // link.openOnClick: Link opens a link on ANY click, so clicking into
         // one to edit its words navigated away instead. LinkClicks handles
         // Mod-click, and a plain click places the caret like any other text.
-        StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }),
+        StarterKit.configure({
+          undoRedo: false,
+          trailingNode: false,
+          link: { openOnClick: false },
+        }),
         // Deliberately NOT given our undoManager: Collaboration destroys the
         // manager it is handed when this editor unmounts. See documentUndo.ts.
         Collaboration.configure({ fragment }),

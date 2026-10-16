@@ -1,4 +1,10 @@
-import { test as base, expect, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
+import {
+  test as base,
+  expect,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from '@playwright/test';
 import { TEST_ORIGIN, authHeaders, createDisposableUser, signInForTests } from '../test-auth.mjs';
 
 const API = 'http://localhost:3001';
@@ -23,19 +29,19 @@ export function getTestToken(): Promise<string> {
  */
 export async function seedDisposableSession(page: Page): Promise<{ email: string; name: string }> {
   const user = await createDisposableUser(API);
-  await page.addInitScript(
-    ([key, value]) => window.localStorage.setItem(key, value),
-    [TOKEN_KEY, user.token] as const,
-  );
+  await page.addInitScript(([key, value]) => window.localStorage.setItem(key, value), [
+    TOKEN_KEY,
+    user.token,
+  ] as const);
   return { email: user.email, name: user.name };
 }
 
 export async function seedSession(page: Page): Promise<void> {
   const token = await getTestToken();
-  await page.addInitScript(
-    ([key, value]) => window.localStorage.setItem(key, value),
-    [TOKEN_KEY, token] as const,
-  );
+  await page.addInitScript(([key, value]) => window.localStorage.setItem(key, value), [
+    TOKEN_KEY,
+    token,
+  ] as const);
 }
 
 export type TestDocument = { id: string; title: string };
@@ -48,14 +54,24 @@ export type TestDocument = { id: string; title: string };
  * something already trashed, hence two steps. Either may fail harmlessly: the
  * test may have trashed it already, or it went with a purged ancestor.
  */
-async function purgeDocument(request: APIRequestContext, id: string, headers: Record<string, string>) {
-  const status = (response: Promise<APIResponse>) => response.then((r) => r.status(), () => 0);
+async function purgeDocument(
+  request: APIRequestContext,
+  id: string,
+  headers: Record<string, string>,
+) {
+  const status = (response: Promise<APIResponse>) =>
+    response.then(
+      (r) => r.status(),
+      () => 0,
+    );
   const trashed = await status(request.delete(`${API}/api/documents/${id}`, { headers }));
   const purged = await status(request.delete(`${API}/api/documents/${id}/permanent`, { headers }));
   // 403 twice means it is already gone, with an ancestor or by the test's own
   // hand. Anything else short of a purge leaves a document behind.
   if (purged !== 204 && !(trashed === 403 && purged === 403)) {
-    console.warn(`e2e cleanup: document ${id} was left behind (delete ${trashed}, purge ${purged})`);
+    console.warn(
+      `e2e cleanup: document ${id} was left behind (delete ${trashed}, purge ${purged})`,
+    );
   }
 }
 
@@ -66,7 +82,9 @@ async function purgeDocument(request: APIRequestContext, id: string, headers: Re
  * as a disposable user whose token only the page holds. Taking the header off
  * the create request itself means teardown can purge each one as its owner.
  */
-function trackCreatedDocuments(page: Page): () => Promise<Array<{ id: string; authorization: string }>> {
+function trackCreatedDocuments(
+  page: Page,
+): () => Promise<Array<{ id: string; authorization: string }>> {
   const pending: Array<Promise<{ id: string; authorization: string } | null>> = [];
   page.on('response', (response) => {
     const request = response.request();
@@ -74,7 +92,8 @@ function trackCreatedDocuments(page: Page): () => Promise<Array<{ id: string; au
     if (new URL(response.url()).pathname !== '/api/documents') return;
     pending.push(
       Promise.all([response.json() as Promise<{ id: string }>, request.allHeaders()]).then(
-        ([doc, headers]) => (headers.authorization ? { id: doc.id, authorization: headers.authorization } : null),
+        ([doc, headers]) =>
+          headers.authorization ? { id: doc.id, authorization: headers.authorization } : null,
         () => null,
       ),
     );

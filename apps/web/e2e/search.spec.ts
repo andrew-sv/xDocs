@@ -1,4 +1,12 @@
-import { blocks, createsDocument, docRow, expect, openDocument, seedDisposableSession, test } from './fixtures';
+import {
+  blocks,
+  createsDocument,
+  docRow,
+  expect,
+  openDocument,
+  seedDisposableSession,
+  test,
+} from './fixtures';
 import type { Page } from '@playwright/test';
 
 /**
@@ -19,7 +27,9 @@ async function searchUntilFound(page: Page, query: string, text: string) {
   await expect(async () => {
     await page.getByTestId('search-input').fill('');
     await page.getByTestId('search-input').fill(query);
-    await expect(page.getByTestId('search-row').filter({ hasText: text })).toHaveCount(1, { timeout: 2_000 });
+    await expect(page.getByTestId('search-row').filter({ hasText: text })).toHaveCount(1, {
+      timeout: 2_000,
+    });
   }).toPass({ timeout: 20_000 });
 }
 
@@ -113,7 +123,10 @@ test.describe('search', () => {
     await expect(page.getByTestId('crumb').first()).toHaveText(parent);
   });
 
-  test('typed block text becomes searchable and the match is highlighted', async ({ page, doc }) => {
+  test('typed block text becomes searchable and the match is highlighted', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     const needle = `zorblat${Date.now()}`;
     await blocks(page).first().locator('.block-body').click();

@@ -50,15 +50,20 @@ function DocumentRow({
   onMove: (doc: DocumentDTO) => void;
 }) {
   return (
-    <li
-      className={selected ? 'doc selected' : 'doc'}
-      data-testid="doc-row"
-      data-doc-id={doc.id}
-    >
-      <button type="button" className="doc-open" data-testid="doc-open" onClick={() => onSelect(doc)}>
+    <li className={selected ? 'doc selected' : 'doc'} data-testid="doc-row" data-doc-id={doc.id}>
+      <button
+        type="button"
+        className="doc-open"
+        data-testid="doc-open"
+        onClick={() => onSelect(doc)}
+      >
         <span className="doc-title">
           {doc.hasChildren && (
-            <span className="doc-haschildren" data-testid="doc-haschildren" title="Has sub-documents">
+            <span
+              className="doc-haschildren"
+              data-testid="doc-haschildren"
+              title="Has sub-documents"
+            >
               ▸
             </span>
           )}
@@ -174,73 +179,78 @@ export function DocumentList({
         />
       ) : (
         <>
-      {trail.length > 0 && (
-        <nav className="crumbs" data-testid="crumbs" aria-label="Document path">
-          <button type="button" className="crumb" data-testid="crumb-root" onClick={() => onNavigateCrumb(-1)}>
-            All
-          </button>
-          {trail.map((doc, index) => (
-            <span key={doc.id} className="crumb-part">
-              <span className="crumb-sep">/</span>
+          {trail.length > 0 && (
+            <nav className="crumbs" data-testid="crumbs" aria-label="Document path">
               <button
                 type="button"
                 className="crumb"
-                data-testid="crumb"
-                onClick={() => onNavigateCrumb(index)}
+                data-testid="crumb-root"
+                onClick={() => onNavigateCrumb(-1)}
               >
-                {doc.title || 'Untitled'}
+                All
               </button>
-            </span>
-          ))}
-        </nav>
-      )}
-      {current && (
-        /*
-         * The open document stays visible in the sidebar, not only in the
-         * breadcrumb — otherwise it vanishes the moment you open it, and its
-         * delete control goes with it.
-         */
-        <div className="current-doc" data-testid="current-doc">
-          <span className="section-label">Current</span>
-          <ul className="doc-list">
-            <DocumentRow
-              doc={current}
-              selected={current.id === selectedId}
-              onSelect={onSelect}
-              onDelete={onDelete}
-              onMove={onMove}
-            />
-          </ul>
-          <span className="section-label">Sub-documents</span>
-        </div>
-      )}
-      <ul className="doc-list" data-testid="doc-list">
-        {loading ? (
-          // Never render the previous level's rows — showing the wrong tree for
-          // a moment reads as a glitch, and worse, invites a misdirected click.
-          <li className="doc-loading" data-testid="doc-list-loading">
-            <span className="spinner" role="status" aria-label="Loading documents" />
-          </li>
-        ) : (
-          <>
-            {documents.map((doc) => (
-              <DocumentRow
-                key={doc.id}
-                doc={doc}
-                selected={doc.id === selectedId}
-                onSelect={onSelect}
-                onDelete={onDelete}
-                onMove={onMove}
-              />
-            ))}
-            {documents.length === 0 && (
-              <li className="empty">
-                {trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}
+              {trail.map((doc, index) => (
+                <span key={doc.id} className="crumb-part">
+                  <span className="crumb-sep">/</span>
+                  <button
+                    type="button"
+                    className="crumb"
+                    data-testid="crumb"
+                    onClick={() => onNavigateCrumb(index)}
+                  >
+                    {doc.title || 'Untitled'}
+                  </button>
+                </span>
+              ))}
+            </nav>
+          )}
+          {current && (
+            /*
+             * The open document stays visible in the sidebar, not only in the
+             * breadcrumb — otherwise it vanishes the moment you open it, and its
+             * delete control goes with it.
+             */
+            <div className="current-doc" data-testid="current-doc">
+              <span className="section-label">Current</span>
+              <ul className="doc-list">
+                <DocumentRow
+                  doc={current}
+                  selected={current.id === selectedId}
+                  onSelect={onSelect}
+                  onDelete={onDelete}
+                  onMove={onMove}
+                />
+              </ul>
+              <span className="section-label">Sub-documents</span>
+            </div>
+          )}
+          <ul className="doc-list" data-testid="doc-list">
+            {loading ? (
+              // Never render the previous level's rows — showing the wrong tree for
+              // a moment reads as a glitch, and worse, invites a misdirected click.
+              <li className="doc-loading" data-testid="doc-list-loading">
+                <span className="spinner" role="status" aria-label="Loading documents" />
               </li>
+            ) : (
+              <>
+                {documents.map((doc) => (
+                  <DocumentRow
+                    key={doc.id}
+                    doc={doc}
+                    selected={doc.id === selectedId}
+                    onSelect={onSelect}
+                    onDelete={onDelete}
+                    onMove={onMove}
+                  />
+                ))}
+                {documents.length === 0 && (
+                  <li className="empty">
+                    {trail.length > 0 ? 'No sub-documents yet.' : 'No documents yet.'}
+                  </li>
+                )}
+              </>
             )}
-          </>
-        )}
-      </ul>
+          </ul>
         </>
       )}
       <button
@@ -266,7 +276,12 @@ export function DocumentList({
           <span className="account-name" title={user.email}>
             {user.name || user.email}
           </span>
-          <button type="button" className="account-signout" data-testid="sign-out" onClick={onSignOut}>
+          <button
+            type="button"
+            className="account-signout"
+            data-testid="sign-out"
+            onClick={onSignOut}
+          >
             Sign out
           </button>
         </div>

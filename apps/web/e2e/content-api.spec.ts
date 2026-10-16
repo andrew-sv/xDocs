@@ -1,5 +1,13 @@
 import { authHeaders } from '../test-auth.mjs';
-import { blockEditor, blocks, blockTexts, expect, getTestToken, openDocument, test } from './fixtures';
+import {
+  blockEditor,
+  blocks,
+  blockTexts,
+  expect,
+  getTestToken,
+  openDocument,
+  test,
+} from './fixtures';
 
 const API = 'http://localhost:3001';
 
@@ -23,10 +31,15 @@ test.describe('content API', () => {
     });
 
     // No reload: the text has to arrive over the socket.
-    await expect.poll(() => blockTexts(page)).toEqual(['Written from a script', 'While you were watching']);
+    await expect
+      .poll(() => blockTexts(page))
+      .toEqual(['Written from a script', 'While you were watching']);
   });
 
-  test('an API-written code block renders as one code block in an open editor', async ({ page, doc }) => {
+  test('an API-written code block renders as one code block in an open editor', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
 
     const diagram = '+-----+\n|  a  |  indented\n+-----+';

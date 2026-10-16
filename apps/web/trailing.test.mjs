@@ -8,15 +8,36 @@
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
-for (const key of ['window', 'document', 'DOMParser', 'Node', 'Element', 'HTMLElement', 'Text', 'Range', 'getComputedStyle', 'MutationObserver', 'KeyboardEvent', 'requestAnimationFrame', 'cancelAnimationFrame']) {
-  Object.defineProperty(globalThis, key, { value: dom.window[key], writable: true, configurable: true });
+for (const key of [
+  'window',
+  'document',
+  'DOMParser',
+  'Node',
+  'Element',
+  'HTMLElement',
+  'Text',
+  'Range',
+  'getComputedStyle',
+  'MutationObserver',
+  'KeyboardEvent',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+]) {
+  Object.defineProperty(globalThis, key, {
+    value: dom.window[key],
+    writable: true,
+    configurable: true,
+  });
 }
 
 const { Editor } = await import('@tiptap/react');
 const StarterKit = (await import('@tiptap/starter-kit')).default;
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 function build(trailingNode) {
   const element = dom.window.document.createElement('div');
@@ -59,7 +80,10 @@ editor.chain().focus().toggleHeading({ level: 1 }).run();
 editor.commands.insertContentAt(editor.state.doc.content.size, '<p></p>');
 const withExtra = editor.state.doc.childCount;
 // Delete that trailing paragraph; nothing should put it back.
-editor.commands.deleteRange({ from: editor.state.doc.content.size - 2, to: editor.state.doc.content.size });
+editor.commands.deleteRange({
+  from: editor.state.doc.content.size - 2,
+  to: editor.state.doc.content.size,
+});
 ck('a manually added trailing paragraph stays deleted', editor.state.doc.childCount < withExtra);
 editor.destroy();
 

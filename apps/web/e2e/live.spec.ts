@@ -11,7 +11,11 @@ const API = 'http://localhost:3001';
  * of these tests reload the page or move focus: the change has to arrive by
  * itself.
  */
-async function addChild(request: APIRequestContext, parent: TestDocument, title: string): Promise<TestDocument> {
+async function addChild(
+  request: APIRequestContext,
+  parent: TestDocument,
+  title: string,
+): Promise<TestDocument> {
   const res = await request.post(`${API}/api/documents`, {
     headers: authHeaders(await getTestToken()),
     data: { title, parentId: parent.id },
@@ -37,7 +41,9 @@ test.describe('live sidebar', () => {
     await openDocument(page, doc);
     await expect(subDocRow(page, 'Doomed elsewhere')).toBeVisible();
 
-    await request.delete(`${API}/api/documents/${child.id}`, { headers: authHeaders(await getTestToken()) });
+    await request.delete(`${API}/api/documents/${child.id}`, {
+      headers: authHeaders(await getTestToken()),
+    });
 
     await expect(subDocRow(page, 'Doomed elsewhere')).toHaveCount(0);
   });
@@ -58,7 +64,12 @@ test.describe('live sidebar', () => {
     await expect(subDocRow(page, 'New name')).toBeVisible();
   });
 
-  test('changes made while offline appear once the page is back', async ({ page, context, request, doc }) => {
+  test('changes made while offline appear once the page is back', async ({
+    page,
+    context,
+    request,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await expect(page.getByTestId('doc-list-loading')).toHaveCount(0);
 

@@ -1,6 +1,9 @@
 import { addBlock, blocks, blockTexts, expect, openDocument, test, typeInBlock } from './fixtures';
 
-async function threeBlocks(page: import('@playwright/test').Page, doc: { id: string; title: string }) {
+async function threeBlocks(
+  page: import('@playwright/test').Page,
+  doc: { id: string; title: string },
+) {
   await openDocument(page, doc);
   await typeInBlock(page, 0, 'one');
   await addBlock(page);
@@ -38,9 +41,12 @@ test.describe('reorder', () => {
     const box = (await target.boundingBox())!;
 
     await blocks(page).nth(0).hover();
-    await blocks(page).nth(0).getByTestId('block-handle').dragTo(target, {
-      targetPosition: { x: box.width / 2, y: box.height * 0.8 },
-    });
+    await blocks(page)
+      .nth(0)
+      .getByTestId('block-handle')
+      .dragTo(target, {
+        targetPosition: { x: box.width / 2, y: box.height * 0.8 },
+      });
 
     await expect.poll(() => blockTexts(page)).toEqual(['two', 'three', 'one']);
   });
@@ -52,9 +58,12 @@ test.describe('reorder', () => {
     const box = (await target.boundingBox())!;
 
     await blocks(page).nth(2).hover();
-    await blocks(page).nth(2).getByTestId('block-handle').dragTo(target, {
-      targetPosition: { x: box.width / 2, y: box.height * 0.2 },
-    });
+    await blocks(page)
+      .nth(2)
+      .getByTestId('block-handle')
+      .dragTo(target, {
+        targetPosition: { x: box.width / 2, y: box.height * 0.2 },
+      });
 
     await expect.poll(() => blockTexts(page)).toEqual(['three', 'one', 'two']);
   });

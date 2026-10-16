@@ -6,9 +6,9 @@ test.describe('visibility', () => {
 
     await expect(page.getByTestId('visibility-toggle')).toHaveText(/Private/);
     await page.getByTestId('crumb-root').click();
-    await expect(page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-visibility"]`)).toHaveText(
-      /Private/,
-    );
+    await expect(
+      page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-visibility"]`),
+    ).toHaveText(/Private/);
     await page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-open"]`).click();
 
     await page.getByTestId('visibility-toggle').click();
@@ -16,9 +16,9 @@ test.describe('visibility', () => {
     await expect(page.getByTestId('visibility-toggle')).toHaveText(/Public/);
     // The sidebar badge must follow, not just the header control.
     await page.getByTestId('crumb-root').click();
-    await expect(page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-visibility"]`)).toHaveText(
-      /Public/,
-    );
+    await expect(
+      page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-visibility"]`),
+    ).toHaveText(/Public/);
   });
 
   test('toggling back to private sticks after a reload', async ({ page, doc }) => {
@@ -50,7 +50,11 @@ test.describe('visibility', () => {
     }
   });
 
-  test('a non-owner sees a static badge, no toggle and no delete', async ({ page, doc, browser }) => {
+  test('a non-owner sees a static badge, no toggle and no delete', async ({
+    page,
+    doc,
+    browser,
+  }) => {
     await openDocument(page, doc);
     await page.getByTestId('visibility-toggle').click();
     await expect(page.getByTestId('visibility-toggle')).toHaveText(/Public/);

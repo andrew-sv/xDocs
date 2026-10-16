@@ -21,8 +21,12 @@ test.describe('restoring a nested document', () => {
     await page.getByTestId('new-document').click();
     await expect(page.getByTestId('title-input')).toHaveValue('Untitled');
     await page.getByTestId('title-input').fill(parent);
-    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: parent })
-      .getByTestId('doc-open').click();
+    await page
+      .getByTestId('doc-list')
+      .getByTestId('doc-row')
+      .filter({ hasText: parent })
+      .getByTestId('doc-open')
+      .click();
     await expect(page.getByTestId('title-input')).toHaveValue(parent);
 
     await page.getByTestId('add-document').click();
@@ -45,13 +49,19 @@ test.describe('restoring a nested document', () => {
     const { parent, child } = await nestedAndDeleted(page);
 
     await page.getByTestId('trash-toggle').click();
-    await page.getByTestId('trash-row').filter({ hasText: child }).getByTestId('trash-restore').click();
+    await page
+      .getByTestId('trash-row')
+      .filter({ hasText: child })
+      .getByTestId('trash-restore')
+      .click();
 
     await expect(page.getByTestId('title-input')).toHaveValue(child);
     // The sidebar is at its parent's level: the parent is the path, and the
     // restored document is listed among the parent's sub-documents.
     await expect(page.getByTestId('crumb')).toHaveText([parent]);
-    await expect(page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: child })).toHaveCount(1);
+    await expect(
+      page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: child }),
+    ).toHaveCount(1);
   });
 
   test('by undo, after navigating away, it still opens inside its parent', async ({ page }) => {
@@ -61,6 +71,8 @@ test.describe('restoring a nested document', () => {
 
     await expect(page.getByTestId('title-input')).toHaveValue(child);
     await expect(page.getByTestId('crumb')).toHaveText([parent]);
-    await expect(page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: child })).toHaveCount(1);
+    await expect(
+      page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: child }),
+    ).toHaveCount(1);
   });
 });

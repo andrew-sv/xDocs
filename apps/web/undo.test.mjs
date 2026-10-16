@@ -9,8 +9,23 @@
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
-for (const key of ['window', 'document', 'DOMParser', 'Node', 'Element', 'HTMLElement', 'Text', 'Range', 'getComputedStyle', 'MutationObserver']) {
-  Object.defineProperty(globalThis, key, { value: dom.window[key], writable: true, configurable: true });
+for (const key of [
+  'window',
+  'document',
+  'DOMParser',
+  'Node',
+  'Element',
+  'HTMLElement',
+  'Text',
+  'Range',
+  'getComputedStyle',
+  'MutationObserver',
+]) {
+  Object.defineProperty(globalThis, key, {
+    value: dom.window[key],
+    writable: true,
+    configurable: true,
+  });
 }
 
 const { Editor } = await import('@tiptap/react');
@@ -21,7 +36,10 @@ const { DocumentUndo } = await import('./src/lib/documentUndo.ts');
 const Y = await import('yjs');
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 function makeDoc() {
   const ydoc = new Y.Doc();
@@ -40,7 +58,10 @@ function makeEditor(ydoc, id, undoManager, { shareWithPlugin }) {
     extensions: [
       StarterKit.configure({ undoRedo: false }),
       shareWithPlugin
-        ? Collaboration.configure({ fragment: ydoc.getXmlFragment(`block-${id}`), yUndoOptions: { undoManager } })
+        ? Collaboration.configure({
+            fragment: ydoc.getXmlFragment(`block-${id}`),
+            yUndoOptions: { undoManager },
+          })
         : Collaboration.configure({ fragment: ydoc.getXmlFragment(`block-${id}`) }),
       ...(shareWithPlugin ? [] : [DocumentUndo.configure({ undoManager })]),
     ],
@@ -56,14 +77,17 @@ function makeEditor(ydoc, id, undoManager, { shareWithPlugin }) {
  */
 function stillRecordsAfterUnmount(shareWithPlugin) {
   const { ydoc, blocks, undoManager } = makeDoc();
-  blocks.push([{ id: 'a', type: 'paragraph' }, { id: 'b', type: 'paragraph' }]);
+  blocks.push([
+    { id: 'a', type: 'paragraph' },
+    { id: 'b', type: 'paragraph' },
+  ]);
   const e1 = makeEditor(ydoc, 'a', undoManager, { shareWithPlugin });
   const e2 = makeEditor(ydoc, 'b', undoManager, { shareWithPlugin });
   undoManager.addToScope([ydoc.getXmlFragment('block-a'), ydoc.getXmlFragment('block-b')]);
   undoManager.clear();
 
-  e2.destroy();                       // one block unmounts, as on delete/remount
-  blocks.delete(0, 1);                // a subsequent structural change
+  e2.destroy(); // one block unmounts, as on delete/remount
+  blocks.delete(0, 1); // a subsequent structural change
   const recorded = undoManager.undoStack.length === 1;
 
   let restored = false;
@@ -86,8 +110,14 @@ ck('fixed wiring undo restores the deleted block', fixed.restored === true);
 
 // And undo must survive several editors coming and going.
 const { ydoc, blocks, undoManager } = makeDoc();
-blocks.push([{ id: 'a', type: 'paragraph' }, { id: 'b', type: 'paragraph' }, { id: 'c', type: 'paragraph' }]);
-const editors = ['a', 'b', 'c'].map((id) => makeEditor(ydoc, id, undoManager, { shareWithPlugin: false }));
+blocks.push([
+  { id: 'a', type: 'paragraph' },
+  { id: 'b', type: 'paragraph' },
+  { id: 'c', type: 'paragraph' },
+]);
+const editors = ['a', 'b', 'c'].map((id) =>
+  makeEditor(ydoc, id, undoManager, { shareWithPlugin: false }),
+);
 editors[1].destroy();
 editors[2].destroy();
 const remounted = makeEditor(ydoc, 'b', undoManager, { shareWithPlugin: false });

@@ -16,7 +16,10 @@ const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -24,13 +27,15 @@ const H = (t, extra) => authHeaders(t, extra);
 
 const create = (token, title, parentId) =>
   fetch(`${API}/api/documents`, {
-    method: 'POST', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'POST',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ title, ...(parentId ? { parentId } : {}) }),
   }).then((r) => r.json());
 
 const setVisibility = (token, id, visibility) =>
   fetch(`${API}/api/documents/${id}/visibility`, {
-    method: 'PATCH', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'PATCH',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ visibility }),
   });
 
@@ -41,7 +46,11 @@ const listIds = (token, parent) =>
 
 async function canConnect(token, id) {
   const provider = new HocuspocusProvider({
-    url: WS, name: `doc:${id}`, document: new Y.Doc(), token, onAuthenticationFailed: () => {},
+    url: WS,
+    name: `doc:${id}`,
+    document: new Y.Doc(),
+    token,
+    onAuthenticationFailed: () => {},
   });
   const result = await Promise.race([
     new Promise((r) => provider.on('synced', () => r(true))),
@@ -64,13 +73,16 @@ ck('a child inherits the parent visibility (private)', child.visibility === 'pri
 
 ck('child is not in the top-level listing', !(await listIds(owner)).includes(child.id));
 ck('child IS in the parent listing', (await listIds(owner, parent.id)).includes(child.id));
-const [parentRow] = (await fetch(`${API}/api/documents`, { headers: H(owner) }).then((r) => r.json()))
-  .filter((d) => d.id === parent.id);
+const [parentRow] = (
+  await fetch(`${API}/api/documents`, { headers: H(owner) }).then((r) => r.json())
+).filter((d) => d.id === parent.id);
 ck('parent now reports hasChildren', parentRow?.hasChildren === true);
 
 // --- inheritance is a copy, not a live link ---------------------------------
 await setVisibility(owner, parent.id, 'public');
-const childAfter = await fetch(`${API}/api/documents/${child.id}`, { headers: H(owner) }).then((r) => r.json());
+const childAfter = await fetch(`${API}/api/documents/${child.id}`, { headers: H(owner) }).then(
+  (r) => r.json(),
+);
 ck('changing the parent does NOT change existing children', childAfter.visibility === 'private');
 const child2 = await create(owner, 'Child2', parent.id);
 ck('a NEW child inherits the parent current visibility (public)', child2.visibility === 'public');
@@ -79,21 +91,31 @@ ck('a NEW child inherits the parent current visibility (public)', child2.visibil
 ck('stranger sees the public parent', (await listIds(stranger)).includes(parent.id));
 ck('stranger sees the public child', (await listIds(stranger, parent.id)).includes(child2.id));
 ck('stranger can open the public child socket', await canConnect(stranger, child2.id));
-ck('stranger does NOT see the private child', !(await listIds(stranger, parent.id)).includes(child.id));
+ck(
+  'stranger does NOT see the private child',
+  !(await listIds(stranger, parent.id)).includes(child.id),
+);
 
 // The critical case: a PUBLIC document beneath a PRIVATE parent.
 await setVisibility(owner, parent.id, 'private');
-ck('public child under a private parent is not listed', !(await listIds(stranger, parent.id)).includes(child2.id));
+ck(
+  'public child under a private parent is not listed',
+  !(await listIds(stranger, parent.id)).includes(child2.id),
+);
 ck(
   'public child under a private parent 404s by id',
   (await fetch(`${API}/api/documents/${child2.id}`, { headers: H(stranger) })).status === 404,
 );
-ck('public child under a private parent is REFUSED on the websocket', !(await canConnect(stranger, child2.id)));
+ck(
+  'public child under a private parent is REFUSED on the websocket',
+  !(await canConnect(stranger, child2.id)),
+);
 ck('the owner can still reach it', await canConnect(owner, child2.id));
 
 // --- grafting onto someone else's tree --------------------------------------
 const forged = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: H(stranger, { 'content-type': 'application/json' }),
+  method: 'POST',
+  headers: H(stranger, { 'content-type': 'application/json' }),
   body: JSON.stringify({ title: 'graft', parentId: parent.id }),
 });
 ck('stranger cannot create a child under an invisible parent', forged.status === 404);
@@ -113,19 +135,30 @@ ck(
   'and the whole subtree with it',
   (await fetch(`${API}/api/documents/${grandchild.id}`, { headers: H(owner) })).status === 200,
 );
-ck('descendants keep their place in the tree',
-  (await listIds(owner, child.id)).includes(grandchild.id));
+ck(
+  'descendants keep their place in the tree',
+  (await listIds(owner, child.id)).includes(grandchild.id),
+);
 
 // --- the path to a document ---------------------------------------------------
 const pathOf = (token, id) => fetch(`${API}/api/documents/${id}/path`, { headers: H(token) });
 const titles = async (res) => (await res.json()).map((d) => d.title);
 
-ck('a nested document\'s path is its ancestors, root first',
-  JSON.stringify(await titles(await pathOf(owner, grandchild.id))) === JSON.stringify(['Parent', 'Child']));
-ck('a top-level document\'s path is empty',
-  JSON.stringify(await titles(await pathOf(owner, parent.id))) === '[]');
-ck('ancestors carry full metadata, marked as having children',
-  (await pathOf(owner, grandchild.id).then((r) => r.json())).every((d) => d.id && d.hasChildren === true));
+ck(
+  "a nested document's path is its ancestors, root first",
+  JSON.stringify(await titles(await pathOf(owner, grandchild.id))) ===
+    JSON.stringify(['Parent', 'Child']),
+);
+ck(
+  "a top-level document's path is empty",
+  JSON.stringify(await titles(await pathOf(owner, parent.id))) === '[]',
+);
+ck(
+  'ancestors carry full metadata, marked as having children',
+  (await pathOf(owner, grandchild.id).then((r) => r.json())).every(
+    (d) => d.id && d.hasChildren === true,
+  ),
+);
 ck('a malformed id is a 404, not a 500', (await pathOf(owner, 'not-a-uuid')).status === 404);
 
 // Ancestor gating: a public child under a private parent is unreachable, and
@@ -133,11 +166,16 @@ ck('a malformed id is a 404, not a 500', (await pathOf(owner, 'not-a-uuid')).sta
 const secretParent = await create(owner, 'Secret parent');
 const publicChild = await create(owner, 'Public child', secretParent.id);
 await setVisibility(owner, publicChild.id, 'public');
-ck('a stranger cannot read the path of a document under a private parent (404)',
-  (await pathOf(stranger, publicChild.id)).status === 404);
+ck(
+  'a stranger cannot read the path of a document under a private parent (404)',
+  (await pathOf(stranger, publicChild.id)).status === 404,
+);
 await setVisibility(owner, secretParent.id, 'public');
-ck('once the whole chain is public, the stranger gets the path',
-  JSON.stringify(await titles(await pathOf(stranger, publicChild.id))) === JSON.stringify(['Secret parent']));
+ck(
+  'once the whole chain is public, the stranger gets the path',
+  JSON.stringify(await titles(await pathOf(stranger, publicChild.id))) ===
+    JSON.stringify(['Secret parent']),
+);
 
 /*
  * Gating is by EVERY ancestor, not just the parent (#62).
@@ -154,26 +192,40 @@ await setVisibility(owner, mid.id, 'public');
 await setVisibility(owner, leaf.id, 'public');
 const fetchAs = (token, id) => fetch(`${API}/api/documents/${id}`, { headers: H(token) });
 
-ck('public leaf under public mid under PRIVATE root 404s by id', (await fetchAs(stranger, leaf.id)).status === 404);
+ck(
+  'public leaf under public mid under PRIVATE root 404s by id',
+  (await fetchAs(stranger, leaf.id)).status === 404,
+);
 ck('and is refused on the websocket', !(await canConnect(stranger, leaf.id)));
-ck('and the public mid level lists nothing for the stranger', (await listIds(stranger, mid.id)).length === 0);
+ck(
+  'and the public mid level lists nothing for the stranger',
+  (await listIds(stranger, mid.id)).length === 0,
+);
 ck('the owner still reaches the leaf', (await fetchAs(owner, leaf.id)).status === 200);
 ck('and sees it listed under mid', (await listIds(owner, mid.id)).includes(leaf.id));
 
 await setVisibility(owner, root.id, 'public');
-ck('once the root is public, the stranger reaches the leaf', (await fetchAs(stranger, leaf.id)).status === 200);
+ck(
+  'once the root is public, the stranger reaches the leaf',
+  (await fetchAs(stranger, leaf.id)).status === 200,
+);
 ck('and sees it listed under mid', (await listIds(stranger, mid.id)).includes(leaf.id));
 ck('and may open its websocket', await canConnect(stranger, leaf.id));
 
 await setVisibility(owner, mid.id, 'private');
-ck('a private MIDDLE ancestor hides the leaf again', (await fetchAs(stranger, leaf.id)).status === 404);
+ck(
+  'a private MIDDLE ancestor hides the leaf again',
+  (await fetchAs(stranger, leaf.id)).status === 404,
+);
 ck('mid is not listed under the public root', !(await listIds(stranger, root.id)).includes(mid.id));
 ck('and its level lists nothing', (await listIds(stranger, mid.id)).length === 0);
 ck('the websocket is refused again', !(await canConnect(stranger, leaf.id)));
 
 const malformed = await fetch(`${API}/api/documents?parent=not-a-uuid`, { headers: H(owner) });
-ck('a malformed ?parent= lists nothing rather than failing',
-  malformed.status === 200 && (await malformed.json()).length === 0);
+ck(
+  'a malformed ?parent= lists nothing rather than failing',
+  malformed.status === 200 && (await malformed.json()).length === 0,
+);
 
 await fetch(`${API}/api/documents/${root.id}`, { method: 'DELETE', headers: H(owner) });
 ck('a deleted root takes its leaf out of reach', (await fetchAs(owner, leaf.id)).status === 404);

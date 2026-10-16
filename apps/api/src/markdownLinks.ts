@@ -59,7 +59,9 @@ export function parseLinks(text: string): TextRun[] {
 /** The inverse: what a caller can send back unchanged. */
 export function formatLinks(runs: TextRun[]): string {
   return runs
-    .map((run) => (run.href ? `[${escapeText(run.text)}](${escapeHref(run.href)})` : escapeText(run.text)))
+    .map((run) =>
+      run.href ? `[${escapeText(run.text)}](${escapeHref(run.href)})` : escapeText(run.text),
+    )
     .join('');
 }
 

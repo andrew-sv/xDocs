@@ -66,6 +66,4 @@ export function initialsFor(name: string): string {
 
 /** Platform-appropriate label for the undo shortcut. */
 export const undoShortcutLabel =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
-    ? '⌘Z'
-    : 'Ctrl+Z';
+  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘Z' : 'Ctrl+Z';

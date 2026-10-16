@@ -19,7 +19,10 @@ const token = await signInForTests(API);
 const H = (extra) => authHeaders(token, extra);
 
 let failures = 0;
-const check = (label, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`); if (!ok) failures++; };
+const check = (label, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
+  if (!ok) failures++;
+};
 
 function connect(docId) {
   const doc = new Y.Doc();
@@ -56,7 +59,9 @@ function readText(doc, blockId) {
 
 // 1. Create document over REST
 const created = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: H({ 'content-type': 'application/json' }), body: JSON.stringify({ title: 'Untitled' }),
+  method: 'POST',
+  headers: H({ 'content-type': 'application/json' }),
+  body: JSON.stringify({ title: 'Untitled' }),
 }).then((r) => r.json());
 check('REST creates document', typeof created.id === 'string');
 const id = created.id;
@@ -70,7 +75,10 @@ check('new document is seeded with exactly one block', seeded.length === 1);
 const b1 = seeded[0]?.id;
 
 // 3. A titles the document and types into the seeded block
-check('new document is seeded with the requested title', A.doc.getText(TITLE_KEY).toString() === 'Untitled');
+check(
+  'new document is seeded with the requested title',
+  A.doc.getText(TITLE_KEY).toString() === 'Untitled',
+);
 // The title is already in the CRDT, so renaming REPLACES it — the same thing
 // applyTextEdit does in the app when you select all and retype.
 const titleA = A.doc.getText(TITLE_KEY);
@@ -93,7 +101,7 @@ check('client B sees the title', B.doc.getText(TITLE_KEY).toString() === 'Quarte
 // Title edits are collaborative too: B renames, A must see it.
 B.doc.getText(TITLE_KEY).insert(15, ' 2026');
 await sleep(600);
-check('A receives B\'s title edit', A.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026');
+check("A receives B's title edit", A.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026');
 
 const b3 = crypto.randomUUID();
 B.doc.getArray(BLOCKS_KEY).push([{ id: b3, type: 'paragraph' }]);
@@ -103,14 +111,30 @@ check("A receives B's new block", A.doc.getArray(BLOCKS_KEY).length === 3);
 check("A receives B's text", readText(A.doc, b3) === 'Added by B');
 
 // 4b. A reorders: drag the last block to the top. B must see the new order.
-const orderBefore = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const orderBefore = A.doc
+  .getArray(BLOCKS_KEY)
+  .toArray()
+  .map((b) => b.id);
 const mv = resolveMove(A.doc.getArray(BLOCKS_KEY).toArray(), b3, b1, 'above');
 applyMove(A.doc.getArray(BLOCKS_KEY), mv.from, mv.to);
 await sleep(700);
-const orderAfter = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const orderAfter = A.doc
+  .getArray(BLOCKS_KEY)
+  .toArray()
+  .map((b) => b.id);
 check('reorder moves block to the front', orderAfter.join() === [b3, b1, b2].join());
-check('reorder preserves every block', [...orderAfter].sort().join() === [...orderBefore].sort().join());
-check('B sees the reorder', B.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === orderAfter.join());
+check(
+  'reorder preserves every block',
+  [...orderAfter].sort().join() === [...orderBefore].sort().join(),
+);
+check(
+  'B sees the reorder',
+  B.doc
+    .getArray(BLOCKS_KEY)
+    .toArray()
+    .map((b) => b.id)
+    .join() === orderAfter.join(),
+);
 check('reordered block keeps its text', readText(B.doc, b3) === 'Added by B');
 
 // 4c. Undo. Built exactly as the app builds it, including trackedOrigins.
@@ -125,7 +149,10 @@ for (const b of A.doc.getArray(BLOCKS_KEY).toArray()) {
 writeParagraph(B.doc, b2, 'edit by B');
 await sleep(700);
 
-const orderBeforeDelete = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const orderBeforeDelete = A.doc
+  .getArray(BLOCKS_KEY)
+  .toArray()
+  .map((b) => b.id);
 const deleteAt = orderBeforeDelete.indexOf(b1);
 A.doc.getArray(BLOCKS_KEY).delete(deleteAt, 1);
 await sleep(400);
@@ -134,7 +161,10 @@ check('B sees the deletion', B.doc.getArray(BLOCKS_KEY).length === 2);
 
 undoA.undo();
 await sleep(700);
-const restored = A.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id);
+const restored = A.doc
+  .getArray(BLOCKS_KEY)
+  .toArray()
+  .map((b) => b.id);
 check('undo restores the deleted block', restored.join() === orderBeforeDelete.join());
 check('undo restores it at its original index', restored[deleteAt] === b1);
 check('undo restores the block text', readText(A.doc, b1) === 'Hello from the first block');
@@ -152,7 +182,8 @@ undoA.destroy();
 
 // 5. Disconnect everything and flush to Postgres, so step 6 really is a load
 // from the database rather than a read of what is still in memory.
-A.provider.destroy(); B.provider.destroy();
+A.provider.destroy();
+B.provider.destroy();
 await flushStore(API, H(), id);
 
 // 6. Fresh client loads purely from Postgres
@@ -164,7 +195,11 @@ check('persisted: block 1 text restored', readText(C.doc, b1) === 'Hello from th
 check('persisted: block 3 text restored', readText(C.doc, b3) === 'Added by B');
 check(
   'persisted: block order restored',
-  C.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === [b3, b1, b2].join(),
+  C.doc
+    .getArray(BLOCKS_KEY)
+    .toArray()
+    .map((b) => b.id)
+    .join() === [b3, b1, b2].join(),
 );
 const C2Title = C.doc.getText(TITLE_KEY).toString();
 C.provider.destroy();
@@ -209,13 +244,18 @@ const blocked = await Promise.race([
 check('collab refuses a deleted document', blocked === true);
 whileDeleted.provider.destroy();
 
-const restoredDoc = await fetch(`${API}/api/documents/${id}/restore`, { method: 'POST', headers: H() })
-  .then((r) => r.json());
+const restoredDoc = await fetch(`${API}/api/documents/${id}/restore`, {
+  method: 'POST',
+  headers: H(),
+}).then((r) => r.json());
 check('restore returns the same document id', restoredDoc.id === id);
 check('restore keeps the title', restoredDoc.title === 'Quarterly notes 2026');
 
 const backInList = await fetch(`${API}/api/documents`, { headers: H() }).then((r) => r.json());
-check('restored document is listed again', backInList.some((d) => d.id === id));
+check(
+  'restored document is listed again',
+  backInList.some((d) => d.id === id),
+);
 
 // The whole point of the soft delete: the Yjs state came back with it.
 const D = connect(id);
@@ -224,10 +264,17 @@ await sleep(600);
 check('restored document keeps its blocks', D.doc.getArray(BLOCKS_KEY).length === 3);
 check(
   'restored document keeps its block order',
-  D.doc.getArray(BLOCKS_KEY).toArray().map((b) => b.id).join() === [b3, b1, b2].join(),
+  D.doc
+    .getArray(BLOCKS_KEY)
+    .toArray()
+    .map((b) => b.id)
+    .join() === [b3, b1, b2].join(),
 );
 check('restored document keeps its text', readText(D.doc, b1) === 'Hello from the first block');
-check('restored document keeps its title', D.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026');
+check(
+  'restored document keeps its title',
+  D.doc.getText(TITLE_KEY).toString() === 'Quarterly notes 2026',
+);
 D.provider.destroy();
 
 // 10. Cleanup

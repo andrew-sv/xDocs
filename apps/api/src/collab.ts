@@ -49,9 +49,7 @@ export async function withDirectConnection<T>(
   if (!collabServer) throw new Error('Collaboration server is not running');
   // `Server` is the transport; `hocuspocus` is the document layer that can open
   // a direct connection.
-  const connection = await collabServer.hocuspocus.openDirectConnection(
-    collabDocName(documentId),
-  );
+  const connection = await collabServer.hocuspocus.openDirectConnection(collabDocName(documentId));
   const transact: Transact = async (transaction) => {
     let result!: ReturnType<typeof transaction>;
     await connection.transact((doc: { getArray: Y.Doc['getArray'] }) => {

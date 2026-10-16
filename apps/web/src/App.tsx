@@ -485,9 +485,10 @@ export function App() {
    */
   const selectedId = selected?.id ?? null;
   const childrenAreSidebarLevel = selectedId !== null && selectedId === currentParentId;
-  const [fetchedChildren, setFetchedChildren] = useState<{ parentId: string; docs: DocumentDTO[] } | null>(
-    null,
-  );
+  const [fetchedChildren, setFetchedChildren] = useState<{
+    parentId: string;
+    docs: DocumentDTO[];
+  } | null>(null);
   useEffect(() => {
     if (selectedId === null || childrenAreSidebarLevel) return;
     let current = true;
@@ -694,7 +695,11 @@ export function App() {
         onOpenSearchResult={openSearchResult}
         onOpenKeys={() => setKeysOpen(true)}
       />
-      {error && <main className="editor"><p className="error">{error}</p></main>}
+      {error && (
+        <main className="editor">
+          <p className="error">{error}</p>
+        </main>
+      )}
       {!error && selected && (
         <DocumentEditor
           key={selected.id}

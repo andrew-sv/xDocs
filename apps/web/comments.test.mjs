@@ -19,7 +19,10 @@ import {
 } from './src/lib/comments.ts';
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const ada = { id: 'u-ada', name: 'Ada' };
 const bob = { id: 'u-bob', name: 'Bob' };
@@ -94,7 +97,10 @@ const open = (doc, text = 'first') =>
   addComment(doc, id, 'into the void', bob);
   editComment(doc, id, 'no-such-comment', 'x');
   setResolved(doc, id, true);
-  ck('replying to a deleted thread does nothing, rather than resurrecting it', readThreads(doc).length === 0);
+  ck(
+    'replying to a deleted thread does nothing, rather than resurrecting it',
+    readThreads(doc).length === 0,
+  );
   ck('and deleting from it is safe', deleteComment(doc, id, 'nope').threadGone === true);
 }
 
@@ -127,9 +133,11 @@ const open = (doc, text = 'first') =>
   sync();
   const after = readThreads(a)[0];
   ck('a concurrent edit of one comment does not duplicate it', after.comments.length === 3);
-  ck('both clients settle on the same text',
+  ck(
+    'both clients settle on the same text',
     after.comments.find((c) => c.id === target).text ===
-      readThreads(b)[0].comments.find((c) => c.id === target).text);
+      readThreads(b)[0].comments.find((c) => c.id === target).text,
+  );
 
   // One deletes a thread while the other replies to it.
   const doomed = open(a, 'short-lived');
@@ -137,8 +145,10 @@ const open = (doc, text = 'first') =>
   deleteThread(a, doomed);
   addComment(b, doomed, 'too late', bob);
   sync();
-  ck('a thread deleted while someone replies stays deleted on both sides',
-    readThreads(a).some((t) => t.id === doomed) === readThreads(b).some((t) => t.id === doomed));
+  ck(
+    'a thread deleted while someone replies stays deleted on both sides',
+    readThreads(a).some((t) => t.id === doomed) === readThreads(b).some((t) => t.id === doomed),
+  );
 }
 
 // --- quoting ----------------------------------------------------------------

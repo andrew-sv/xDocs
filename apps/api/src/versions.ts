@@ -132,10 +132,16 @@ const isCommentAttribute = (key: string) => key === 'comment' || key.startsWith(
  * though, and a mark whose thread has since been deleted is a highlight that
  * opens nothing — the one state the comments code is careful never to leave.
  */
-function dropOrphanedCommentMarks(node: Y.XmlFragment | Y.XmlElement | Y.XmlText, threads: Set<string>) {
+function dropOrphanedCommentMarks(
+  node: Y.XmlFragment | Y.XmlElement | Y.XmlText,
+  threads: Set<string>,
+) {
   if (node instanceof Y.XmlText) {
     let at = 0;
-    for (const op of node.toDelta() as Array<{ insert: unknown; attributes?: Record<string, unknown> }>) {
+    for (const op of node.toDelta() as Array<{
+      insert: unknown;
+      attributes?: Record<string, unknown>;
+    }>) {
       const length = typeof op.insert === 'string' ? op.insert.length : 1;
       for (const [key, value] of Object.entries(op.attributes ?? {})) {
         const threadId = (value as { threadId?: unknown } | null)?.threadId;
@@ -148,7 +154,8 @@ function dropOrphanedCommentMarks(node: Y.XmlFragment | Y.XmlElement | Y.XmlText
     return;
   }
   for (const child of node.toArray()) {
-    if (child instanceof Y.XmlElement || child instanceof Y.XmlText) dropOrphanedCommentMarks(child, threads);
+    if (child instanceof Y.XmlElement || child instanceof Y.XmlText)
+      dropOrphanedCommentMarks(child, threads);
   }
 }
 

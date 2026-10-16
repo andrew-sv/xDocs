@@ -13,7 +13,9 @@ test.describe('storage usage', () => {
 
     const chooser = page.waitForEvent('filechooser');
     await page.getByTestId('tb-attach-file').click();
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: 'counted.txt',
       mimeType: 'text/plain',
       buffer: Buffer.alloc(4096),

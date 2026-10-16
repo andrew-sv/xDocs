@@ -20,7 +20,9 @@ test.describe('toolbar links', () => {
     await expect(link).toHaveAttribute('href', 'https://example.com');
     await expect(page.getByTestId('link-input')).toHaveCount(0);
     // Back in the text, ready to keep typing.
-    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(
+      true,
+    );
   });
 
   test('with nothing selected, the address itself becomes the link', async ({ page, doc }) => {
@@ -129,7 +131,9 @@ test.describe('toolbar links', () => {
     await page.keyboard.press('Enter');
 
     const opening = context.waitForEvent('page');
-    await blockEditor(page, 0).locator('a').click({ modifiers: [mod] });
+    await blockEditor(page, 0)
+      .locator('a')
+      .click({ modifiers: [mod] });
     const opened = await opening;
 
     expect(opened.url()).toBe('http://localhost:5173/');
@@ -168,7 +172,10 @@ test.describe('toolbar links', () => {
 });
 
 test.describe('attachments', () => {
-  async function attach(page: import('@playwright/test').Page, file: { name: string; mimeType: string; buffer: Buffer }) {
+  async function attach(
+    page: import('@playwright/test').Page,
+    file: { name: string; mimeType: string; buffer: Buffer },
+  ) {
     const chooser = page.waitForEvent('filechooser');
     await page.getByTestId('tb-attach-file').click();
     await (await chooser).setFiles(file);
@@ -178,7 +185,11 @@ test.describe('attachments', () => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
     await page.keyboard.type('See ');
-    await attach(page, { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello from a test') });
+    await attach(page, {
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('hello from a test'),
+    });
 
     const link = blockEditor(page, 0).locator('a');
     await expect(link).toHaveText('notes.txt');
@@ -195,7 +206,11 @@ test.describe('attachments', () => {
   test('clicking an attachment downloads it, rather than navigating', async ({ page, doc }) => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
-    await attach(page, { name: 'Звіт Q3.txt', mimeType: 'text/plain', buffer: Buffer.from('quarterly numbers') });
+    await attach(page, {
+      name: 'Звіт Q3.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('quarterly numbers'),
+    });
     const link = blockEditor(page, 0).locator('a');
     await expect(link).toHaveAttribute('href', ATTACHMENT_HREF);
 

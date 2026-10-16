@@ -35,9 +35,7 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
     throw new UnauthorizedError();
   }
   if (res.status === 403) {
-    const body = (await res.json().catch(() => null)) as
-      | { error?: string; code?: string }
-      | null;
+    const body = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
     /*
      * Only the allowlist refusal ends the session, and it says so by its code.
      *
@@ -107,8 +105,7 @@ export const api = {
       body: JSON.stringify({ title, ...(parentId ? { parentId } : {}) }),
     }),
   deleteDocument: (id: string) => request<void>(`/documents/${id}`, { method: 'DELETE' }),
-  search: (q: string) =>
-    request<SearchResultDTO[]>(`/documents/search?q=${encodeURIComponent(q)}`),
+  search: (q: string) => request<SearchResultDTO[]>(`/documents/search?q=${encodeURIComponent(q)}`),
   /** Every visible document at once — used by the move picker. */
   listAllDocuments: () => request<DocumentDTO[]>('/documents?flat=1'),
   moveDocument: (id: string, parentId: string | null) =>
@@ -143,7 +140,8 @@ export const api = {
     return (await res.json()) as AttachmentDTO;
   },
   /** Newest first. Content is fetched per version, never for the whole list. */
-  listVersions: (documentId: string) => request<DocumentVersionDTO[]>(`/documents/${documentId}/versions`),
+  listVersions: (documentId: string) =>
+    request<DocumentVersionDTO[]>(`/documents/${documentId}/versions`),
   getVersion: (documentId: string, versionId: string) =>
     request<DocumentVersionContentDTO>(`/documents/${documentId}/versions/${versionId}`),
   /** Keep the document as it stands right now. */
@@ -151,7 +149,9 @@ export const api = {
     request<DocumentVersionDTO>(`/documents/${documentId}/versions`, { method: 'POST' }),
   /** A CRDT edit on the server; open editors receive it over the socket. */
   restoreVersion: (documentId: string, versionId: string) =>
-    request<DocumentContentDTO>(`/documents/${documentId}/versions/${versionId}/restore`, { method: 'POST' }),
+    request<DocumentContentDTO>(`/documents/${documentId}/versions/${versionId}/restore`, {
+      method: 'POST',
+    }),
   attachmentUsage: () => request<AttachmentUsageDTO>('/attachments/usage'),
   listAttachments: (documentId: string) =>
     request<DocumentAttachmentDTO[]>(`/documents/${documentId}/attachments`),
@@ -159,6 +159,9 @@ export const api = {
   downloadAttachment: async (id: string): Promise<{ blob: Blob; filename: string | null }> => {
     const res = await send(`/attachments/${id}`);
     if (!res.ok) throw await failure(res, 'Download failed');
-    return { blob: await res.blob(), filename: filenameFrom(res.headers.get('content-disposition')) };
+    return {
+      blob: await res.blob(),
+      filename: filenameFrom(res.headers.get('content-disposition')),
+    };
   },
 };

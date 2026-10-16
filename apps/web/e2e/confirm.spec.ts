@@ -59,7 +59,10 @@ test.describe('delete confirmation', () => {
     await expect(page.getByTestId('confirm-warning')).toContainText('sub-documents');
   });
 
-  test('the open document is shown in the sidebar, not only the breadcrumb', async ({ page, doc }) => {
+  test('the open document is shown in the sidebar, not only the breadcrumb', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await expect(page.getByTestId('current-doc')).toBeVisible();
     await expect(page.getByTestId('current-doc')).toContainText(doc.title);

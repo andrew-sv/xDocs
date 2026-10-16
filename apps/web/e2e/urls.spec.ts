@@ -1,11 +1,22 @@
 import type { APIRequestContext } from '@playwright/test';
 import { authHeaders } from '../test-auth.mjs';
-import { expect, getTestToken, openDocument, seedDisposableSession, test, type TestDocument } from './fixtures';
+import {
+  expect,
+  getTestToken,
+  openDocument,
+  seedDisposableSession,
+  test,
+  type TestDocument,
+} from './fixtures';
 
 const API = 'http://localhost:3001';
 
 /** A sub-document made over REST; the fixture purges it with the parent. */
-async function addChild(request: APIRequestContext, parent: TestDocument, title: string): Promise<TestDocument> {
+async function addChild(
+  request: APIRequestContext,
+  parent: TestDocument,
+  title: string,
+): Promise<TestDocument> {
   const res = await request.post(`${API}/api/documents`, {
     headers: authHeaders(await getTestToken()),
     data: { title, parentId: parent.id },
@@ -14,7 +25,10 @@ async function addChild(request: APIRequestContext, parent: TestDocument, title:
 }
 
 test.describe('document URLs', () => {
-  test('opening a document puts it in the URL, and a reload keeps it open', async ({ page, doc }) => {
+  test('opening a document puts it in the URL, and a reload keeps it open', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await expect(page).toHaveURL(`/doc/${doc.id}`);
 
@@ -23,7 +37,11 @@ test.describe('document URLs', () => {
     await expect(page.getByTestId('crumb')).toHaveText([doc.title]);
   });
 
-  test('a link to a nested document opens it with its real breadcrumbs', async ({ page, request, doc }) => {
+  test('a link to a nested document opens it with its real breadcrumbs', async ({
+    page,
+    request,
+    doc,
+  }) => {
     const child = await addChild(request, doc, 'Linked child');
 
     await page.goto(`/doc/${child.id}`);
@@ -37,8 +55,12 @@ test.describe('document URLs', () => {
   test('Back and Forward move between documents', async ({ page, request, doc }) => {
     await addChild(request, doc, 'Next door');
     await openDocument(page, doc);
-    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: 'Next door' })
-      .getByTestId('doc-open').click();
+    await page
+      .getByTestId('doc-list')
+      .getByTestId('doc-row')
+      .filter({ hasText: 'Next door' })
+      .getByTestId('doc-open')
+      .click();
     await expect(page.getByTestId('title-input')).toHaveValue('Next door');
 
     await page.goBack();
@@ -57,7 +79,10 @@ test.describe('document URLs', () => {
     await expect(page.getByTestId('title-input')).toHaveValue('Next door');
   });
 
-  test('a link to a document that does not exist says so, and keeps the URL', async ({ page, doc }) => {
+  test('a link to a document that does not exist says so, and keeps the URL', async ({
+    page,
+    doc,
+  }) => {
     const missing = '00000000-0000-0000-0000-000000000000';
     await page.goto(`/doc/${missing}`);
 

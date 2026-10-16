@@ -10,7 +10,14 @@ type Props = {
   onCancel: () => void;
 };
 
-export function ConfirmDialog({ title, message, warning, confirmLabel, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({
+  title,
+  message,
+  warning,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: Props) {
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -43,7 +50,12 @@ export function ConfirmDialog({ title, message, warning, confirmLabel, onConfirm
           </p>
         )}
         <div className="dialog-actions">
-          <button type="button" className="dialog-cancel" data-testid="confirm-cancel" onClick={onCancel}>
+          <button
+            type="button"
+            className="dialog-cancel"
+            data-testid="confirm-cancel"
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button

@@ -1,7 +1,9 @@
 import { expect, openDocument, test } from './fixtures';
 
 test.describe('sidebar level switching', () => {
-  test('a document created while the list is still loading is not wiped by it', async ({ page }) => {
+  test('a document created while the list is still loading is not wiped by it', async ({
+    page,
+  }) => {
     /*
      * The first list request is held open, so it resolves AFTER the new
      * document has been added to the sidebar. Without the sequence guard in
@@ -70,7 +72,12 @@ test.describe('sidebar level switching', () => {
     });
 
     await page.getByTestId('crumb-root').click();
-    await page.getByTestId('doc-list').getByTestId('doc-row').first().getByTestId('doc-open').click();
+    await page
+      .getByTestId('doc-list')
+      .getByTestId('doc-row')
+      .first()
+      .getByTestId('doc-open')
+      .click();
 
     await expect(page.getByTestId('doc-list-loading')).toBeVisible();
     // The previous level's row must be gone already, not lingering underneath.

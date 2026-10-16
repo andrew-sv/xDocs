@@ -46,7 +46,10 @@ test.describe('refused actions', () => {
    * refuses for the real reason, and the words asserted below are the server's
    * own. Nothing here mocks the 403 itself.
    */
-  test('an owner-only refusal shows its reason and keeps you signed in', async ({ page, request }) => {
+  test('an owner-only refusal shows its reason and keeps you signed in', async ({
+    page,
+    request,
+  }) => {
     const { doc, purge } = await strangersPublicDocument(request);
     try {
       await page.route('**/api/documents*', async (route) => {
@@ -72,7 +75,9 @@ test.describe('refused actions', () => {
       await page.getByTestId('confirm-delete').click();
 
       // The server's own wording, not something the client invented.
-      await expect(page.getByTestId('notice')).toContainText('Only the owner can delete this document.');
+      await expect(page.getByTestId('notice')).toContainText(
+        'Only the owner can delete this document.',
+      );
       // The whole point: still signed in, and the document is still there.
       await expect(page.getByTestId('login-gate')).toHaveCount(0);
       await expect(page.getByTestId('new-document')).toBeVisible();
@@ -109,6 +114,8 @@ test.describe('refused actions', () => {
     await expect(page.getByTestId('login-gate')).toContainText(reason);
     await expect(page.getByTestId('new-document')).toHaveCount(0);
     // And the token is gone, so a reload does not walk back into the app.
-    expect(await page.evaluate(() => window.localStorage.getItem('xdocs.session-token'))).toBeNull();
+    expect(
+      await page.evaluate(() => window.localStorage.getItem('xdocs.session-token')),
+    ).toBeNull();
   });
 });

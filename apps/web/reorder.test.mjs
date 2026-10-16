@@ -2,9 +2,15 @@ import * as Y from 'yjs';
 import { resolveMove, resolveNudge, applyMove } from './src/lib/reorder.ts';
 
 let fail = 0;
-const ck = (l, ok) => { if (!ok) { console.log('FAIL  ' + l); fail++; } };
+const ck = (l, ok) => {
+  if (!ok) {
+    console.log('FAIL  ' + l);
+    fail++;
+  }
+};
 
-const ids = (n) => Array.from({ length: n }, (_, i) => ({ id: String.fromCharCode(97 + i), type: 'paragraph' }));
+const ids = (n) =>
+  Array.from({ length: n }, (_, i) => ({ id: String.fromCharCode(97 + i), type: 'paragraph' }));
 
 /** Run a drop through resolveMove + applyMove and return the resulting order. */
 function drop(count, draggedId, targetId, edge) {
@@ -14,7 +20,10 @@ function drop(count, draggedId, targetId, edge) {
   const blocks = arr.toArray();
   const m = resolveMove(blocks, draggedId, targetId, edge);
   if (m) applyMove(arr, m.from, m.to);
-  return arr.toArray().map((b) => b.id).join('');
+  return arr
+    .toArray()
+    .map((b) => b.id)
+    .join('');
 }
 
 // a b c d
@@ -42,23 +51,43 @@ function nudge(count, id, dir) {
   arr.push(ids(count));
   const m = resolveNudge(arr.toArray(), id, dir);
   if (m) applyMove(arr, m.from, m.to);
-  return arr.toArray().map((b) => b.id).join('');
+  return arr
+    .toArray()
+    .map((b) => b.id)
+    .join('');
 }
 ck('nudge b up    -> bacd', nudge(4, 'b', -1) === 'bacd');
 ck('nudge a down  -> bacd', nudge(4, 'a', 1) === 'bacd');
 ck('nudge c down  -> abdc', nudge(4, 'c', 1) === 'abdc');
 ck('nudge d down clamps', nudge(4, 'd', 1) === 'abcd');
 ck('nudge a up clamps', nudge(4, 'a', -1) === 'abcd');
-ck('nudge round-trips', (() => { const d=new Y.Doc(); const a=d.getArray('b'); a.push(ids(4));
-  let m=resolveNudge(a.toArray(),'a',1); applyMove(a,m.from,m.to);
-  m=resolveNudge(a.toArray(),'a',-1); applyMove(a,m.from,m.to);
-  return a.toArray().map(x=>x.id).join(''); })() === 'abcd');
+ck(
+  'nudge round-trips',
+  (() => {
+    const d = new Y.Doc();
+    const a = d.getArray('b');
+    a.push(ids(4));
+    let m = resolveNudge(a.toArray(), 'a', 1);
+    applyMove(a, m.from, m.to);
+    m = resolveNudge(a.toArray(), 'a', -1);
+    applyMove(a, m.from, m.to);
+    return a
+      .toArray()
+      .map((x) => x.id)
+      .join('');
+  })() === 'abcd',
+);
 
 // Every permutation of drop must preserve the exact set of blocks.
-for (const from of 'abcd') for (const to of 'abcd') for (const e of ['above','below']) {
-  const r = drop(4, from, to, e);
-  if ([...r].sort().join('') !== 'abcd') { console.log(`FAIL  lost/duplicated block: ${from}->${to} ${e} = ${r}`); fail++; }
-}
+for (const from of 'abcd')
+  for (const to of 'abcd')
+    for (const e of ['above', 'below']) {
+      const r = drop(4, from, to, e);
+      if ([...r].sort().join('') !== 'abcd') {
+        console.log(`FAIL  lost/duplicated block: ${from}->${to} ${e} = ${r}`);
+        fail++;
+      }
+    }
 
 // A moved block must keep its own rich-text fragment.
 const d = new Y.Doc();
@@ -67,8 +96,17 @@ arr.push(ids(3));
 d.getXmlFragment('block-a').insert(0, [new Y.XmlText('content of a')]);
 const m = resolveMove(arr.toArray(), 'a', 'c', 'below');
 applyMove(arr, m.from, m.to);
-ck('moved block keeps its fragment', d.getXmlFragment('block-a').toString().includes('content of a'));
-ck('order after fragment move', arr.toArray().map(b=>b.id).join('') === 'bca');
+ck(
+  'moved block keeps its fragment',
+  d.getXmlFragment('block-a').toString().includes('content of a'),
+);
+ck(
+  'order after fragment move',
+  arr
+    .toArray()
+    .map((b) => b.id)
+    .join('') === 'bca',
+);
 
 // Shift+Enter inserts directly below the current block (DocumentEditor's
 // handleInsertBelow: find the index, insert at index + 1).
@@ -78,7 +116,10 @@ function insertBelow(count, afterId) {
   arr.push(ids(count));
   const i = arr.toArray().findIndex((b) => b.id === afterId);
   arr.insert(i + 1, [{ id: 'n', type: 'paragraph' }]);
-  return arr.toArray().map((b) => b.id).join('');
+  return arr
+    .toArray()
+    .map((b) => b.id)
+    .join('');
 }
 ck('insert below first block', insertBelow(3, 'a') === 'anbc');
 ck('insert below middle block', insertBelow(3, 'b') === 'abnc');

@@ -81,7 +81,10 @@ export const { useSession, signOut } = authClient;
  * Passing the ID token signs in directly and hands back a bearer token.
  */
 export async function signInWithGoogleIdToken(idToken: string) {
-  const result = await authClient.signIn.social({ provider: 'google', idToken: { token: idToken } });
+  const result = await authClient.signIn.social({
+    provider: 'google',
+    idToken: { token: idToken },
+  });
   if (result.error) throw new Error(result.error.message ?? 'Google sign-in failed');
   return result;
 }

@@ -20,7 +20,10 @@ const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -28,17 +31,20 @@ const H = (t, extra) => authHeaders(t, extra);
 
 const create = (token, title, parentId) =>
   fetch(`${API}/api/documents`, {
-    method: 'POST', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'POST',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ title, ...(parentId ? { parentId } : {}) }),
   }).then((r) => r.json());
 
 const search = (token, q) =>
-  fetch(`${API}/api/documents/search?q=${encodeURIComponent(q)}`, { headers: H(token) })
-    .then((r) => r.json());
+  fetch(`${API}/api/documents/search?q=${encodeURIComponent(q)}`, { headers: H(token) }).then((r) =>
+    r.json(),
+  );
 
 const setVisibility = (token, id, visibility) =>
   fetch(`${API}/api/documents/${id}/visibility`, {
-    method: 'PATCH', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'PATCH',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ visibility }),
   });
 
@@ -46,7 +52,11 @@ const setVisibility = (token, id, visibility) =>
 async function writeBody(docId, text) {
   const doc = new Y.Doc();
   const provider = new HocuspocusProvider({
-    url: WS, name: `doc:${docId}`, document: doc, token: owner, onAuthenticationFailed: () => {},
+    url: WS,
+    name: `doc:${docId}`,
+    document: doc,
+    token: owner,
+    onAuthenticationFailed: () => {},
   });
   await new Promise((res) => provider.on('synced', () => res()));
   await sleep(300);
@@ -70,12 +80,18 @@ const NEEDLE = `zorblat${Date.now()}`;
 // --- title search -----------------------------------------------------------
 const titled = await create(owner, `Quarterly ${NEEDLE} report`);
 let hits = await search(owner, NEEDLE);
-ck('a title match is found', hits.some((h) => h.document.id === titled.id));
+ck(
+  'a title match is found',
+  hits.some((h) => h.document.id === titled.id),
+);
 ck('the hit carries the full document', hits[0]?.document?.visibility === 'private');
 
 // --- prefix matching, so results narrow as you type -------------------------
 hits = await search(owner, NEEDLE.slice(0, 10));
-ck('a partial word still matches (prefix search)', hits.some((h) => h.document.id === titled.id));
+ck(
+  'a partial word still matches (prefix search)',
+  hits.some((h) => h.document.id === titled.id),
+);
 
 // --- body search ------------------------------------------------------------
 const bodied = await create(owner, 'Ordinary title');
@@ -89,7 +105,8 @@ ck('the snippet marks the match for highlighting', (bodyHit?.snippet ?? '').incl
 // --- ranking ----------------------------------------------------------------
 ck(
   'a title match outranks a body match',
-  hits.findIndex((h) => h.document.id === titled.id) < hits.findIndex((h) => h.document.id === bodied.id),
+  hits.findIndex((h) => h.document.id === titled.id) <
+    hits.findIndex((h) => h.document.id === bodied.id),
 );
 
 // --- the path, so a buried result says where it lives -----------------------
@@ -98,14 +115,26 @@ const child = await create(owner, `Child ${NEEDLE}-deep`, parent.id);
 hits = await search(owner, `${NEEDLE}`);
 const childHit = hits.find((h) => h.document.id === child.id);
 ck('a nested result is found', Boolean(childHit));
-ck('it carries its ancestor path', childHit?.path?.length === 1 && childHit.path[0].id === parent.id);
-ck('the path is ordered root first', (hits.find((h) => h.document.id === parent.id)?.path ?? []).length === 0);
+ck(
+  'it carries its ancestor path',
+  childHit?.path?.length === 1 && childHit.path[0].id === parent.id,
+);
+ck(
+  'the path is ordered root first',
+  (hits.find((h) => h.document.id === parent.id)?.path ?? []).length === 0,
+);
 
 // --- visibility: the load-bearing part --------------------------------------
-ck('a stranger cannot find a private document', !(await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id));
+ck(
+  'a stranger cannot find a private document',
+  !(await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id),
+);
 
 await setVisibility(owner, titled.id, 'public');
-ck('made public, a stranger can find it', (await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id));
+ck(
+  'made public, a stranger can find it',
+  (await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id),
+);
 
 // A public child under a private parent must stay unreachable — the same
 // ancestor gate the listing and the collab handshake use.
@@ -117,7 +146,10 @@ ck(
 
 // --- deleted documents drop out ---------------------------------------------
 await fetch(`${API}/api/documents/${titled.id}`, { method: 'DELETE', headers: H(owner) });
-ck('a deleted document leaves the index', !(await search(owner, NEEDLE)).some((h) => h.document.id === titled.id));
+ck(
+  'a deleted document leaves the index',
+  !(await search(owner, NEEDLE)).some((h) => h.document.id === titled.id),
+);
 
 // --- degenerate queries -----------------------------------------------------
 ck('an empty query returns nothing rather than everything', (await search(owner, '')).length === 0);

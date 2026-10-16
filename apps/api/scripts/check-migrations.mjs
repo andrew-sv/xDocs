@@ -24,7 +24,9 @@ if (!url) {
   process.exit(2);
 }
 
-const files = readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
+const files = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith('.sql'))
+  .sort();
 
 const client = new pg.Client({ connectionString: url });
 await client.connect();

@@ -20,7 +20,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const session = await signInForTests(API);
 const H = (token, extra) => authHeaders(token, extra);
@@ -28,7 +31,8 @@ const H = (token, extra) => authHeaders(token, extra);
 /** Keys are created over REST, exactly as a person would in the app. */
 async function mintKey(sessionToken, name) {
   const res = await fetch(`${API}/api/keys`, {
-    method: 'POST', headers: H(sessionToken, { 'content-type': 'application/json' }),
+    method: 'POST',
+    headers: H(sessionToken, { 'content-type': 'application/json' }),
     body: JSON.stringify({ name }),
   });
   return res.json();
@@ -63,14 +67,23 @@ ck(
   names.join(',') ===
     'append_to_document,create_document,list_documents,move_document,read_document,replace_document_content,search_documents,set_document_visibility',
 );
-ck('reads are annotated read-only', tools.find((t) => t.name === 'read_document')?.annotations?.readOnlyHint === true);
-ck('writes are not', tools.find((t) => t.name === 'create_document')?.annotations?.readOnlyHint !== true);
+ck(
+  'reads are annotated read-only',
+  tools.find((t) => t.name === 'read_document')?.annotations?.readOnlyHint === true,
+);
+ck(
+  'writes are not',
+  tools.find((t) => t.name === 'create_document')?.annotations?.readOnlyHint !== true,
+);
 ck(
   'replacing content is flagged destructive',
   tools.find((t) => t.name === 'replace_document_content')?.annotations?.destructiveHint === true,
 );
 ck('no deletion tool is exposed', !names.includes('delete_document'));
-ck('tools carry input schemas', Boolean(tools.find((t) => t.name === 'read_document')?.inputSchema));
+ck(
+  'tools carry input schemas',
+  Boolean(tools.find((t) => t.name === 'read_document')?.inputSchema),
+);
 
 // --- create and read back ---------------------------------------------------
 const NEEDLE = `zorblat${Date.now()}`;
@@ -90,48 +103,79 @@ ck('structured content carries the blocks', read.structuredContent?.blocks?.leng
 ck('and the title', read.structuredContent?.title === `MCP ${NEEDLE}`);
 
 // It is a real document, not something only MCP can see.
-const overRest = await fetch(`${API}/api/documents/${id}`, { headers: H(session) }).then((r) => r.json());
+const overRest = await fetch(`${API}/api/documents/${id}`, { headers: H(session) }).then((r) =>
+  r.json(),
+);
 ck('the document exists over REST too', overRest.id === id);
 
 // --- append and replace -----------------------------------------------------
 await call(client, 'append_to_document', { id, blocks: ['Appended line.'] });
 const afterAppend = await call(client, 'read_document', { id });
 ck('append adds without replacing', afterAppend.structuredContent.blocks.length === 3);
-ck('and keeps the original first block', afterAppend.structuredContent.blocks[0] === 'First paragraph from MCP.');
+ck(
+  'and keeps the original first block',
+  afterAppend.structuredContent.blocks[0] === 'First paragraph from MCP.',
+);
 
-await call(client, 'replace_document_content', { id, blocks: ['Only this now.'], title: 'Replaced by MCP' });
+await call(client, 'replace_document_content', {
+  id,
+  blocks: ['Only this now.'],
+  title: 'Replaced by MCP',
+});
 const afterReplace = await call(client, 'read_document', { id });
-ck('replace removes what was there', afterReplace.structuredContent.blocks.join('|') === 'Only this now.');
+ck(
+  'replace removes what was there',
+  afterReplace.structuredContent.blocks.join('|') === 'Only this now.',
+);
 ck('and can set the title', afterReplace.structuredContent.title === 'Replaced by MCP');
 
 // --- code blocks ------------------------------------------------------------
 const diagram = '+---+\n|   |  keeps its indentation\n+---+';
-const codeAppend = await call(client, 'append_to_document', { id, blocks: [{ type: 'code', text: diagram }] });
+const codeAppend = await call(client, 'append_to_document', {
+  id,
+  blocks: [{ type: 'code', text: diagram }],
+});
 ck('a code block can be written', !codeAppend.isError);
 const afterCode = await call(client, 'read_document', { id });
 ck('it is one block, not one per line', afterCode.structuredContent.blocks.length === 2);
 ck(
   'structured content gives it back in the shape the tools take',
-  JSON.stringify(afterCode.structuredContent.blocks[1]) === JSON.stringify({ type: 'code', text: diagram }),
+  JSON.stringify(afterCode.structuredContent.blocks[1]) ===
+    JSON.stringify({ type: 'code', text: diagram }),
 );
-ck('and the text result shows it fenced', text(afterCode).includes(`2. \`\`\`\n${diagram}\n\`\`\``));
+ck(
+  'and the text result shows it fenced',
+  text(afterCode).includes(`2. \`\`\`\n${diagram}\n\`\`\``),
+);
 // So a read can be passed straight back to a write.
 await call(client, 'replace_document_content', { id, blocks: afterCode.structuredContent.blocks });
 const rewritten = await call(client, 'read_document', { id });
 ck(
   'a read round-trips through replace unchanged',
-  JSON.stringify(rewritten.structuredContent.blocks) === JSON.stringify(afterCode.structuredContent.blocks),
+  JSON.stringify(rewritten.structuredContent.blocks) ===
+    JSON.stringify(afterCode.structuredContent.blocks),
 );
 // --- links ---------------------------------------------------------------------
-await call(client, 'replace_document_content', { id, blocks: ['Read [the docs](https://example.com/docs) first.'] });
+await call(client, 'replace_document_content', {
+  id,
+  blocks: ['Read [the docs](https://example.com/docs) first.'],
+});
 const withLink = await call(client, 'read_document', { id });
-ck('a link written through MCP comes back in the same notation',
-  withLink.structuredContent.blocks[0] === 'Read [the docs](https://example.com/docs) first.');
-const refusedLink = await call(client, 'append_to_document', { id, blocks: ['[no](javascript:alert(1))'] });
+ck(
+  'a link written through MCP comes back in the same notation',
+  withLink.structuredContent.blocks[0] === 'Read [the docs](https://example.com/docs) first.',
+);
+const refusedLink = await call(client, 'append_to_document', {
+  id,
+  blocks: ['[no](javascript:alert(1))'],
+});
 ck('a link the editor could not open is refused', refusedLink.isError === true);
 ck('and the refusal explains itself', /not a link/i.test(text(refusedLink)));
 
-const badBlock = await call(client, 'append_to_document', { id, blocks: [{ type: 'heading', text: 'x' }] });
+const badBlock = await call(client, 'append_to_document', {
+  id,
+  blocks: [{ type: 'heading', text: 'x' }],
+});
 ck('an unknown block type is rejected', badBlock.isError === true);
 
 // --- listing and search -----------------------------------------------------
@@ -167,7 +211,8 @@ ck('and the refusal is readable, not a stack trace', /invalid|cannot|refused/i.t
 await call(client, 'set_document_visibility', { id, visibility: 'public' });
 ck(
   'visibility changes reach the API',
-  (await fetch(`${API}/api/documents/${id}`, { headers: H(session) }).then((r) => r.json())).visibility === 'public',
+  (await fetch(`${API}/api/documents/${id}`, { headers: H(session) }).then((r) => r.json()))
+    .visibility === 'public',
 );
 
 // --- errors a model has to act on -------------------------------------------
@@ -183,13 +228,16 @@ const stranger = await createDisposableUser(API);
 const strangerKey = await mintKey(stranger.token, 'stranger key');
 const strangerClient = await connect(strangerKey.key);
 const privateDoc = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: H(session, { 'content-type': 'application/json' }),
+  method: 'POST',
+  headers: H(session, { 'content-type': 'application/json' }),
   body: JSON.stringify({ title: 'Private to the owner' }),
 }).then((r) => r.json());
 
 const denied = await call(strangerClient, 'read_document', { id: privateDoc.id });
 ck("another user's key cannot read a private document", denied.isError === true);
-const strangerSearch = await call(strangerClient, 'search_documents', { query: 'Private to the owner' });
+const strangerSearch = await call(strangerClient, 'search_documents', {
+  query: 'Private to the owner',
+});
 ck('nor find it by searching', !text(strangerSearch).includes(privateDoc.id));
 await strangerClient.close();
 

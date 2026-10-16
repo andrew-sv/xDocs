@@ -1,4 +1,13 @@
-import { addBlock, blockEditor, blocks, expect, openDocument, seedSession, test, typeInBlock } from './fixtures';
+import {
+  addBlock,
+  blockEditor,
+  blocks,
+  expect,
+  openDocument,
+  seedSession,
+  test,
+  typeInBlock,
+} from './fixtures';
 import type { Page } from '@playwright/test';
 
 /** Rows of the first table in a block, as cell texts. */
@@ -23,7 +32,10 @@ async function insertTable(page: Page, index: number) {
 }
 
 test.describe('tables (#50)', () => {
-  test('a table inserted into an empty block replaces it, with a header row', async ({ page, doc }) => {
+  test('a table inserted into an empty block replaces it, with a header row', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await insertTable(page, 0);
 
@@ -43,18 +55,32 @@ test.describe('tables (#50)', () => {
       await page.keyboard.type(word);
       await page.keyboard.press('Tab');
     }
-    await expect.poll(() => tableCells(page, 0)).toEqual([['a', 'b', 'c'], ['d', '', ''], ['', '', '']]);
+    await expect
+      .poll(() => tableCells(page, 0))
+      .toEqual([
+        ['a', 'b', 'c'],
+        ['d', '', ''],
+        ['', '', ''],
+      ]);
 
     // Moving into a cell selects what is in it, so typing replaces it.
     await page.keyboard.press('Shift+Tab');
     await page.keyboard.type('D');
-    await expect.poll(() => tableCells(page, 0)).toEqual([['a', 'b', 'c'], ['D', '', ''], ['', '', '']]);
+    await expect
+      .poll(() => tableCells(page, 0))
+      .toEqual([
+        ['a', 'b', 'c'],
+        ['D', '', ''],
+        ['', '', ''],
+      ]);
 
     // Into the last cell, then once more.
     for (let i = 0; i < 6; i++) await page.keyboard.press('Tab');
     await expect(blockEditor(page, 0).locator('tr')).toHaveCount(4);
     // Focus stayed in the editor, in the new row.
-    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(
+      true,
+    );
   });
 
   test('the toolbar adds and deletes rows and columns, and the table', async ({ page, doc }) => {
@@ -107,22 +133,40 @@ test.describe('tables (#50)', () => {
 
       await insertTable(pageA, 0);
       await pageA.keyboard.type('from A');
-      await expect.poll(() => tableCells(pageB, 0)).toEqual([['from A', '', ''], ['', '', ''], ['', '', '']]);
+      await expect
+        .poll(() => tableCells(pageB, 0))
+        .toEqual([
+          ['from A', '', ''],
+          ['', '', ''],
+          ['', '', ''],
+        ]);
 
       // B edits a different cell of the same table; A sees it.
       await blockEditor(pageB, 0).locator('td').first().click();
       await pageB.keyboard.type('from B');
-      await expect.poll(() => tableCells(pageA, 0)).toEqual([['from A', '', ''], ['from B', '', ''], ['', '', '']]);
+      await expect
+        .poll(() => tableCells(pageA, 0))
+        .toEqual([
+          ['from A', '', ''],
+          ['from B', '', ''],
+          ['', '', ''],
+        ]);
 
       await pageA.reload();
-      await expect.poll(() => tableCells(pageA, 0)).toEqual([['from A', '', ''], ['from B', '', ''], ['', '', '']]);
+      await expect
+        .poll(() => tableCells(pageA, 0))
+        .toEqual([
+          ['from A', '', ''],
+          ['from B', '', ''],
+          ['', '', ''],
+        ]);
     } finally {
       await contextA.close();
       await contextB.close();
     }
   });
 
-  test("the table controls stay clear of the middle of the block above", async ({ page, doc }) => {
+  test('the table controls stay clear of the middle of the block above', async ({ page, doc }) => {
     // See the toolbar note in CLAUDE.md: it floats over the block above, and a
     // button over that block's middle swallows clicks meant for its text.
     await openDocument(page, doc);

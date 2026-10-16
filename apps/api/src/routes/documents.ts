@@ -25,7 +25,12 @@ import {
   visibleTreeSql,
   wouldCreateCycle,
 } from '../db/access.js';
-import { notifyDocumentsChanged, readTitle, withDirectConnection, withDocument } from '../collab.js';
+import {
+  notifyDocumentsChanged,
+  readTitle,
+  withDirectConnection,
+  withDocument,
+} from '../collab.js';
 import { CODE_BLOCK_NODE, readContent } from '../content.js';
 import { linkProblem, parseLinks, writeRuns } from '../markdownLinks.js';
 import { getDb } from '../db/index.js';
@@ -87,7 +92,13 @@ async function childBearing(ids: string[]): Promise<Set<string>> {
   const rows = await getDb()
     .selectDistinct({ parentId: documents.parentId })
     .from(documents)
-    .where(and(isNull(documents.deletedAt), isNotNull(documents.parentId), inArray(documents.parentId, ids)));
+    .where(
+      and(
+        isNull(documents.deletedAt),
+        isNotNull(documents.parentId),
+        inArray(documents.parentId, ids),
+      ),
+    );
   return new Set(rows.map((row) => row.parentId!).filter(Boolean));
 }
 
@@ -173,7 +184,10 @@ async function ancestorPaths(ids: string[], userId: string): Promise<Map<string,
     WITH RECURSIVE up AS (
       SELECT id AS match_id, id, parent_id, title, visibility, created_by, created_at, updated_at, 0 AS depth
         FROM documents
-       WHERE id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+       WHERE id IN (${sql.join(
+         ids.map((id) => sql`${id}`),
+         sql`, `,
+       )})
       UNION ALL
       SELECT u.match_id, d.id, d.parent_id, d.title, d.visibility, d.created_by, d.created_at, d.updated_at, u.depth + 1
         FROM documents d
@@ -356,7 +370,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (rows.length === 0) return c.json([]);
 
     const withChildren = await childBearing(rows.map((row) => row.id));
-    const paths = await ancestorPaths(rows.map((row) => row.id), userId);
+    const paths = await ancestorPaths(
+      rows.map((row) => row.id),
+      userId,
+    );
 
     const results: SearchResultDTO[] = rows.map((row) => ({
       document: toDTO(fromSql(row), userId, withChildren.has(row.id)),
@@ -424,9 +441,12 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const [owned] = await getDb()
       .select({ id: documents.id })
       .from(documents)
-      .where(and(eq(documents.id, id), eq(documents.createdBy, userId), isNotNull(documents.deletedAt)));
+      .where(
+        and(eq(documents.id, id), eq(documents.createdBy, userId), isNotNull(documents.deletedAt)),
+      );
     // Only something already in the trash can be destroyed — never a live one.
-    if (!owned) return c.json({ error: 'Only the owner can permanently delete a trashed document.' }, 403);
+    if (!owned)
+      return c.json({ error: 'Only the owner can permanently delete a trashed document.' }, 403);
 
     const ids = await subtreeIds(id);
     await getDb().delete(documents).where(inArray(documents.id, ids));
@@ -582,7 +602,8 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     // 404 for a document you cannot see, 403 for one you can but do not own —
     // the same split the other owner-only routes use.
     if (!(await canAccessDocument(userId, id))) return c.json({ error: 'Document not found' }, 404);
-    if (row.createdBy !== userId) return c.json({ error: 'Only the owner can move a document' }, 403);
+    if (row.createdBy !== userId)
+      return c.json({ error: 'Only the owner can move a document' }, 403);
 
     if (parentId) {
       if (!(await canAccessDocument(userId, parentId))) {
@@ -628,7 +649,13 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const [row] = await getDb()
       .update(documents)
       .set({ visibility: body.data.visibility })
-      .where(and(eq(documents.id, c.req.param('id')), eq(documents.createdBy, userId), isNull(documents.deletedAt)))
+      .where(
+        and(
+          eq(documents.id, c.req.param('id')),
+          eq(documents.createdBy, userId),
+          isNull(documents.deletedAt),
+        ),
+      )
       .returning(columns);
     if (!row) return c.json({ error: 'Only the owner can change visibility.' }, 403);
     const withChildren = await childBearing([row.id]);
@@ -642,7 +669,9 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const [owned] = await getDb()
       .select({ id: documents.id })
       .from(documents)
-      .where(and(eq(documents.id, id), eq(documents.createdBy, userId), isNull(documents.deletedAt)));
+      .where(
+        and(eq(documents.id, id), eq(documents.createdBy, userId), isNull(documents.deletedAt)),
+      );
     if (!owned) return c.json({ error: 'Only the owner can delete this document.' }, 403);
 
     /*
@@ -667,7 +696,8 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       .select({ id: documents.id, deletedAt: documents.deletedAt })
       .from(documents)
       .where(and(eq(documents.id, id), eq(documents.createdBy, userId)));
-    if (!target?.deletedAt) return c.json({ error: 'Only the owner can restore this document.' }, 403);
+    if (!target?.deletedAt)
+      return c.json({ error: 'Only the owner can restore this document.' }, 403);
 
     // Everything that went with it: same subtree, same deletion timestamp.
     const ids = await subtreeIds(id);

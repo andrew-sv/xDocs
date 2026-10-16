@@ -78,8 +78,8 @@ export function MoveDialog({ document, candidates, loading, onMove, onCancel }: 
       >
         <h2 className="dialog-title">Move “{document.title || 'Untitled'}”</h2>
         <p className="dialog-message">
-          Its sub-documents move with it. Visibility is unchanged — a public
-          document under a private parent stops being visible to others.
+          Its sub-documents move with it. Visibility is unchanged — a public document under a
+          private parent stops being visible to others.
         </p>
 
         <input
@@ -127,7 +127,12 @@ export function MoveDialog({ document, candidates, loading, onMove, onCancel }: 
         </ul>
 
         <div className="dialog-actions">
-          <button type="button" className="dialog-cancel" data-testid="move-cancel" onClick={onCancel}>
+          <button
+            type="button"
+            className="dialog-cancel"
+            data-testid="move-cancel"
+            onClick={onCancel}
+          >
             Cancel
           </button>
         </div>

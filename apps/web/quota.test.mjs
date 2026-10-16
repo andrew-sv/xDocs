@@ -8,12 +8,18 @@
 import { formatBytes, quotaRefusal } from '@xdocs/shared';
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const MB = 1024 * 1024;
 
 ck('an upload well inside the quota is allowed', quotaRefusal(10 * MB, 1 * MB, 200 * MB) === null);
-ck('an upload landing exactly on the limit is allowed', quotaRefusal(199 * MB, 1 * MB, 200 * MB) === null);
+ck(
+  'an upload landing exactly on the limit is allowed',
+  quotaRefusal(199 * MB, 1 * MB, 200 * MB) === null,
+);
 ck('one byte past the limit is refused', quotaRefusal(199 * MB, 1 * MB + 1, 200 * MB) !== null);
 ck('a first upload into an empty store is allowed', quotaRefusal(0, 5 * MB, 200 * MB) === null);
 ck('a file larger than the whole quota is refused', quotaRefusal(0, 500 * MB, 200 * MB) !== null);

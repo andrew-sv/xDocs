@@ -39,7 +39,6 @@ import { VersionHistory } from './VersionHistory';
 import { VisibilityToggle } from './VisibilityToggle';
 import { Toast } from './Toast';
 
-
 type Status = 'connecting' | 'connected' | 'disconnected';
 
 type Props = {
@@ -55,7 +54,14 @@ type Props = {
 
 function DocIcon() {
   return (
-    <svg width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" aria-hidden="true">
+    <svg
+      width="14"
+      height="16"
+      viewBox="0 0 14 16"
+      fill="none"
+      stroke="currentColor"
+      aria-hidden="true"
+    >
       <path d="M2.5 1.5h6l3 3v10h-9z M8.5 1.5v3h3" strokeLinejoin="round" />
     </svg>
   );
@@ -110,13 +116,10 @@ export function DocumentEditor({
    * composer and the thread would both be behind a fold — pressing 💬 would
    * appear to do nothing at all.
    */
-  const showInRail = useCallback(
-    (threadId: string | null) => {
-      setRailCollapsed(false);
-      setActiveThreadId(threadId);
-    },
-    [],
-  );
+  const showInRail = useCallback((threadId: string | null) => {
+    setRailCollapsed(false);
+    setActiveThreadId(threadId);
+  }, []);
   /*
    * A thread being written but not yet created.
    *
@@ -124,9 +127,11 @@ export function DocumentEditor({
    * leave no trace, and an empty thread would already be a highlight on
    * everyone else's screen with nothing behind it.
    */
-  const [pendingThread, setPendingThread] = useState<
-    { blockId: string; quote: string; apply: (threadId: string) => void } | null
-  >(null);
+  const [pendingThread, setPendingThread] = useState<{
+    blockId: string;
+    quote: string;
+    apply: (threadId: string) => void;
+  } | null>(null);
 
   const [status, setStatus] = useState<Status>('connecting');
   const [synced, setSynced] = useState(false);
@@ -222,10 +227,11 @@ export function DocumentEditor({
       setReferenced([]);
       return;
     }
-    const read = () => setReferenced((prev) => {
-      const next = attachmentIdsIn(ydoc);
-      return next.join(',') === prev.join(',') ? prev : next;
-    });
+    const read = () =>
+      setReferenced((prev) => {
+        const next = attachmentIdsIn(ydoc);
+        return next.join(',') === prev.join(',') ? prev : next;
+      });
     read();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const onUpdate = () => {
@@ -488,150 +494,154 @@ export function DocumentEditor({
    */
   return (
     <div className="workspace">
-    <main className="editor">
-      <header className="editor-header">
-        {synced && titleText ? (
-          <TitleEditor title={titleText} onChange={handleTitleChange} />
-        ) : (
-          // Until the CRDT has synced its Y.Text is empty, which would render as
-          // the "Untitled" placeholder. Show the title the list already knows
-          // from REST, with a spinner, rather than flashing a wrong name.
-          <span className="title-loading" data-testid="title-loading">
-            <span className="title-name">{doc.title}</span>
-            <span className="spinner" role="status" aria-label="Loading document" />
-          </span>
-        )}
-        <VisibilityToggle
-          visibility={doc.visibility}
-          isOwner={doc.isOwner}
-          onChange={(next) => onVisibilityChange(doc.id, next)}
-        />
-        <Collaborators people={others} />
-        <button
-          type="button"
-          className="header-button"
-          data-testid="history-open"
-          title="Earlier versions of this document"
-          onClick={() => setHistoryOpen(true)}
-        >
-          History
-        </button>
-        <span className={`status status-${status}`}>
-          {status === 'connected' && synced ? 'Live' : status === 'connected' ? 'Syncing…' : status}
-        </span>
-      </header>
-
-      {synced && provider && ydoc && undoManager && (
-        <>
-          <div className={draggingId ? 'blocks dragging' : 'blocks'}>
-            {blocks.map((block) => (
-              <BlockEditor
-                key={block.id}
-                block={block}
-                ydoc={ydoc}
-                provider={provider}
-                me={me}
-                canRemove={blocks.length > 1}
-                onRemove={() => removeBlock(block.id)}
-                autoFocus={block.id === pendingFocusId}
-                onAutoFocusHandled={clearPendingFocus}
-                canReorder={blocks.length > 1}
-                isDragging={block.id === draggingId}
-                dropEdge={dropTarget?.id === block.id ? dropTarget.edge : null}
-                onDragStart={setDraggingId}
-                onDragEnd={endDrag}
-                onDragOverBlock={handleDragOverBlock}
-                onDropBlock={handleDrop}
-                onNudge={handleNudge}
-                undoManager={undoManager}
-                documentId={doc.id}
-                onAttached={() => setFilesKey((key) => key + 1)}
-                onInsertBelow={handleInsertBelow}
-                onRunCommand={(id) => void runCommand(id)}
-                registerEditor={registerEditor}
-                onComment={startThread}
-                onActivateThread={(threadId) => {
-                  setPendingThread(null);
-                  showInRail(threadId);
-                }}
-              />
-            ))}
-          </div>
-          <div className="block-actions">
-          <button
-            type="button"
-            className="add-block"
-            data-testid="add-block"
-            // Without this, mousedown blurs the editor, the focused block's
-            // toolbar unmounts, the layout shifts up and the button slides out
-            // from under the pointer before mouseup — so the first click only
-            // ever exited edit mode and a second was needed to actually add.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => addBlock()}
-          >
-            + Add paragraph
-          </button>
-          <button
-            type="button"
-            className="add-block add-document"
-            data-testid="add-document"
-            // Same reason as the add-paragraph button: mousedown would blur the
-            // editor, unmount the toolbar and shift this out from under the
-            // pointer before mouseup.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={onAddSubDocument}
-          >
-            + Add document
-          </button>
-          </div>
-          <DocumentFiles documentId={doc.id} reloadKey={filesKey} referenced={referenced} />
-          {orderedSubDocuments.length > 0 && (
-            <nav className="sub-docs" data-testid="sub-docs" aria-label="Sub-documents">
-              <h2 className="sub-docs-title">Sub-documents</h2>
-              <ul className="sub-docs-list">
-                {orderedSubDocuments.map((child) => (
-                  <li key={child.id}>
-                    <button
-                      type="button"
-                      className="sub-doc-link"
-                      data-testid="sub-doc-link"
-                      onClick={() => onOpenSubDocument(child)}
-                    >
-                      <DocIcon />
-                      <span className="sub-doc-title">{child.title || 'Untitled'}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+      <main className="editor">
+        <header className="editor-header">
+          {synced && titleText ? (
+            <TitleEditor title={titleText} onChange={handleTitleChange} />
+          ) : (
+            // Until the CRDT has synced its Y.Text is empty, which would render as
+            // the "Untitled" placeholder. Show the title the list already knows
+            // from REST, with a spinner, rather than flashing a wrong name.
+            <span className="title-loading" data-testid="title-loading">
+              <span className="title-name">{doc.title}</span>
+              <span className="spinner" role="status" aria-label="Loading document" />
+            </span>
           )}
-        </>
+          <VisibilityToggle
+            visibility={doc.visibility}
+            isOwner={doc.isOwner}
+            onChange={(next) => onVisibilityChange(doc.id, next)}
+          />
+          <Collaborators people={others} />
+          <button
+            type="button"
+            className="header-button"
+            data-testid="history-open"
+            title="Earlier versions of this document"
+            onClick={() => setHistoryOpen(true)}
+          >
+            History
+          </button>
+          <span className={`status status-${status}`}>
+            {status === 'connected' && synced
+              ? 'Live'
+              : status === 'connected'
+                ? 'Syncing…'
+                : status}
+          </span>
+        </header>
+
+        {synced && provider && ydoc && undoManager && (
+          <>
+            <div className={draggingId ? 'blocks dragging' : 'blocks'}>
+              {blocks.map((block) => (
+                <BlockEditor
+                  key={block.id}
+                  block={block}
+                  ydoc={ydoc}
+                  provider={provider}
+                  me={me}
+                  canRemove={blocks.length > 1}
+                  onRemove={() => removeBlock(block.id)}
+                  autoFocus={block.id === pendingFocusId}
+                  onAutoFocusHandled={clearPendingFocus}
+                  canReorder={blocks.length > 1}
+                  isDragging={block.id === draggingId}
+                  dropEdge={dropTarget?.id === block.id ? dropTarget.edge : null}
+                  onDragStart={setDraggingId}
+                  onDragEnd={endDrag}
+                  onDragOverBlock={handleDragOverBlock}
+                  onDropBlock={handleDrop}
+                  onNudge={handleNudge}
+                  undoManager={undoManager}
+                  documentId={doc.id}
+                  onAttached={() => setFilesKey((key) => key + 1)}
+                  onInsertBelow={handleInsertBelow}
+                  onRunCommand={(id) => void runCommand(id)}
+                  registerEditor={registerEditor}
+                  onComment={startThread}
+                  onActivateThread={(threadId) => {
+                    setPendingThread(null);
+                    showInRail(threadId);
+                  }}
+                />
+              ))}
+            </div>
+            <div className="block-actions">
+              <button
+                type="button"
+                className="add-block"
+                data-testid="add-block"
+                // Without this, mousedown blurs the editor, the focused block's
+                // toolbar unmounts, the layout shifts up and the button slides out
+                // from under the pointer before mouseup — so the first click only
+                // ever exited edit mode and a second was needed to actually add.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => addBlock()}
+              >
+                + Add paragraph
+              </button>
+              <button
+                type="button"
+                className="add-block add-document"
+                data-testid="add-document"
+                // Same reason as the add-paragraph button: mousedown would blur the
+                // editor, unmount the toolbar and shift this out from under the
+                // pointer before mouseup.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onAddSubDocument}
+              >
+                + Add document
+              </button>
+            </div>
+            <DocumentFiles documentId={doc.id} reloadKey={filesKey} referenced={referenced} />
+            {orderedSubDocuments.length > 0 && (
+              <nav className="sub-docs" data-testid="sub-docs" aria-label="Sub-documents">
+                <h2 className="sub-docs-title">Sub-documents</h2>
+                <ul className="sub-docs-list">
+                  {orderedSubDocuments.map((child) => (
+                    <li key={child.id}>
+                      <button
+                        type="button"
+                        className="sub-doc-link"
+                        data-testid="sub-doc-link"
+                        onClick={() => onOpenSubDocument(child)}
+                      >
+                        <DocIcon />
+                        <span className="sub-doc-title">{child.title || 'Untitled'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            )}
+          </>
+        )}
+
+        {toast && <Toast message={toast.message} onUndo={runUndo} onDismiss={dismissToast} />}
+        {historyOpen && <VersionHistory documentId={doc.id} onClose={closeHistory} />}
+      </main>
+
+      {synced && (
+        <CommentsRail
+          threads={threads}
+          activeId={activeThreadId}
+          me={me}
+          pending={pendingThread ? { quote: pendingThread.quote } : null}
+          onSendPending={sendPendingThread}
+          onCancelPending={() => setPendingThread(null)}
+          onActivate={(id) => {
+            setPendingThread(null);
+            setActiveThreadId(id);
+          }}
+          collapsed={railCollapsed}
+          onToggleCollapsed={toggleRail}
+          onReply={replyToThread}
+          onEdit={editThreadComment}
+          onDelete={deleteThreadComment}
+          onResolve={resolveThread}
+        />
       )}
-
-      {toast && <Toast message={toast.message} onUndo={runUndo} onDismiss={dismissToast} />}
-      {historyOpen && <VersionHistory documentId={doc.id} onClose={closeHistory} />}
-    </main>
-
-    {synced && (
-      <CommentsRail
-        threads={threads}
-        activeId={activeThreadId}
-        me={me}
-        pending={pendingThread ? { quote: pendingThread.quote } : null}
-        onSendPending={sendPendingThread}
-        onCancelPending={() => setPendingThread(null)}
-        onActivate={(id) => {
-          setPendingThread(null);
-          setActiveThreadId(id);
-        }}
-        collapsed={railCollapsed}
-        onToggleCollapsed={toggleRail}
-        onReply={replyToThread}
-        onEdit={editThreadComment}
-        onDelete={deleteThreadComment}
-        onResolve={resolveThread}
-      />
-    )}
     </div>
   );
 }

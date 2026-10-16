@@ -14,12 +14,7 @@ import { XdocsClient, XdocsError, type XdocsClientOptions } from './client.js';
 
 const documentIdSchema = z.string().describe('The document id (a uuid).');
 const blocksSchema = z
-  .array(
-    z.union([
-      z.string(),
-      z.object({ type: z.literal('code'), text: z.string() }),
-    ]),
-  )
+  .array(z.union([z.string(), z.object({ type: z.literal('code'), text: z.string() })]))
   .describe(
     'Blocks, in order. A string is a paragraph; a newline inside one starts another paragraph block. ' +
       'Links are written as [label](https://example.com) and become real links; a backslash escapes a ' +
@@ -61,7 +56,10 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
       description:
         'Full-text search across document titles and body text. Returns matches with the path each one lives under and a snippet, best matches first.',
       inputSchema: z.object({
-        query: z.string().min(1).describe('Words to search for. The last word matches as a prefix.'),
+        query: z
+          .string()
+          .min(1)
+          .describe('Words to search for. The last word matches as a prefix.'),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -87,10 +85,13 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
     {
       title: 'List documents',
       description:
-        'List documents. By default the top level; pass parentId for one document\'s children, or flat: true for every document you can see at once.',
+        "List documents. By default the top level; pass parentId for one document's children, or flat: true for every document you can see at once.",
       inputSchema: z.object({
         parentId: z.string().nullish().describe('List the children of this document.'),
-        flat: z.boolean().optional().describe('Return the whole visible tree instead of one level.'),
+        flat: z
+          .boolean()
+          .optional()
+          .describe('Return the whole visible tree instead of one level.'),
       }),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -174,7 +175,8 @@ export function createXdocsServer(options: XdocsClientOptions): McpServer {
       // Destructive: it removes text someone may have written.
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
-    async ({ id, blocks, title }) => ok(describeContent(await client.replaceContent(id, blocks, title))),
+    async ({ id, blocks, title }) =>
+      ok(describeContent(await client.replaceContent(id, blocks, title))),
   );
 
   server.registerTool(

@@ -80,7 +80,12 @@ export function CommentComposer({
         }}
       />
       <div className="comment-actions">
-        <button type="button" className="comment-cancel" data-testid="comment-cancel" onClick={onCancel}>
+        <button
+          type="button"
+          className="comment-cancel"
+          data-testid="comment-cancel"
+          onClick={onCancel}
+        >
           Cancel
         </button>
         <button

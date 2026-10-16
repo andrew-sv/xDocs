@@ -47,7 +47,12 @@ export function TrashList({ entries, loading, onRestore, onPurge, onClose }: Pro
         )}
         {!loading &&
           entries.map((entry) => (
-            <li key={entry.id} className="doc trash-row" data-testid="trash-row" data-doc-id={entry.id}>
+            <li
+              key={entry.id}
+              className="doc trash-row"
+              data-testid="trash-row"
+              data-doc-id={entry.id}
+            >
               <div className="doc-open trash-entry">
                 <span className="doc-title">{entry.title || 'Untitled'}</span>
                 <span className="doc-meta">

@@ -19,7 +19,10 @@ const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -27,7 +30,8 @@ const H = (t, extra) => authHeaders(t, extra);
 
 const create = (token, title) =>
   fetch(`${API}/api/documents`, {
-    method: 'POST', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'POST',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ title }),
   }).then((r) => r.json());
 
@@ -35,17 +39,25 @@ const getContent = (token, id) =>
   fetch(`${API}/api/documents/${id}/content`, { headers: H(token) });
 const putContent = (token, id, body) =>
   fetch(`${API}/api/documents/${id}/content`, {
-    method: 'PUT', headers: H(token, { 'content-type': 'application/json' }), body: JSON.stringify(body),
+    method: 'PUT',
+    headers: H(token, { 'content-type': 'application/json' }),
+    body: JSON.stringify(body),
   });
 const postContent = (token, id, body) =>
   fetch(`${API}/api/documents/${id}/content`, {
-    method: 'POST', headers: H(token, { 'content-type': 'application/json' }), body: JSON.stringify(body),
+    method: 'POST',
+    headers: H(token, { 'content-type': 'application/json' }),
+    body: JSON.stringify(body),
   });
 
 function connect(docId, token) {
   const doc = new Y.Doc();
   const provider = new HocuspocusProvider({
-    url: WS, name: `doc:${docId}`, document: doc, token, onAuthenticationFailed: () => {},
+    url: WS,
+    name: `doc:${docId}`,
+    document: doc,
+    token,
+    onAuthenticationFailed: () => {},
   });
   return { doc, provider, synced: new Promise((res) => provider.on('synced', () => res())) };
 }
@@ -69,23 +81,38 @@ const doc = await create(owner, 'Bridge test');
 const initial = await getContent(owner, doc.id).then((r) => r.json());
 ck('a new document reads back with its title', initial.title === 'Bridge test');
 ck('and its seeded empty block', Array.isArray(initial.blocks) && initial.blocks.length === 1);
-ck('blocks carry ids and types', typeof initial.blocks[0].id === 'string' && initial.blocks[0].type === 'paragraph');
+ck(
+  'blocks carry ids and types',
+  typeof initial.blocks[0].id === 'string' && initial.blocks[0].type === 'paragraph',
+);
 
 // --- writing ----------------------------------------------------------------
-const written = await putContent(owner, doc.id, { title: 'Written by API', blocks: ['First line', 'Second line'] });
+const written = await putContent(owner, doc.id, {
+  title: 'Written by API',
+  blocks: ['First line', 'Second line'],
+});
 ck('content can be replaced', written.status === 200);
 const body = await written.json();
-ck('the response reflects the new blocks', body.blocks.map((b) => b.text).join('|') === 'First line|Second line');
+ck(
+  'the response reflects the new blocks',
+  body.blocks.map((b) => b.text).join('|') === 'First line|Second line',
+);
 ck('and the new title', body.title === 'Written by API');
 ck('replacing removes what was there', body.blocks.length === 2);
 
 const appended = await postContent(owner, doc.id, { blocks: ['Third line'] }).then((r) => r.json());
-ck('blocks can be appended', appended.blocks.map((b) => b.text).join('|') === 'First line|Second line|Third line');
+ck(
+  'blocks can be appended',
+  appended.blocks.map((b) => b.text).join('|') === 'First line|Second line|Third line',
+);
 
 // A block is one node, so an embedded newline becomes another block — the same
 // shape typing it would have produced.
 const multiline = await putContent(owner, doc.id, { blocks: ['One\nTwo'] }).then((r) => r.json());
-ck('a newline splits into separate blocks', multiline.blocks.map((b) => b.text).join('|') === 'One|Two');
+ck(
+  'a newline splits into separate blocks',
+  multiline.blocks.map((b) => b.text).join('|') === 'One|Two',
+);
 
 // --- it really goes through the CRDT ----------------------------------------
 const client = connect(doc.id, owner);
@@ -114,29 +141,65 @@ await sleep(600);
 
 const afterBoth = await getContent(owner, doc.id).then((r) => r.json());
 ck('a human edit is visible over REST', afterBoth.blocks[0].text === 'Typed by a person');
-ck('and the API-written blocks are still there', afterBoth.blocks.map((b) => b.text).includes('Added while connected'));
+ck(
+  'and the API-written blocks are still there',
+  afterBoth.blocks.map((b) => b.text).includes('Added while connected'),
+);
 
 client.provider.destroy();
 await flushStore(API, H(owner), doc.id);
 
 // --- persistence and the search mirror --------------------------------------
 const reread = await getContent(owner, doc.id).then((r) => r.json());
-ck('content survives every client disconnecting', reread.blocks.map((b) => b.text).includes('Added while connected'));
-const hits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent('Added while connected')}`, { headers: H(owner) }).then((r) => r.json());
-ck('API-written text is searchable once stored', hits.some((h) => h.document.id === doc.id));
+ck(
+  'content survives every client disconnecting',
+  reread.blocks.map((b) => b.text).includes('Added while connected'),
+);
+const hits = await fetch(
+  `${API}/api/documents/search?q=${encodeURIComponent('Added while connected')}`,
+  { headers: H(owner) },
+).then((r) => r.json());
+ck(
+  'API-written text is searchable once stored',
+  hits.some((h) => h.document.id === doc.id),
+);
 const listed = await fetch(`${API}/api/documents`, { headers: H(owner) }).then((r) => r.json());
-ck('an API-written title reaches the documents list', listed.find((d) => d.id === doc.id)?.title === 'Written by API');
+ck(
+  'an API-written title reaches the documents list',
+  listed.find((d) => d.id === doc.id)?.title === 'Written by API',
+);
 
 // --- access -----------------------------------------------------------------
-ck('a stranger cannot read a private document (404)', (await getContent(stranger, doc.id)).status === 404);
-ck('a stranger cannot write to it (404)', (await putContent(stranger, doc.id, { blocks: ['nope'] })).status === 404);
-ck('an unknown document is a 404', (await getContent(owner, '00000000-0000-0000-0000-000000000000')).status === 404);
+ck(
+  'a stranger cannot read a private document (404)',
+  (await getContent(stranger, doc.id)).status === 404,
+);
+ck(
+  'a stranger cannot write to it (404)',
+  (await putContent(stranger, doc.id, { blocks: ['nope'] })).status === 404,
+);
+ck(
+  'an unknown document is a 404',
+  (await getContent(owner, '00000000-0000-0000-0000-000000000000')).status === 404,
+);
 
 // --- validation --------------------------------------------------------------
-ck('a malformed body is a 400', (await putContent(owner, doc.id, { blocks: 'not an array' })).status === 400);
-ck('an over-long title is a 400', (await putContent(owner, doc.id, { title: 'x'.repeat(201), blocks: [] })).status === 400);
-ck('an empty block list is allowed (it empties the document)', (await putContent(owner, doc.id, { blocks: [] })).status === 200);
-ck('and the document is then empty', (await getContent(owner, doc.id).then((r) => r.json())).blocks.length === 0);
+ck(
+  'a malformed body is a 400',
+  (await putContent(owner, doc.id, { blocks: 'not an array' })).status === 400,
+);
+ck(
+  'an over-long title is a 400',
+  (await putContent(owner, doc.id, { title: 'x'.repeat(201), blocks: [] })).status === 400,
+);
+ck(
+  'an empty block list is allowed (it empties the document)',
+  (await putContent(owner, doc.id, { blocks: [] })).status === 200,
+);
+ck(
+  'and the document is then empty',
+  (await getContent(owner, doc.id).then((r) => r.json())).blocks.length === 0,
+);
 
 // --- code blocks --------------------------------------------------------------
 const codeDoc = await create(owner, 'Code block test');
@@ -159,7 +222,10 @@ const codeFragment = (index) =>
   codeClient.doc.getXmlFragment(`block-${codeClient.doc.getArray('blocks').get(index).id}`);
 // y-tiptap discards an element whose name the editor's schema does not know,
 // so the node name is the contract, not an implementation detail.
-ck('a client receives it as a TipTap codeBlock node', codeFragment(1).get(0)?.nodeName === 'codeBlock');
+ck(
+  'a client receives it as a TipTap codeBlock node',
+  codeFragment(1).get(0)?.nodeName === 'codeBlock',
+);
 ck('holding the text verbatim', textOf(codeClient.doc)[1] === diagram);
 
 // A code block made in the editor has the same shape, and "paragraph" meta.
@@ -182,24 +248,42 @@ await sleep(600);
 const reread2 = await getContent(owner, codeDoc.id).then((r) => r.json());
 ck('an editor-made code block reads as code', reread2.blocks[0].type === 'code');
 ck('with its text', reread2.blocks[0].text === 'made\n  in the editor');
-ck('a block mixing a paragraph and code reads as a paragraph', reread2.blocks[2].type === 'paragraph');
+ck(
+  'a block mixing a paragraph and code reads as a paragraph',
+  reread2.blocks[2].type === 'paragraph',
+);
 codeClient.provider.destroy();
 
-const codeAppended = await postContent(owner, codeDoc.id, { blocks: [{ type: 'code', text: 'appended()' }] })
-  .then((r) => r.json());
-ck('a code block can be appended', codeAppended.blocks.at(-1).type === 'code' && codeAppended.blocks.at(-1).text === 'appended()');
+const codeAppended = await postContent(owner, codeDoc.id, {
+  blocks: [{ type: 'code', text: 'appended()' }],
+}).then((r) => r.json());
+ck(
+  'a code block can be appended',
+  codeAppended.blocks.at(-1).type === 'code' && codeAppended.blocks.at(-1).text === 'appended()',
+);
 
-const emptyCode = await putContent(owner, codeDoc.id, { blocks: [{ type: 'code', text: '' }] }).then((r) => r.json());
-ck('an empty code block is still a code block', emptyCode.blocks.length === 1 && emptyCode.blocks[0].type === 'code');
+const emptyCode = await putContent(owner, codeDoc.id, {
+  blocks: [{ type: 'code', text: '' }],
+}).then((r) => r.json());
+ck(
+  'an empty code block is still a code block',
+  emptyCode.blocks.length === 1 && emptyCode.blocks[0].type === 'code',
+);
 
-const objectParagraph = await putContent(owner, codeDoc.id, { blocks: [{ type: 'paragraph', text: 'a\nb' }] })
-  .then((r) => r.json());
-ck('the object form of a paragraph splits on newlines like a string', objectParagraph.blocks.map((b) => b.text).join('|') === 'a|b');
+const objectParagraph = await putContent(owner, codeDoc.id, {
+  blocks: [{ type: 'paragraph', text: 'a\nb' }],
+}).then((r) => r.json());
+ck(
+  'the object form of a paragraph splits on newlines like a string',
+  objectParagraph.blocks.map((b) => b.text).join('|') === 'a|b',
+);
 
 // What a read returns can be written straight back.
 await putContent(owner, codeDoc.id, { blocks: ['prose', { type: 'code', text: 'a\n  b' }] });
 const roundTrip = await getContent(owner, codeDoc.id).then((r) => r.json());
-const rewritten = await putContent(owner, codeDoc.id, { blocks: roundTrip.blocks }).then((r) => r.json());
+const rewritten = await putContent(owner, codeDoc.id, { blocks: roundTrip.blocks }).then((r) =>
+  r.json(),
+);
 ck(
   'a read round-trips through a write unchanged',
   JSON.stringify(rewritten.blocks.map(({ type, text }) => [type, text])) ===
@@ -222,11 +306,19 @@ imageFragment.insert(0, [imageNode]);
 await sleep(600);
 
 const imageContent = await getContent(owner, imageDoc.id).then((r) => r.json());
-ck('an image block reads back as its filename', imageContent.blocks[0].text === `${imageNeedle}.png`);
+ck(
+  'an image block reads back as its filename',
+  imageContent.blocks[0].text === `${imageNeedle}.png`,
+);
 imageClient.provider.destroy();
 await flushStore(API, H(owner), imageDoc.id);
-const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, { headers: H(owner) }).then((r) => r.json());
-ck('and an image is findable by its filename', imageHits.some((h) => h.document.id === imageDoc.id));
+const imageHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(imageNeedle)}`, {
+  headers: H(owner),
+}).then((r) => r.json());
+ck(
+  'and an image is findable by its filename',
+  imageHits.some((h) => h.document.id === imageDoc.id),
+);
 
 // --- tables: a row reads as one line, its cells side by side (#50) --------------
 const tableDoc = await create(owner, 'Table test');
@@ -244,21 +336,30 @@ const rows = [
 ];
 const texts = [];
 const table = new Y.XmlElement('table');
-table.insert(0, rows.map(([cellName, cells]) => {
-  const row = new Y.XmlElement('tableRow');
-  row.insert(0, cells.map((cellText) => {
-    const cell = new Y.XmlElement(cellName);
-    cell.insert(0, cellText.split('\n').map((line) => {
-      const paragraph = new Y.XmlElement('paragraph');
-      const text = new Y.XmlText();
-      paragraph.insert(0, [text]);
-      texts.push([text, line]);
-      return paragraph;
-    }));
-    return cell;
-  }));
-  return row;
-}));
+table.insert(
+  0,
+  rows.map(([cellName, cells]) => {
+    const row = new Y.XmlElement('tableRow');
+    row.insert(
+      0,
+      cells.map((cellText) => {
+        const cell = new Y.XmlElement(cellName);
+        cell.insert(
+          0,
+          cellText.split('\n').map((line) => {
+            const paragraph = new Y.XmlElement('paragraph');
+            const text = new Y.XmlText();
+            paragraph.insert(0, [text]);
+            texts.push([text, line]);
+            return paragraph;
+          }),
+        );
+        return cell;
+      }),
+    );
+    return row;
+  }),
+);
 tableFragment.delete(0, tableFragment.length);
 tableFragment.insert(0, [table]);
 // Only once attached: a detached Y.XmlText queues what it is given (#25).
@@ -272,8 +373,13 @@ ck(
 );
 tableClient.provider.destroy();
 await flushStore(API, H(owner), tableDoc.id);
-const tableHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(tableNeedle)}`, { headers: H(owner) }).then((r) => r.json());
-ck('and the words in its cells are searchable', tableHits.some((h) => h.document.id === tableDoc.id));
+const tableHits = await fetch(`${API}/api/documents/search?q=${encodeURIComponent(tableNeedle)}`, {
+  headers: H(owner),
+}).then((r) => r.json());
+ck(
+  'and the words in its cells are searchable',
+  tableHits.some((h) => h.document.id === tableDoc.id),
+);
 
 // --- links ----------------------------------------------------------------------
 const linkDoc = await create(owner, 'Link test');
@@ -284,9 +390,18 @@ const linkWritten = await putContent(owner, linkDoc.id, {
     { type: 'code', text: 'const link = "[label](href)";' },
   ],
 }).then((r) => r.json());
-ck('a link round-trips as written', linkWritten.blocks[0].text === 'See [the docs](https://example.com/docs) for more.');
-ck('escaped brackets stay literal', linkWritten.blocks[1].text === 'Brackets \\[not a link\\] stay literal.');
-ck('code block text is verbatim, not link notation', linkWritten.blocks[2].text === 'const link = "[label](href)";');
+ck(
+  'a link round-trips as written',
+  linkWritten.blocks[0].text === 'See [the docs](https://example.com/docs) for more.',
+);
+ck(
+  'escaped brackets stay literal',
+  linkWritten.blocks[1].text === 'Brackets \\[not a link\\] stay literal.',
+);
+ck(
+  'code block text is verbatim, not link notation',
+  linkWritten.blocks[2].text === 'const link = "[label](href)";',
+);
 
 // The mark is real, not decoration: a connected client sees it.
 const linkClient = connect(linkDoc.id, owner);
@@ -296,7 +411,9 @@ const linkedBlockId = linkClient.doc.getArray('blocks').get(0).id;
 const linkedDelta = linkClient.doc.getXmlFragment(`block-${linkedBlockId}`).get(0).get(0).toDelta();
 ck(
   'a client receives it as a link mark',
-  linkedDelta.some((op) => op.attributes?.link?.href === 'https://example.com/docs' && op.insert === 'the docs'),
+  linkedDelta.some(
+    (op) => op.attributes?.link?.href === 'https://example.com/docs' && op.insert === 'the docs',
+  ),
 );
 
 // And a link made in the editor reads back in the same notation.
@@ -311,21 +428,45 @@ linkTextNode.insert(0, 'xDocs is here');
 linkTextNode.format(0, 5, { link: { href: 'https://xdocs.test/' } });
 await sleep(600);
 const linkBack = await getContent(owner, linkDoc.id).then((r) => r.json());
-ck('a link made in the editor reads back as [label](href)', linkBack.blocks[0].text === '[xDocs](https://xdocs.test/) is here');
+ck(
+  'a link made in the editor reads back as [label](href)',
+  linkBack.blocks[0].text === '[xDocs](https://xdocs.test/) is here',
+);
 linkClient.provider.destroy();
 
 // What search indexes stays plain: the words, not the notation.
-const linkSearch = await fetch(`${API}/api/documents/search?q=${encodeURIComponent('the docs')}`, { headers: H(owner) }).then((r) => r.json());
+const linkSearch = await fetch(`${API}/api/documents/search?q=${encodeURIComponent('the docs')}`, {
+  headers: H(owner),
+}).then((r) => r.json());
 ck('search still sees the words, not the markup', Array.isArray(linkSearch));
 
-const unsafeLink = await putContent(owner, linkDoc.id, { blocks: ['[click](javascript:alert(1))'] });
+const unsafeLink = await putContent(owner, linkDoc.id, {
+  blocks: ['[click](javascript:alert(1))'],
+});
 ck('an unusable link is refused (400)', unsafeLink.status === 400);
 const afterUnsafe = await getContent(owner, linkDoc.id).then((r) => r.json());
-ck('and the document is left alone', afterUnsafe.blocks[0].text === '[xDocs](https://xdocs.test/) is here');
-ck('a relative link is allowed', (await putContent(owner, linkDoc.id, { blocks: ['[a doc](/doc/00000000-0000-0000-0000-000000000000)'] })).status === 200);
+ck(
+  'and the document is left alone',
+  afterUnsafe.blocks[0].text === '[xDocs](https://xdocs.test/) is here',
+);
+ck(
+  'a relative link is allowed',
+  (
+    await putContent(owner, linkDoc.id, {
+      blocks: ['[a doc](/doc/00000000-0000-0000-0000-000000000000)'],
+    })
+  ).status === 200,
+);
 
-ck('an unknown block type is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status === 400);
-ck('a code block without text is a 400', (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400);
+ck(
+  'an unknown block type is a 400',
+  (await putContent(owner, codeDoc.id, { blocks: [{ type: 'heading', text: 'x' }] })).status ===
+    400,
+);
+ck(
+  'a code block without text is a 400',
+  (await putContent(owner, codeDoc.id, { blocks: [{ type: 'code' }] })).status === 400,
+);
 
 await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

@@ -174,7 +174,12 @@ export function ApiKeysDialog({ onClose }: Props) {
         </ul>
 
         <div className="dialog-actions">
-          <button type="button" className="dialog-cancel" data-testid="keys-close" onClick={onClose}>
+          <button
+            type="button"
+            className="dialog-cancel"
+            data-testid="keys-close"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
