@@ -43,6 +43,13 @@
       "when": 1792145742598,
       "tag": "0005_documents_filter_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792172249398,
+      "tag": "0006_documents_parent_fk",
+      "breakpoints": true
     }
   ]
 }

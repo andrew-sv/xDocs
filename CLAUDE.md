@@ -117,6 +117,12 @@ lookup filters on it, so a revoked key stops working on the next request.
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
 document can never be destroyed even if the UI asks; keep it that way.
 
+`parent_id` is a self-referencing FK with NO ACTION (#64), so no row can point
+at a parent that does not exist. That is why both hard deletes remove a whole
+subtree in ONE statement (the constraint is checked at its end) or re-parent
+first: deleting a parent on its own is refused. Never make it `CASCADE` — that
+would hard-delete children the soft delete exists to keep.
+
 The one other is `pnpm --filter @xdocs/api cleanup:test-users` (#30), which
 deletes `disposable-%@xdocs.test` users older than a cutoff (24h default,
 `--older-than <hours>`, `--dry-run`) and their documents. It deletes documents
