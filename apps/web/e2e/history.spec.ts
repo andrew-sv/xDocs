@@ -1,12 +1,24 @@
 import type { DocumentVersionDTO } from '@xdocs/shared';
 import type { Page } from '@playwright/test';
-import { blockEditor, blockTexts, expect, mod, openDocument, seedSession, test, typeInBlock } from './fixtures';
+import {
+  blockEditor,
+  blockTexts,
+  expect,
+  mod,
+  openDocument,
+  seedSession,
+  test,
+  typeInBlock,
+} from './fixtures';
 
 /** Save a version from the open History dialog, and return it. */
 async function saveVersion(page: Page): Promise<DocumentVersionDTO> {
   const [response] = await Promise.all([
     page.waitForResponse(
-      (r) => r.request().method() === 'POST' && /\/versions$/.test(new URL(r.url()).pathname) && r.status() === 201,
+      (r) =>
+        r.request().method() === 'POST' &&
+        /\/versions$/.test(new URL(r.url()).pathname) &&
+        r.status() === 201,
     ),
     page.getByTestId('history-save').click(),
   ]);
@@ -52,7 +64,9 @@ test.describe('version history', () => {
 
     // And what it replaced is one click away.
     await page.getByTestId('history-open').click();
-    await expect(page.getByTestId('history-entry').first()).toContainText('restored an earlier version');
+    await expect(page.getByTestId('history-entry').first()).toContainText(
+      'restored an earlier version',
+    );
     await page.getByTestId('history-entry').first().click();
     await expect(page.getByTestId('history-preview')).toContainText('Rewritten wording');
   });

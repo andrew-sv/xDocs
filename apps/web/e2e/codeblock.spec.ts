@@ -28,7 +28,10 @@ test.describe('code block', () => {
     expect(TRANSPARENT).toContain(codeBg);
   });
 
-  test('the code block is taller than a single line, so both lines are inside it', async ({ page, doc }) => {
+  test('the code block is taller than a single line, so both lines are inside it', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await blockEditor(page, 0).click();
     await page.keyboard.type('``` ');
@@ -65,7 +68,9 @@ test.describe('code block', () => {
     const pre = blockEditor(page, 0).locator('pre');
     await expect.poll(() => pre.evaluate((el) => el.textContent)).toBe('def f():\n  return 1');
     // Focus must still be in the editor — by default Tab escapes it.
-    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(
+      true,
+    );
   });
 
   test('Shift+Tab removes one level of indentation', async ({ page, doc }) => {
@@ -88,7 +93,9 @@ test.describe('code block', () => {
     await page.keyboard.press('Tab');
 
     // Capturing Tab everywhere would trap keyboard users in the editor.
-    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(false);
+    expect(await blockEditor(page, 0).evaluate((el) => el.contains(document.activeElement))).toBe(
+      false,
+    );
   });
 
   test('typed leading spaces survive a round trip', async ({ page, doc }) => {
@@ -107,7 +114,11 @@ test.describe('code block', () => {
     await page.locator(`[data-doc-id="${doc.id}"] [data-testid="doc-open"]`).click();
     await expect(page.locator('.status')).toHaveText('Live');
     await expect
-      .poll(() => blockEditor(page, 0).locator('pre').evaluate((el) => el.textContent))
+      .poll(() =>
+        blockEditor(page, 0)
+          .locator('pre')
+          .evaluate((el) => el.textContent),
+      )
       .toBe('a\n    indented');
   });
 
@@ -122,7 +133,10 @@ test.describe('code block', () => {
     await expect(blockEditor(page, 0).locator('pre')).toHaveCount(1);
   });
 
-  test('converting several inline-code lines yields ONE block, not one per line', async ({ page, doc }) => {
+  test('converting several inline-code lines yields ONE block, not one per line', async ({
+    page,
+    doc,
+  }) => {
     // The shape people actually produce: a paragraph per line, each marked as
     // inline code. TipTap's own toggleCodeBlock would make five separate
     // blocks — with exactly the margins between them we are trying to remove.

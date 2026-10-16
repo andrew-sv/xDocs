@@ -44,7 +44,8 @@ function toDTO(row: VersionRow): DocumentVersionDTO {
     documentId: row.documentId,
     title: row.title,
     reason: row.reason,
-    author: row.authorId && row.authorName !== null ? { id: row.authorId, name: row.authorName } : null,
+    author:
+      row.authorId && row.authorName !== null ? { id: row.authorId, name: row.authorName } : null,
     savedAt: row.savedAt.toISOString(),
   };
 }
@@ -121,7 +122,10 @@ export const versionsRoute = new Hono<{ Variables: Variables }>()
 
     const doc = decodeVersion(row.ystate);
     try {
-      const body: DocumentVersionContentDTO = { version: toDTO(row), content: readContent(id, doc) };
+      const body: DocumentVersionContentDTO = {
+        version: toDTO(row),
+        content: readContent(id, doc),
+      };
       return c.json(body);
     } finally {
       doc.destroy();
@@ -150,7 +154,12 @@ export const versionsRoute = new Hono<{ Variables: Variables }>()
       const content = await withDirectConnection(id, async (transact) => {
         const before = await transact((doc) => capture(doc, readTitle(doc)));
         if (!before.empty) {
-          await recordVersion({ documentId: id, capture: before, reason: 'before-restore', userId: c.get('userId') });
+          await recordVersion({
+            documentId: id,
+            capture: before,
+            reason: 'before-restore',
+            userId: c.get('userId'),
+          });
         }
         return transact((doc) => {
           restoreVersion(doc, version);

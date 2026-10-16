@@ -42,7 +42,13 @@ export function Collaborators({ people }: Props) {
         </span>
       ))}
       {overflow > 0 && (
-        <span className="collaborator collaborator-overflow" title={people.slice(SHOWN).map((p) => p.name).join(', ')}>
+        <span
+          className="collaborator collaborator-overflow"
+          title={people
+            .slice(SHOWN)
+            .map((p) => p.name)
+            .join(', ')}
+        >
           +{overflow}
         </span>
       )}

@@ -88,8 +88,12 @@ function run(suite) {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';
-    child.stdout.on('data', (d) => { output += d; });
-    child.stderr.on('data', (d) => { output += d; });
+    child.stdout.on('data', (d) => {
+      output += d;
+    });
+    child.stderr.on('data', (d) => {
+      output += d;
+    });
     child.on('error', (err) => {
       output += `\nfailed to start: ${err.message}\n`;
     });
@@ -111,7 +115,9 @@ function run(suite) {
 
 function report({ name, ok, seconds, output }) {
   const badge = ok ? 'PASS' : 'FAIL';
-  console.log(`\n── ${name} ${'─'.repeat(Math.max(1, 40 - name.length))} ${seconds.toFixed(1)}s  ${badge}`);
+  console.log(
+    `\n── ${name} ${'─'.repeat(Math.max(1, 40 - name.length))} ${seconds.toFixed(1)}s  ${badge}`,
+  );
   if (output) console.log(output);
 }
 
@@ -130,7 +136,9 @@ async function pool(list, limit) {
  */
 const health = await fetch('http://localhost:3001/health').catch(() => null);
 if (!health?.ok) {
-  console.error('the API is not answering on http://localhost:3001 — start the stack with `pnpm dev`');
+  console.error(
+    'the API is not answering on http://localhost:3001 — start the stack with `pnpm dev`',
+  );
   process.exit(2);
 }
 
@@ -139,7 +147,7 @@ const separately = suites.filter((s) => s.alone);
 
 console.log(
   `integration: ${suites.length} suite(s) — ${together.length} together (concurrency ${limit}), ` +
-  `${separately.length} on their own`,
+    `${separately.length} on their own`,
 );
 
 // The solitary ones first, and one at a time: they must not overlap the pool
@@ -164,7 +172,12 @@ if (failed.length === 0) {
 console.log(`\n${failed.length} suite(s) FAILED\n`);
 for (const r of failed) {
   console.log(`── ${r.name} (exit ${r.code}) ──`);
-  console.log(r.output.split('\n').filter((line) => /^FAIL|Error|error:/.test(line)).join('\n') || r.output);
+  console.log(
+    r.output
+      .split('\n')
+      .filter((line) => /^FAIL|Error|error:/.test(line))
+      .join('\n') || r.output,
+  );
   console.log();
 }
 process.exit(1);

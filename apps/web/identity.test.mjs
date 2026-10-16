@@ -9,7 +9,10 @@
 import { collaboratorFrom, colorFor, initialsFor } from './src/lib/identity.ts';
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 // --- colour is derived, not drawn ------------------------------------------
 ck('the same id always gives the same colour', colorFor('user-abc') === colorFor('user-abc'));

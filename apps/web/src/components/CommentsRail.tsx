@@ -111,7 +111,11 @@ export function CommentsRail({
    */
   if (collapsed) {
     return (
-      <aside className="comments-rail comments-rail-collapsed" data-testid="comments-rail" data-collapsed="true">
+      <aside
+        className="comments-rail comments-rail-collapsed"
+        data-testid="comments-rail"
+        data-collapsed="true"
+      >
         <button
           type="button"
           className="comments-expand"
@@ -133,7 +137,12 @@ export function CommentsRail({
   }
 
   return (
-    <aside className="comments-rail" data-testid="comments-rail" data-collapsed="false" aria-label="Comments">
+    <aside
+      className="comments-rail"
+      data-testid="comments-rail"
+      data-collapsed="false"
+      aria-label="Comments"
+    >
       <header className="comments-rail-header">
         <span>Comments</span>
         <span className="comments-count" data-testid="comments-count">

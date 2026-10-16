@@ -18,7 +18,11 @@ async function addChildren(request: APIRequestContext, parent: TestDocument, tit
 const links = (page: import('@playwright/test').Page) => page.getByTestId('sub-doc-link');
 
 test.describe('sub-document links', () => {
-  test('a document lists its sub-documents as links at the bottom', async ({ page, request, doc }) => {
+  test('a document lists its sub-documents as links at the bottom', async ({
+    page,
+    request,
+    doc,
+  }) => {
     await addChildren(request, doc, ['Alpha child', 'Beta child']);
     await openDocument(page, doc);
 
@@ -61,7 +65,11 @@ test.describe('sub-document links', () => {
     await expect(links(page)).toHaveText(['Freshly named']);
   });
 
-  test('links work on a document reopened by undoing its deletion', async ({ page, request, doc }) => {
+  test('links work on a document reopened by undoing its deletion', async ({
+    page,
+    request,
+    doc,
+  }) => {
     await addChildren(request, doc, ['Alpha child']);
     await openDocument(page, doc);
 

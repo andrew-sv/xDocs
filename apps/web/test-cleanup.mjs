@@ -22,16 +22,22 @@ export function trackCreatedDocuments() {
   globalThis.fetch = async (input, init) => {
     const response = await realFetch(input, init);
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
-    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const method = (
+      init?.method ?? (input instanceof Request ? input.method : 'GET')
+    ).toUpperCase();
     if (method === 'POST' && url.pathname === '/api/documents' && response.status === 201) {
       const authorization = new Headers(init?.headers).get('authorization');
       pending.push(
-        response.clone().json().then(
-          (doc) => {
-            if (doc?.id && authorization) created.push({ id: doc.id, authorization, api: url.origin });
-          },
-          () => {},
-        ),
+        response
+          .clone()
+          .json()
+          .then(
+            (doc) => {
+              if (doc?.id && authorization)
+                created.push({ id: doc.id, authorization, api: url.origin });
+            },
+            () => {},
+          ),
       );
     }
     return response;
@@ -55,10 +61,20 @@ export function trackCreatedDocuments() {
 
       const attempt = async ({ id, api }, authorization) => {
         const headers = { authorization, origin: TEST_ORIGIN };
-        const trashed = await realFetch(`${api}/api/documents/${id}`, { method: 'DELETE', headers })
-          .then((r) => r.status, () => 0);
-        const purged = await realFetch(`${api}/api/documents/${id}/permanent`, { method: 'DELETE', headers })
-          .then((r) => r.status, () => 0);
+        const trashed = await realFetch(`${api}/api/documents/${id}`, {
+          method: 'DELETE',
+          headers,
+        }).then(
+          (r) => r.status,
+          () => 0,
+        );
+        const purged = await realFetch(`${api}/api/documents/${id}/permanent`, {
+          method: 'DELETE',
+          headers,
+        }).then(
+          (r) => r.status,
+          () => 0,
+        );
         return { trashed, purged };
       };
 
@@ -77,7 +93,9 @@ export function trackCreatedDocuments() {
       }
 
       if (leftBehind.length > 0) {
-        console.warn(`cleanup: ${leftBehind.length} document(s) left behind:\n  ${leftBehind.join('\n  ')}`);
+        console.warn(
+          `cleanup: ${leftBehind.length} document(s) left behind:\n  ${leftBehind.join('\n  ')}`,
+        );
       }
     },
   };

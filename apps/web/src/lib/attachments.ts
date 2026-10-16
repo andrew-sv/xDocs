@@ -67,7 +67,11 @@ export async function attachFile(editor: Editor, documentId: string, file: File)
     .chain()
     .focus()
     .insertContent([
-      { type: 'text', text: attachment.filename, marks: [{ type: 'link', attrs: { href: attachment.href } }] },
+      {
+        type: 'text',
+        text: attachment.filename,
+        marks: [{ type: 'link', attrs: { href: attachment.href } }],
+      },
       // Typing after it should not extend the link.
       { type: 'text', text: ' ' },
     ])

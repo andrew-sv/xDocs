@@ -75,7 +75,10 @@ test.describe('comments', () => {
     await expect(page.locator('.comment-mark')).toHaveCount(0);
   });
 
-  test('a thread is collapsed until it is clicked, and its highlight opens it', async ({ page, doc }) => {
+  test('a thread is collapsed until it is clicked, and its highlight opens it', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await typeInBlock(page, 0, 'Alpha beta gamma');
     await commentFirstWord(page, 'Why alpha?');
@@ -140,7 +143,10 @@ test.describe('comments', () => {
     await expect(page.getByTestId('comment-text')).toHaveText('Why alpha?');
   });
 
-  test('the rail folds away, remembers it, and unfolds when there is something to show', async ({ page, doc }) => {
+  test('the rail folds away, remembers it, and unfolds when there is something to show', async ({
+    page,
+    doc,
+  }) => {
     await openDocument(page, doc);
     await typeInBlock(page, 0, 'Alpha beta gamma');
     await commentFirstWord(page, 'Why alpha?');
@@ -182,7 +188,12 @@ test.describe('comments', () => {
    * and a comment is attributed to the account that wrote it, which needs two
    * accounts to mean anything.
    */
-  test('a comment reaches the other person, and only its author can change it', async ({ page, request, doc, browser }) => {
+  test('a comment reaches the other person, and only its author can change it', async ({
+    page,
+    request,
+    doc,
+    browser,
+  }) => {
     await request.patch(`${API}/api/documents/${doc.id}/visibility`, {
       headers: authHeaders(await getTestToken(), { 'content-type': 'application/json' }),
       data: { visibility: 'public' },

@@ -109,7 +109,8 @@ export function VersionHistory({ documentId, onClose }: Props) {
     setPreview(null);
     api.getVersion(documentId, selected).then(
       (body) => current && setPreview(body),
-      (e: unknown) => current && setError(e instanceof Error ? e.message : 'Could not load that version.'),
+      (e: unknown) =>
+        current && setError(e instanceof Error ? e.message : 'Could not load that version.'),
     );
     return () => {
       current = false;
@@ -210,7 +211,9 @@ export function VersionHistory({ documentId, onClose }: Props) {
           </ul>
 
           <section className="history-preview" data-testid="history-preview" aria-label="Preview">
-            {chosen && !preview && <span className="spinner" role="status" aria-label="Loading version" />}
+            {chosen && !preview && (
+              <span className="spinner" role="status" aria-label="Loading version" />
+            )}
             {preview && (
               <>
                 <h3 className="version-title">{preview.content.title || 'Untitled'}</h3>
@@ -229,7 +232,12 @@ export function VersionHistory({ documentId, onClose }: Props) {
         )}
 
         <div className="dialog-actions">
-          <button type="button" className="dialog-cancel" data-testid="history-close" onClick={onClose}>
+          <button
+            type="button"
+            className="dialog-cancel"
+            data-testid="history-close"
+            onClick={onClose}
+          >
             Close
           </button>
           <button

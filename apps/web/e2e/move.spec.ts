@@ -36,8 +36,12 @@ test.describe('moving documents', () => {
     await expect(
       page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: subject }),
     ).toHaveCount(0);
-    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: destination })
-      .getByTestId('doc-open').click();
+    await page
+      .getByTestId('doc-list')
+      .getByTestId('doc-row')
+      .filter({ hasText: destination })
+      .getByTestId('doc-open')
+      .click();
     await expect(
       page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: subject }),
     ).toHaveCount(1);
@@ -71,8 +75,12 @@ test.describe('moving documents', () => {
 
   test('neither is its own sub-document', async ({ page }) => {
     const parent = await newDocument(page, 'cycleparent');
-    await page.getByTestId('doc-list').getByTestId('doc-row').filter({ hasText: parent })
-      .getByTestId('doc-open').click();
+    await page
+      .getByTestId('doc-list')
+      .getByTestId('doc-row')
+      .filter({ hasText: parent })
+      .getByTestId('doc-open')
+      .click();
     /*
      * The parent must be the OPEN document before a child goes under it — a
      * misdirected row click otherwise adds one to somebody's real document

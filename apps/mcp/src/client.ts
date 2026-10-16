@@ -72,7 +72,11 @@ export class XdocsClient {
     });
   }
 
-  replaceContent(id: string, blocks: WriteBlockInput[], title?: string): Promise<DocumentContentDTO> {
+  replaceContent(
+    id: string,
+    blocks: WriteBlockInput[],
+    title?: string,
+  ): Promise<DocumentContentDTO> {
     return this.request<DocumentContentDTO>(`/documents/${id}/content`, {
       method: 'PUT',
       body: JSON.stringify({ blocks, ...(title === undefined ? {} : { title }) }),

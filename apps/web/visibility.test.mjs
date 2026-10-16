@@ -18,7 +18,10 @@ const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -27,8 +30,11 @@ const H = (t, extra) => authHeaders(t, extra);
 /** Can this token reach the document over the websocket? */
 async function canConnect(token, id) {
   const provider = new HocuspocusProvider({
-    url: WS, name: `doc:${id}`, document: new Y.Doc(),
-    token, onAuthenticationFailed: () => {},
+    url: WS,
+    name: `doc:${id}`,
+    document: new Y.Doc(),
+    token,
+    onAuthenticationFailed: () => {},
   });
   const result = await Promise.race([
     new Promise((r) => provider.on('synced', () => r(true))),
@@ -47,7 +53,8 @@ const listIds = (token) =>
 
 // --- a new document is private and owner-only ------------------------------
 const doc = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: H(owner, { 'content-type': 'application/json' }),
+  method: 'POST',
+  headers: H(owner, { 'content-type': 'application/json' }),
   body: JSON.stringify({ title: 'visibility test' }),
 }).then((r) => r.json());
 
@@ -65,16 +72,21 @@ ck('stranger CANNOT open the websocket', !(await canConnect(stranger, doc.id)));
 // --- a stranger cannot administer someone else's document ------------------
 const patchAs = (token, visibility) =>
   fetch(`${API}/api/documents/${doc.id}/visibility`, {
-    method: 'PATCH', headers: H(token, { 'content-type': 'application/json' }),
+    method: 'PATCH',
+    headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ visibility }),
   });
 ck('stranger cannot change visibility (403)', (await patchAs(stranger, 'public')).status === 403);
 ck(
   'stranger cannot delete (403)',
-  (await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(stranger) })).status === 403,
+  (await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(stranger) }))
+    .status === 403,
 );
-ck('document is still private after those attempts',
-  (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(owner) }).then((r) => r.json())).visibility === 'private');
+ck(
+  'document is still private after those attempts',
+  (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(owner) }).then((r) => r.json()))
+    .visibility === 'private',
+);
 
 /*
  * An owner-only refusal must NOT carry the code that ends a session (#31).
@@ -84,8 +96,10 @@ ck('document is still private after those attempts',
  * would log the user out for doing something as ordinary as clicking delete on
  * a document they do not own.
  */
-const refusal = await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(stranger) })
-  .then((r) => r.json());
+const refusal = await fetch(`${API}/api/documents/${doc.id}`, {
+  method: 'DELETE',
+  headers: H(stranger),
+}).then((r) => r.json());
 ck('the refusal carries no account_not_allowed code', refusal.code === undefined);
 ck('and explains itself in words', typeof refusal.error === 'string' && refusal.error.length > 0);
 
@@ -97,23 +111,35 @@ ck(
   'stranger can now fetch it',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) })).status === 200,
 );
-ck('stranger is not marked as owner',
-  (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) }).then((r) => r.json())).isOwner === false);
+ck(
+  'stranger is not marked as owner',
+  (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) }).then((r) => r.json()))
+    .isOwner === false,
+);
 ck('stranger can now open the websocket', await canConnect(stranger, doc.id));
 ck('stranger still cannot change visibility', (await patchAs(stranger, 'private')).status === 403);
 
 // --- public means EDIT, not just read --------------------------------------
-const a = new HocuspocusProvider({ url: WS, name: `doc:${doc.id}`, document: new Y.Doc(), token: owner });
-const b = new HocuspocusProvider({ url: WS, name: `doc:${doc.id}`, document: new Y.Doc(), token: stranger });
-await Promise.all([
-  new Promise((r) => a.on('synced', r)),
-  new Promise((r) => b.on('synced', r)),
-]);
+const a = new HocuspocusProvider({
+  url: WS,
+  name: `doc:${doc.id}`,
+  document: new Y.Doc(),
+  token: owner,
+});
+const b = new HocuspocusProvider({
+  url: WS,
+  name: `doc:${doc.id}`,
+  document: new Y.Doc(),
+  token: stranger,
+});
+await Promise.all([new Promise((r) => a.on('synced', r)), new Promise((r) => b.on('synced', r))]);
 b.document.getArray('blocks').push([{ id: crypto.randomUUID(), type: 'paragraph' }]);
 await sleep(800);
-ck('a non-owner can edit a public document (collaboration works)',
+ck(
+  'a non-owner can edit a public document (collaboration works)',
   a.document.getArray('blocks').length === b.document.getArray('blocks').length &&
-  a.document.getArray('blocks').length > 1);
+    a.document.getArray('blocks').length > 1,
+);
 a.destroy();
 b.destroy();
 

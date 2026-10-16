@@ -44,7 +44,12 @@ export const BlockKeymap = Extension.create<BlockKeymapOptions>({
         const blockStart = state.doc.resolve(from).start();
         const before = state.doc.textBetween(blockStart, from, '\n', '\n');
         const lineStart = from - (before.length - before.lastIndexOf('\n') - 1);
-        const lead = state.doc.textBetween(lineStart, Math.min(lineStart + INDENT.length, from), '\n', '\n');
+        const lead = state.doc.textBetween(
+          lineStart,
+          Math.min(lineStart + INDENT.length, from),
+          '\n',
+          '\n',
+        );
 
         const remove = lead.startsWith(INDENT) ? INDENT.length : lead.startsWith(' ') ? 1 : 0;
         // Consume the key regardless, so Shift-Tab never escapes mid-code.

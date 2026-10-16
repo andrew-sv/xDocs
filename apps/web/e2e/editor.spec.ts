@@ -1,7 +1,19 @@
-import { addBlock, blockEditor, blocks, blockTexts, expect, openDocument, test, typeInBlock } from './fixtures';
+import {
+  addBlock,
+  blockEditor,
+  blocks,
+  blockTexts,
+  expect,
+  openDocument,
+  test,
+  typeInBlock,
+} from './fixtures';
 
 test.describe('editing', () => {
-  test('one click on "Add paragraph" adds exactly one block, from an editing state', async ({ page, doc }) => {
+  test('one click on "Add paragraph" adds exactly one block, from an editing state', async ({
+    page,
+    doc,
+  }) => {
     // The two-click regression: mousedown used to blur the editor, unmounting
     // the toolbar and shifting the button out from under the pointer, so the
     // first click only exited edit mode.

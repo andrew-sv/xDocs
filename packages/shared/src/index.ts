@@ -314,7 +314,8 @@ export function attachmentHref(id: string): string {
 }
 
 /** Matches an `attachmentHref`, capturing the id. */
-export const ATTACHMENT_HREF = /^\/api\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+export const ATTACHMENT_HREF =
+  /^\/api\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export const attachmentSchema = z.object({
   id: z.uuid(),

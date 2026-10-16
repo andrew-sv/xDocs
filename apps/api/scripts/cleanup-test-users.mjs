@@ -76,9 +76,9 @@ try {
   const documents = await client.query(`DELETE FROM documents WHERE created_by = ANY($1)`, [ids]);
   await client.query(`DELETE FROM "user" WHERE id = ANY($1)`, [ids]);
 
-  const { rows: [{ count: ownerless }] } = await client.query(
-    `SELECT count(*)::int AS count FROM documents WHERE created_by IS NULL`,
-  );
+  const {
+    rows: [{ count: ownerless }],
+  } = await client.query(`SELECT count(*)::int AS count FROM documents WHERE created_by IS NULL`);
 
   await client.query(values['dry-run'] ? 'ROLLBACK' : 'COMMIT');
 

@@ -6,8 +6,26 @@
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
-for (const key of ['window', 'document', 'DOMParser', 'Node', 'Element', 'HTMLElement', 'Text', 'Range', 'getComputedStyle', 'MutationObserver', 'KeyboardEvent', 'requestAnimationFrame', 'cancelAnimationFrame']) {
-  Object.defineProperty(globalThis, key, { value: dom.window[key], writable: true, configurable: true });
+for (const key of [
+  'window',
+  'document',
+  'DOMParser',
+  'Node',
+  'Element',
+  'HTMLElement',
+  'Text',
+  'Range',
+  'getComputedStyle',
+  'MutationObserver',
+  'KeyboardEvent',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+]) {
+  Object.defineProperty(globalThis, key, {
+    value: dom.window[key],
+    writable: true,
+    configurable: true,
+  });
 }
 
 const { Editor } = await import('@tiptap/react');
@@ -15,7 +33,10 @@ const StarterKit = (await import('@tiptap/starter-kit')).default;
 const { BlockKeymap } = await import('./src/lib/blockKeymap.ts');
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 let calls = 0;
 const element = dom.window.document.createElement('div');
@@ -25,7 +46,11 @@ const editor = new Editor({
   element,
   extensions: [
     StarterKit.configure({ undoRedo: false }),
-    BlockKeymap.configure({ onInsertBelow: () => { calls += 1; } }),
+    BlockKeymap.configure({
+      onInsertBelow: () => {
+        calls += 1;
+      },
+    }),
   ],
   content: '<p>hello</p>',
 });
@@ -59,7 +84,12 @@ const plain = new Editor({
 });
 plain.commands.focus('end');
 plain.view.dom.dispatchEvent(
-  new dom.window.KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true }),
+  new dom.window.KeyboardEvent('keydown', {
+    key: 'Enter',
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  }),
 );
 ck('without a handler Shift+Enter falls back to hard break', plain.getHTML().includes('<br'));
 

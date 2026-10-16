@@ -24,7 +24,10 @@ const API = 'http://localhost:3001';
  */
 test.describe('collaborator identity', () => {
   /** Public, so an account that does not own it can open it at all. */
-  async function shareDocument(request: import('@playwright/test').APIRequestContext, doc: TestDocument) {
+  async function shareDocument(
+    request: import('@playwright/test').APIRequestContext,
+    doc: TestDocument,
+  ) {
     await request.patch(`${API}/api/documents/${doc.id}/visibility`, {
       headers: authHeaders(await getTestToken(), { 'content-type': 'application/json' }),
       data: { visibility: 'public' },
@@ -32,9 +35,9 @@ test.describe('collaborator identity', () => {
   }
 
   const caretLabels = (page: Page) =>
-    page.locator('.collaboration-carets__label').evaluateAll((nodes) =>
-      nodes.map((node) => (node.textContent ?? '').trim()),
-    );
+    page
+      .locator('.collaboration-carets__label')
+      .evaluateAll((nodes) => nodes.map((node) => (node.textContent ?? '').trim()));
 
   test("a caret carries the collaborator's real name", async ({ page, request, doc, browser }) => {
     await shareDocument(request, doc);
@@ -56,7 +59,12 @@ test.describe('collaborator identity', () => {
     }
   });
 
-  test('the collaborator list names who else is in the document', async ({ page, request, doc, browser }) => {
+  test('the collaborator list names who else is in the document', async ({
+    page,
+    request,
+    doc,
+    browser,
+  }) => {
     await shareDocument(request, doc);
     await openDocument(page, doc);
     // Alone, there is no list at all rather than an empty one.
@@ -88,7 +96,11 @@ test.describe('collaborator identity', () => {
     }
   });
 
-  test('the same person in two tabs is one collaborator, not two', async ({ page, doc, browser }) => {
+  test('the same person in two tabs is one collaborator, not two', async ({
+    page,
+    doc,
+    browser,
+  }) => {
     await openDocument(page, doc);
 
     const context = await browser.newContext();

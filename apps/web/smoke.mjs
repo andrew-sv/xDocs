@@ -20,7 +20,10 @@ const WS = baseUrl.replace(/^http/, 'ws');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 // --- the deployment is alive -------------------------------------------------
 const health = await fetch(`${baseUrl}/health`);
@@ -31,7 +34,8 @@ ck('health reports ok', (await health.json())?.ok === true);
 ck('unauthenticated list is 401', (await fetch(`${baseUrl}/api/documents`)).status === 401);
 ck(
   'a forged bearer token is 401',
-  (await fetch(`${baseUrl}/api/documents`, { headers: { authorization: 'Bearer forged' } })).status === 401,
+  (await fetch(`${baseUrl}/api/documents`, { headers: { authorization: 'Bearer forged' } }))
+    .status === 401,
 );
 ck(
   'unauthenticated create is 401',

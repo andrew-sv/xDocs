@@ -1,0 +1,16 @@
+# Generated, or owned by a tool that writes them its own way.
+pnpm-lock.yaml
+apps/api/drizzle/
+**/dist/
+apps/web/playwright-report/
+apps/web/test-results/
+.vercel/
+.agents/
+.claude/
+skills-lock.json
+
+# Prose. Prettier reflows lists and tables, and these are read as written.
+*.md
+
+# Workflow files: indentation is meaning, and CI is not the place to find out.
+.github/

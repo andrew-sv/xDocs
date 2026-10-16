@@ -127,8 +127,18 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
 
   const format: Action[] = [
     { label: 'B', title: 'Bold', isActive: active.bold, run: () => chain().toggleBold().run() },
-    { label: 'I', title: 'Italic', isActive: active.italic, run: () => chain().toggleItalic().run() },
-    { label: 'S', title: 'Strike', isActive: active.strike, run: () => chain().toggleStrike().run() },
+    {
+      label: 'I',
+      title: 'Italic',
+      isActive: active.italic,
+      run: () => chain().toggleItalic().run(),
+    },
+    {
+      label: 'S',
+      title: 'Strike',
+      isActive: active.strike,
+      run: () => chain().toggleStrike().run(),
+    },
     { label: '<>', title: 'Code', isActive: active.code, run: () => chain().toggleCode().run() },
     {
       label: '{ }',
@@ -136,11 +146,36 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
       isActive: active.codeBlock,
       run: () => toggleCodeBlock(editor),
     },
-    { label: 'H1', title: 'Heading 1', isActive: active.h1, run: () => chain().toggleHeading({ level: 1 }).run() },
-    { label: 'H2', title: 'Heading 2', isActive: active.h2, run: () => chain().toggleHeading({ level: 2 }).run() },
-    { label: '•', title: 'Bullet list', isActive: active.bulletList, run: () => chain().toggleBulletList().run() },
-    { label: '1.', title: 'Ordered list', isActive: active.orderedList, run: () => chain().toggleOrderedList().run() },
-    { label: '”', title: 'Blockquote', isActive: active.blockquote, run: () => chain().toggleBlockquote().run() },
+    {
+      label: 'H1',
+      title: 'Heading 1',
+      isActive: active.h1,
+      run: () => chain().toggleHeading({ level: 1 }).run(),
+    },
+    {
+      label: 'H2',
+      title: 'Heading 2',
+      isActive: active.h2,
+      run: () => chain().toggleHeading({ level: 2 }).run(),
+    },
+    {
+      label: '•',
+      title: 'Bullet list',
+      isActive: active.bulletList,
+      run: () => chain().toggleBulletList().run(),
+    },
+    {
+      label: '1.',
+      title: 'Ordered list',
+      isActive: active.orderedList,
+      run: () => chain().toggleOrderedList().run(),
+    },
+    {
+      label: '”',
+      title: 'Blockquote',
+      isActive: active.blockquote,
+      run: () => chain().toggleBlockquote().run(),
+    },
   ];
 
   // A code block's text cannot carry marks, so neither a link nor an
@@ -156,7 +191,13 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
         setLinkDraft((editor.getAttributes('link').href as string | undefined) ?? '');
       },
     },
-    { label: '📎', title: 'Attach file', isActive: false, disabled: active.codeBlock, run: onAttachFile },
+    {
+      label: '📎',
+      title: 'Attach file',
+      isActive: false,
+      disabled: active.codeBlock,
+      run: onAttachFile,
+    },
     // Replaced by the table's own controls while the caret is in one: tables
     // do not nest, and the group needs the room (see TableIcon).
     ...(active.table
@@ -187,11 +228,36 @@ export function Toolbar({ editor, onAttachFile, onError, onComment }: Props) {
    */
   const table: Action[] = active.table
     ? [
-        { label: <TableIcon edit="add-row" />, title: 'Add row', isActive: false, run: () => chain().addRowAfter().run() },
-        { label: <TableIcon edit="add-column" />, title: 'Add column', isActive: false, run: () => chain().addColumnAfter().run() },
-        { label: <TableIcon edit="delete-row" />, title: 'Delete row', isActive: false, run: () => chain().deleteRow().run() },
-        { label: <TableIcon edit="delete-column" />, title: 'Delete column', isActive: false, run: () => chain().deleteColumn().run() },
-        { label: <TableIcon edit="delete-table" />, title: 'Delete table', isActive: false, run: () => chain().deleteTable().run() },
+        {
+          label: <TableIcon edit="add-row" />,
+          title: 'Add row',
+          isActive: false,
+          run: () => chain().addRowAfter().run(),
+        },
+        {
+          label: <TableIcon edit="add-column" />,
+          title: 'Add column',
+          isActive: false,
+          run: () => chain().addColumnAfter().run(),
+        },
+        {
+          label: <TableIcon edit="delete-row" />,
+          title: 'Delete row',
+          isActive: false,
+          run: () => chain().deleteRow().run(),
+        },
+        {
+          label: <TableIcon edit="delete-column" />,
+          title: 'Delete column',
+          isActive: false,
+          run: () => chain().deleteColumn().run(),
+        },
+        {
+          label: <TableIcon edit="delete-table" />,
+          title: 'Delete table',
+          isActive: false,
+          run: () => chain().deleteTable().run(),
+        },
       ]
     : [];
 
@@ -309,7 +375,15 @@ function TableIcon({
       </>
     );
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      aria-hidden="true"
+    >
       {shape}
     </svg>
   );

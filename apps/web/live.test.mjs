@@ -19,7 +19,10 @@ const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let fail = 0;
-const ck = (l, ok) => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`); if (!ok) fail++; };
+const ck = (l, ok) => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
+  if (!ok) fail++;
+};
 
 const owner = await signInForTests(API);
 const H = (t, extra) => authHeaders(t, extra);
@@ -29,7 +32,10 @@ function listen(token) {
   const doc = new Y.Doc();
   const pings = [];
   const provider = new HocuspocusProvider({
-    url: WS, name: 'workspace', document: doc, token,
+    url: WS,
+    name: 'workspace',
+    document: doc,
+    token,
     onStateless: ({ payload }) => pings.push(payload),
     onAuthenticationFailed: () => {},
   });
@@ -59,14 +65,18 @@ await b.ready;
 // --- routes ping ---------------------------------------------------------------
 let seen = a.pings.length;
 const created = await fetch(`${API}/api/documents`, {
-  method: 'POST', headers: H(owner, { 'content-type': 'application/json' }), body: JSON.stringify({ title: 'Live test' }),
+  method: 'POST',
+  headers: H(owner, { 'content-type': 'application/json' }),
+  body: JSON.stringify({ title: 'Live test' }),
 }).then((r) => r.json());
 ck('creating a document pings', await pingAfter(a.pings, seen));
 ck('and the ping carries nothing but the signal', a.pings.at(-1) === 'documents-changed');
 
 seen = a.pings.length;
 await fetch(`${API}/api/documents/${created.id}/visibility`, {
-  method: 'PATCH', headers: H(owner, { 'content-type': 'application/json' }), body: JSON.stringify({ visibility: 'public' }),
+  method: 'PATCH',
+  headers: H(owner, { 'content-type': 'application/json' }),
+  body: JSON.stringify({ visibility: 'public' }),
 });
 ck('changing visibility pings', await pingAfter(a.pings, seen));
 
@@ -78,13 +88,20 @@ ck('reads do not ping', a.pings.length === seen);
 
 seen = a.pings.length;
 const refused = await fetch(`${API}/api/documents/${created.id}/parent`, {
-  method: 'PATCH', headers: H(owner, { 'content-type': 'application/json' }), body: JSON.stringify({ parentId: created.id }),
+  method: 'PATCH',
+  headers: H(owner, { 'content-type': 'application/json' }),
+  body: JSON.stringify({ parentId: created.id }),
 });
 await sleep(500);
 ck('a refused change does not ping', refused.status >= 400 && a.pings.length === seen);
 
 // --- renaming by typing pings too, once the title is stored ----------------------
-const editor = new HocuspocusProvider({ url: WS, name: `doc:${created.id}`, document: new Y.Doc(), token: owner });
+const editor = new HocuspocusProvider({
+  url: WS,
+  name: `doc:${created.id}`,
+  document: new Y.Doc(),
+  token: owner,
+});
 await new Promise((r) => editor.on('synced', () => r()));
 seen = a.pings.length;
 const title = editor.document.getText('title');
@@ -92,7 +109,10 @@ title.delete(0, title.length);
 title.insert(0, 'Renamed by typing');
 ck('a rename typed in an editor pings once it is stored', await pingAfter(a.pings, seen, 8000));
 const listed = await fetch(`${API}/api/documents`, { headers: H(owner) }).then((r) => r.json());
-ck('and by then the list has the new title', listed.find((d) => d.id === created.id)?.title === 'Renamed by typing');
+ck(
+  'and by then the list has the new title',
+  listed.find((d) => d.id === created.id)?.title === 'Renamed by typing',
+);
 
 // Ordinary typing, with the title unchanged, is not a list change.
 await sleep(500);
@@ -109,7 +129,10 @@ editor.destroy();
 // --- the channel is read-only ------------------------------------------------------
 a.doc.getText('smuggled').insert(0, 'hello from a');
 await sleep(800);
-ck('nothing written into the channel reaches other listeners', b.doc.getText('smuggled').toString() === '');
+ck(
+  'nothing written into the channel reaches other listeners',
+  b.doc.getText('smuggled').toString() === '',
+);
 
 // --- and closed to strangers ---------------------------------------------------------
 const forged = listen('not-a-real-session');

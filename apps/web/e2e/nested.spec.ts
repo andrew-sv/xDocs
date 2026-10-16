@@ -44,7 +44,9 @@ test.describe('nested documents', () => {
     // Navigating up refetches the root list, so this waits on a round trip —
     // the config's expect timeout covers it.
     await expect(
-      page.getByTestId('doc-list').locator(`[data-doc-id="${doc.id}"] [data-testid="doc-haschildren"]`),
+      page
+        .getByTestId('doc-list')
+        .locator(`[data-doc-id="${doc.id}"] [data-testid="doc-haschildren"]`),
     ).toBeVisible();
   });
 

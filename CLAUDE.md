@@ -12,6 +12,7 @@ pnpm db:migrate                # apply pending migrations
 pnpm dev                       # api+collab :3001, web :5173
 pnpm typecheck                 # all packages, plus the e2e specs
 pnpm lint                      # ESLint, type-aware; CI runs it
+pnpm format                    # Prettier; CI runs format:check
 pnpm build
 ```
 

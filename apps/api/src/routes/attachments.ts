@@ -48,12 +48,14 @@ async function usedBytes(userId: string): Promise<number> {
   return Number(row?.total ?? 0);
 }
 
+// Control characters are exactly what this matches.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
+
 /** Only ever a display name and a download suggestion, never a path. */
 function cleanFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? '';
-  // Control characters are exactly what this strips.
-  // eslint-disable-next-line no-control-regex
-  const cleaned = base.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 255);
+  const cleaned = base.replace(CONTROL_CHARACTERS, '').trim().slice(0, 255);
   return cleaned || 'file';
 }
 

@@ -1,7 +1,10 @@
 import { blockEditor, blocks, expect, openDocument, test, typeInBlock } from './fixtures';
 
 test.describe('documents', () => {
-  test('opening a document shows its real name and a spinner, never "Untitled"', async ({ page, doc }) => {
+  test('opening a document shows its real name and a spinner, never "Untitled"', async ({
+    page,
+    doc,
+  }) => {
     /*
      * Block the collab socket so the document never syncs and the loading state
      * persists — otherwise this is a sub-second flash and the test would be a

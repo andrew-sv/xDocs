@@ -144,7 +144,8 @@ export function addComment(ydoc: Y.Doc, threadId: string, text: string, author: 
  * cannot clobber anything else about the comment.
  */
 export function editComment(ydoc: Y.Doc, threadId: string, commentId: string, text: string): void {
-  const comment = threadsMap(ydoc).get(threadId) && commentsIn(threadsMap(ydoc).get(threadId)!).get(commentId);
+  const comment =
+    threadsMap(ydoc).get(threadId) && commentsIn(threadsMap(ydoc).get(threadId)!).get(commentId);
   if (!comment) return;
   ydoc.transact(() => {
     comment.set('text', text);
@@ -159,7 +160,11 @@ export function editComment(ydoc: Y.Doc, threadId: string, commentId: string, te
  * two go together — the caller clears the mark when this reports the thread is
  * gone.
  */
-export function deleteComment(ydoc: Y.Doc, threadId: string, commentId: string): { threadGone: boolean } {
+export function deleteComment(
+  ydoc: Y.Doc,
+  threadId: string,
+  commentId: string,
+): { threadGone: boolean } {
   const thread = threadsMap(ydoc).get(threadId);
   if (!thread) return { threadGone: true };
   let threadGone = false;
