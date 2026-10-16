@@ -36,6 +36,13 @@
       "when": 1790685122236,
       "tag": "0004_document_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792145742598,
+      "tag": "0005_documents_filter_indexes",
+      "breakpoints": true
     }
   ]
 }
