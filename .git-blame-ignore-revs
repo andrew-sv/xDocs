@@ -1,0 +1,6 @@
+# Commits `git blame` should look through. GitHub reads this file as is;
+# locally, run once: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format with Prettier (#76) — squash-merged, so it also carries the
+# Prettier config and the hoisted control-character regex in attachments.ts.
+f329d60af4d0d26d1d29f847ea8b7be664edc5b4
