@@ -1,0 +1,2 @@
+CREATE INDEX "documents_live_parent_idx" ON "documents" USING btree ("parent_id") WHERE "documents"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX "documents_created_by_idx" ON "documents" USING btree ("created_by");

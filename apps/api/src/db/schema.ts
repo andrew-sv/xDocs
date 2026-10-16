@@ -72,8 +72,21 @@ export const documents = pgTable(
     ),
   },
   (table) => [
-    // Every sidebar query filters on this.
+    /*
+     * Every walk of the tree, live or not: the delete cascade, restore and the
+     * cycle check follow parent_id into the trash too, so this stays whole.
+     */
     index('documents_parent_idx').on(table.parentId),
+    /*
+     * The same walk over live rows only, which is what the sidebar and the
+     * visibility rule do on every request. Partial, so trashed documents are
+     * not in it at all rather than fetched and filtered out.
+     */
+    index('documents_live_parent_idx')
+      .on(table.parentId)
+      .where(sql`${table.deletedAt} IS NULL`),
+    // The other half of the visibility rule, and every owner-only route.
+    index('documents_created_by_idx').on(table.createdBy),
     index('documents_search_idx').using('gin', table.search),
   ],
 );
