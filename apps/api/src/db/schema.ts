@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { customType, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  customType,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 /** Raw Yjs update payload. drizzle has no first-class bytea, so declare it. */
@@ -46,11 +55,15 @@ export const documents = pgTable(
     /*
      * Parent document; null means top level.
      *
-     * Deliberately NOT onDelete: 'cascade'. Deletion here is a soft delete, and
-     * a real FK cascade would hard-delete rows and destroy the Yjs state that
-     * the soft delete exists to preserve.
+     * A real FK, so a row can never point at a parent that does not exist —
+     * such a document is unreachable by every walk of the tree (#64). Plain
+     * NO ACTION, deliberately NOT onDelete: 'cascade': deletion here is a soft
+     * delete, and a cascade would hard-delete rows and destroy the Yjs state
+     * the soft delete exists to preserve. The one hard delete removes a whole
+     * subtree in one statement, which NO ACTION allows, since it is checked
+     * at the end of the statement.
      */
-    parentId: uuid('parent_id'),
+    parentId: uuid('parent_id').references((): AnyPgColumn => documents.id),
     /*
      * Plain text of every block, mirrored out of the CRDT by the collab store
      * hook — the same denormalisation as `title`, for the same reason.

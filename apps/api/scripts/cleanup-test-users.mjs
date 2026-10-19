@@ -10,8 +10,9 @@
  * deleting the user alone would leave its documents ownerless — private ones
  * then reachable by nobody. So they are deleted first, attachments going with
  * them through their own cascade. A sub-document someone ELSE owns under one of
- * them is moved to the top level rather than deleted: `parent_id` has no FK,
- * and a child pointing at a row that no longer exists is unreachable too.
+ * them is moved to the top level rather than deleted — and it has to move
+ * first: `parent_id` is a NO ACTION FK (#64), so deleting its parent while it
+ * still points there is refused, which rolls back the whole cleanup.
  *
  * Only users older than the cutoff are touched, so a test run in progress
  * keeps its accounts. It refuses to run unless ALLOW_PASSWORD_LOGIN=true —

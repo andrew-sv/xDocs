@@ -175,6 +175,12 @@ function fromSql(row: SearchRow): DocumentColumns {
  * it lives under. Every ancestor has a child by definition, hence hasChildren.
  *
  * Walks upward from all matches in one query rather than one per result.
+ *
+ * The CYCLE clause ends a walk that comes back to a document it has already
+ * visited (#64). Moves are serialised so a parent cycle should never form
+ * (#55), but this is an UPWARD walk, the one shape that can enter a cycle and
+ * never leave — and UNION alone would not stop it, since `depth` makes every
+ * row distinct. A downward walk from a root cannot reach a cycle at all.
  */
 async function ancestorPaths(ids: string[], userId: string): Promise<Map<string, DocumentDTO[]>> {
   const paths = new Map<string, DocumentDTO[]>();
@@ -192,10 +198,10 @@ async function ancestorPaths(ids: string[], userId: string): Promise<Map<string,
       SELECT u.match_id, d.id, d.parent_id, d.title, d.visibility, d.created_by, d.created_at, d.updated_at, u.depth + 1
         FROM documents d
         JOIN up u ON d.id = u.parent_id
-    )
+    ) CYCLE id SET is_cycle USING visited
     SELECT match_id, id, parent_id, title, visibility, created_by, created_at, updated_at, depth
       FROM up
-     WHERE depth > 0
+     WHERE depth > 0 AND NOT is_cycle
      ORDER BY match_id, depth DESC
   `);
 
