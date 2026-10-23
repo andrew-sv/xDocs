@@ -202,6 +202,12 @@ Each of these caused a real bug. Changing them silently breaks things.
   away focus and selection.
 - **Use `@tiptap/extension-collaboration-caret`**, not `-cursor` (the v2 name,
   frozen and incompatible with TipTap 3).
+- **Every `@tiptap/*` dependency is pinned exactly, to one version (#69).**
+  TipTap pins its packages to each other exactly, so one of ours on a newer
+  minor installs a second `@tiptap/core`/`pm`, and ProseMirror breaks in ways
+  that do not look like a version problem. `pnpm add` writes `^` by default —
+  fix it by hand. Upgrade them all together; `tiptap-versions.test.mjs` checks
+  the declarations and the lockfile. `y-tiptap` has its own version line.
 - **Drag and drop:** the payload uses a private MIME type, never `text/plain`
   (ProseMirror would insert it as literal text), and `.blocks.dragging
   .block-body` drops editors out of hit-testing so ProseMirror cannot intercept
