@@ -20,7 +20,9 @@ import * as Y from 'yjs';
 import {
   admittedRow,
   canAccessDocument,
+  purgeSubtree,
   subtreeIds,
+  trashSubtree,
   visibleDocumentIds,
   visibleTreeSql,
   wouldCreateCycle,
@@ -469,8 +471,8 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (!owned)
       return c.json({ error: 'Only the owner can permanently delete a trashed document.' }, 403);
 
-    const ids = await subtreeIds(id);
-    await getDb().delete(documents).where(inArray(documents.id, ids));
+    // Spares what the purger cannot reach, as the delete now does (#87).
+    await purgeSubtree(id, userId);
     return c.body(null, 204);
   })
 
@@ -696,16 +698,13 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     if (!owned) return c.json({ error: 'Only the owner can delete this document.' }, 403);
 
     /*
-     * Cascade to the whole subtree, stamping ONE timestamp across it. Restore
-     * uses that exact value to find precisely the documents this delete took,
-     * without disturbing anything deleted earlier.
+     * Cascade to the subtree, stamping ONE timestamp across it. Restore uses
+     * that exact value to find precisely the documents this delete took,
+     * without disturbing anything deleted earlier. The cascade stops at
+     * documents the deleter cannot reach, which move to the top level instead
+     * (#87) — see trashSubtree.
      */
-    const ids = await subtreeIds(id);
-    const deletedAt = new Date();
-    await getDb()
-      .update(documents)
-      .set({ deletedAt })
-      .where(and(inArray(documents.id, ids), isNull(documents.deletedAt)));
+    await trashSubtree(id, userId, new Date());
     return c.body(null, 204);
   })
 
