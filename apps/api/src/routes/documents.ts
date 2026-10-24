@@ -33,7 +33,7 @@ import {
 } from '../collab.js';
 import { CODE_BLOCK_NODE, readContent } from '../content.js';
 import { linkProblem, parseLinks, writeRuns } from '../markdownLinks.js';
-import { getDb } from '../db/index.js';
+import { getDb, rowsOf } from '../db/index.js';
 import { documents } from '../db/schema.js';
 import { capture, recordVersion } from '../versions.js';
 
@@ -205,7 +205,7 @@ async function ancestorPaths(ids: string[], userId: string): Promise<Map<string,
      ORDER BY match_id, depth DESC
   `);
 
-  const rows = (result as unknown as { rows?: Array<SearchRow & { match_id: string }> }).rows ?? [];
+  const rows = rowsOf<SearchRow & { match_id: string }>(result);
   for (const row of rows) {
     const path = paths.get(row.match_id) ?? [];
     path.push(toDTO(fromSql(row), userId, true));
@@ -372,7 +372,7 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
        LIMIT 30
     `);
 
-    const rows = (result as unknown as { rows?: SearchRow[] }).rows ?? [];
+    const rows = rowsOf<SearchRow>(result);
     if (rows.length === 0) return c.json([]);
 
     const withChildren = await childBearing(rows.map((row) => row.id));
@@ -426,7 +426,7 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
         FROM roots r
        ORDER BY r.deleted_at DESC
     `);
-    const list = (rows as unknown as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+    const list = rowsOf<Record<string, unknown>>(rows);
     const entries: TrashEntryDTO[] = list.map((row) => ({
       id: String(row.id),
       title: String(row.title),
