@@ -85,6 +85,10 @@ jobs:
       # migration chain builds the schema from empty on every PR.
       - run: pnpm db:migrate
 
+      # The compiled bundle, started the way Railway starts it, so this suite
+      # tests what ships rather than the tsx dev server.
+      - run: pnpm -F @xdocs/api build
+
       - name: Start the API and wait for it
         run: |
           pnpm -F @xdocs/api start &
