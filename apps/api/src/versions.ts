@@ -6,12 +6,13 @@ import {
   type BlockMeta,
   type VersionReason,
 } from '@xdocs/shared';
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import * as Y from 'yjs';
 import { readContentText } from './contentText.js';
 import { getDb } from './db/index.js';
 import { documentVersions } from './db/schema.js';
+import { versionsToPrune } from './retention.js';
 
 /**
  * Version history (#49).
@@ -57,10 +58,11 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
  *    the empty seed from initialYState, and a version of nothing is clutter
  *
  * One statement, run inside the store's own transaction, so the archive and
- * the overwrite commit together.
+ * the overwrite commit together. Reports whether a version was written, which
+ * is the store hook's cue to prune (#63).
  */
-export async function archivePreviousState(tx: Tx, documentId: string): Promise<void> {
-  await tx.execute(sql`
+export async function archivePreviousState(tx: Tx, documentId: string): Promise<boolean> {
+  const result = await tx.execute(sql`
     INSERT INTO document_versions (document_id, ystate, title, reason, saved_at)
     SELECT d.id, d.ystate, d.title, 'auto', d.updated_at
       FROM documents d
@@ -76,6 +78,39 @@ export async function archivePreviousState(tx: Tx, documentId: string): Promise<
             )
        )
   `);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Apply the retention policy (#63, see retention.ts) to one document's history.
+ *
+ * The store hook calls it only when it has just archived an automatic version,
+ * inside the same transaction: history only grows when a document is edited,
+ * so pruning on that growth keeps every document bounded without a scheduled
+ * job, and a store that archived nothing — nearly all of them, given the
+ * interval — pays nothing. When it does run it is one indexed read of the
+ * document's version metadata (never `ystate`) on
+ * `document_versions_document_idx`, and at most one delete by primary key.
+ *
+ * Manual, before-restore and before-replace versions do not trigger it: they
+ * are rare, and the next automatic version prunes for them.
+ */
+export async function pruneVersions(tx: Tx, documentId: string, now = new Date()): Promise<number> {
+  const versions = await tx
+    .select({
+      id: documentVersions.id,
+      reason: documentVersions.reason,
+      savedAt: documentVersions.savedAt,
+      createdAt: documentVersions.createdAt,
+    })
+    .from(documentVersions)
+    .where(eq(documentVersions.documentId, documentId));
+  const doomed = versionsToPrune(versions, now);
+  if (doomed.length === 0) return 0;
+  await tx
+    .delete(documentVersions)
+    .where(and(eq(documentVersions.documentId, documentId), inArray(documentVersions.id, doomed)));
+  return doomed.length;
 }
 
 /** The live document, captured for a version. */

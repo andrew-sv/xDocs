@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import { canAccessDocument } from './db/access.js';
 import { getDb } from './db/index.js';
 import { documents } from './db/schema.js';
-import { archivePreviousState } from './versions.js';
+import { archivePreviousState, pruneVersions } from './versions.js';
 
 /*
  * The running Hocuspocus server, for editing a document from the REST side.
@@ -129,8 +129,9 @@ export const collabConfiguration: Partial<ServerConfiguration> = {
         const title = readTitle(document);
         await getDb().transaction(async (tx) => {
           // The state about to be overwritten becomes a version first, at
-          // most once per interval — see archivePreviousState (#49).
-          await archivePreviousState(tx, id);
+          // most once per interval — see archivePreviousState (#49). A new
+          // version is the moment to thin out the old ones (#63).
+          if (await archivePreviousState(tx, id)) await pruneVersions(tx, id);
           await tx
             .update(documents)
             .set({
