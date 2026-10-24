@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import { getDb } from './db/index.js';
 import { apiKeys } from './db/schema.js';
 import { user } from './db/auth-schema.js';
@@ -10,6 +10,16 @@ export const API_KEY_PREFIX = 'xdk_';
 
 /** Length of the shown-in-lists prefix, including `xdk_`. */
 const DISPLAY_PREFIX_LENGTH = API_KEY_PREFIX.length + 6;
+
+/**
+ * How stale `last_used_at` may get before a request rewrites it (#66).
+ *
+ * Writing it on every request turned a burst of MCP reads into a burst of row
+ * updates on Neon, for a value nothing reads more precisely than "today" (the
+ * keys dialog shows a date). A minute still answers "is this key in use right
+ * now" and caps the writes at one per key per minute, however busy the key is.
+ */
+export const LAST_USED_RESOLUTION_SECONDS = 60;
 
 export function isApiKey(token: string | undefined | null): boolean {
   return typeof token === 'string' && token.startsWith(API_KEY_PREFIX);
@@ -59,10 +69,26 @@ export async function identityFromApiKey(token: string): Promise<ApiKeyIdentity 
 
   // Fire-and-forget: knowing when a key was last used must never be able to
   // fail a request that was otherwise fine.
+  //
+  // The staleness test is in the statement rather than read first, so it stays
+  // one round trip and two requests racing cannot both decide to write (#66).
+  // Both sides use the database's now(), not this process's clock: comparing
+  // the two would make the throttle depend on clock skew.
   void getDb()
     .update(apiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(apiKeys.id, row.id))
+    .set({ lastUsedAt: sql`now()` })
+    .where(
+      and(
+        eq(apiKeys.id, row.id),
+        or(
+          isNull(apiKeys.lastUsedAt),
+          lt(
+            apiKeys.lastUsedAt,
+            sql`now() - make_interval(secs => ${LAST_USED_RESOLUTION_SECONDS})`,
+          ),
+        ),
+      ),
+    )
     .catch(() => {});
 
   return { userId: row.userId, email: row.email, keyId: row.id };

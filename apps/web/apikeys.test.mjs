@@ -6,6 +6,9 @@
  * back out of the database, and must see exactly what its owner sees and
  * nothing more.
  */
+import { createRequire } from 'node:module';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
 import { trackCreatedDocuments } from './test-cleanup.mjs';
 
@@ -112,6 +115,60 @@ ck(
     })
   ).status === 404,
 );
+
+// --- last_used_at is written at most once a minute (#66) --------------------
+// A key of its own, so no other request in this suite moves its timestamp.
+const usage = await createKey(owner, 'last-used test key');
+const usageKey = usage.body.key;
+const lastUsedAt = async () =>
+  (await fetch(`${API}/api/keys`, { headers: H(owner) }).then((r) => r.json())).find(
+    (k) => k.id === usage.body.id,
+  )?.lastUsedAt;
+// The write is fire-and-forget, so the response can arrive before it lands.
+const settle = async (until) => {
+  for (let i = 0; i < 20; i++) {
+    const v = await lastUsedAt();
+    if (until(v)) return v;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return lastUsedAt();
+};
+
+ck('a fresh key has never been used', usage.body.lastUsedAt === null);
+await fetch(`${API}/api/documents`, { headers: keyHeaders(usageKey) });
+const firstUse = await settle((v) => v != null);
+ck('its first use sets last_used_at', typeof firstUse === 'string');
+
+await fetch(`${API}/api/documents`, { headers: keyHeaders(usageKey) });
+// A negative: there is nothing to wait FOR, so give a write that should not
+// happen the same two seconds the positive above was allowed.
+const secondUse = await settle((v) => v !== firstUse);
+ck('an immediate second use does not rewrite it', secondUse === firstUse);
+
+// The stale path, without waiting out the minute: age the row in the database,
+// which is what a minute passing does to it, and use the key again.
+const require = createRequire(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../api/package.json'),
+);
+const pg = require('pg');
+if (!process.env.DATABASE_URL) {
+  process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../.env.local'));
+}
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db.connect();
+const aged = await db.query(
+  `UPDATE api_keys SET last_used_at = now() - interval '1 hour' WHERE id = $1 RETURNING last_used_at`,
+  [usage.body.id],
+);
+await db.end();
+const agedAt = aged.rows[0].last_used_at.toISOString();
+await fetch(`${API}/api/documents`, { headers: keyHeaders(usageKey) });
+const staleUse = await settle((v) => v !== agedAt);
+ck(
+  'a use after it has gone stale rewrites it',
+  typeof staleUse === 'string' && Date.parse(staleUse) > Date.parse(firstUse),
+);
+await fetch(`${API}/api/keys/${usage.body.id}`, { method: 'DELETE', headers: H(owner) });
 
 // --- revocation --------------------------------------------------------------
 const revoked = await fetch(`${API}/api/keys/${created.body.id}`, {
