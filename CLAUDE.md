@@ -143,6 +143,20 @@ with `clone()`; it leaves comment threads alone and strips only marks whose
 thread is gone. Reading a version over REST does not break the "no content over
 HTTP" rule: a version is immutable, so there is nothing to clobber.
 
+Versions are pruned by a retention policy (#63), `versionsToPrune` in
+`src/retention.ts`: every version from the last 24h, then the newest per UTC
+day up to 30 days old, then the newest per week (from Monday, UTC), all by
+`saved_at`. `manual` versions are never pruned, nor the newest `before-restore`
+and newest `before-replace`; exempt rows do not take a bucket's place. The
+store hook runs it inside its transaction only when `archivePreviousState`
+actually wrote a row — history grows only then, so no schedule is needed and
+most stores pay nothing. It reads metadata on the existing
+`(document_id, saved_at)` index and deletes by id. Keep the rule in that one
+function: `pnpm --filter @xdocs/api prune:versions` imports it to catch up
+history saved before the policy, which otherwise waits for its document's next
+edit (`--dry-run` runs in a transaction and rolls back; `--document <id>`
+limits it). The integration suite runs it only with `--document`.
+
 `attachments` holds uploaded files as bytea, capped per file at
 `MAX_ATTACHMENT_BYTES` and per user at `ATTACHMENT_QUOTA_BYTES`
 (`DEFAULT_ATTACHMENT_QUOTA_BYTES` when unset) — `/attachments/usage` is
