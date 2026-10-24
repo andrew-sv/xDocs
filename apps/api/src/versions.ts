@@ -195,44 +195,196 @@ function dropOrphanedCommentMarks(
 }
 
 /**
+ * A block's content as a comparable string: element names, attributes and
+ * text runs with their marks, keys sorted so equal content compares equal.
+ *
+ * With `threads`, comment marks whose thread is not in it are left out — the
+ * version is compared as the restore would write it, after
+ * `dropOrphanedCommentMarks`. Runs left with the same marks are merged, since
+ * Yjs would have merged them too.
+ */
+function contentKey(fragment: Y.XmlFragment, threads?: Set<string>): string {
+  const stable = (value: unknown): unknown =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((key) => [key, stable((value as Record<string, unknown>)[key])]),
+        )
+      : Array.isArray(value)
+        ? value.map(stable)
+        : value;
+  const marks = (attributes: Record<string, unknown> = {}) =>
+    stable(
+      Object.fromEntries(
+        Object.entries(attributes).filter(([key, value]) => {
+          if (value === null || value === undefined) return false;
+          if (!threads || !isCommentAttribute(key)) return true;
+          const threadId = (value as { threadId?: unknown }).threadId;
+          return typeof threadId === 'string' && threads.has(threadId);
+        }),
+      ),
+    );
+  const walk = (node: Y.XmlFragment | Y.XmlElement | Y.XmlText): unknown => {
+    if (node instanceof Y.XmlText) {
+      const runs: Array<{ insert: unknown; marks: string }> = [];
+      for (const op of node.toDelta() as Array<{
+        insert: unknown;
+        attributes?: Record<string, unknown>;
+      }>) {
+        const key = JSON.stringify(marks(op.attributes));
+        const last = runs.at(-1);
+        if (last?.marks === key && typeof last.insert === 'string' && typeof op.insert === 'string')
+          last.insert += op.insert;
+        else runs.push({ insert: stable(op.insert), marks: key });
+      }
+      return runs;
+    }
+    const children = node
+      .toArray()
+      .map((child) =>
+        child instanceof Y.XmlElement || child instanceof Y.XmlText ? walk(child) : null,
+      );
+    return node instanceof Y.XmlElement
+      ? { name: node.nodeName, attributes: stable(node.getAttributes()), children }
+      : children;
+  };
+  return JSON.stringify(walk(fragment));
+}
+
+/**
+ * Which entries of `from` to leave where they are, standing for which entries
+ * of `to`: an order-preserving matching of the two block lists, as pairs of
+ * indices, scored by `score` (0 = cannot stand in) and maximised.
+ */
+function keptInPlace(
+  from: number,
+  to: number,
+  score: (i: number, j: number) => number,
+): Array<[number, number]> {
+  // best[i][j]: the best total over from[i..] and to[j..].
+  const best = Array.from({ length: from + 1 }, () => new Array<number>(to + 1).fill(0));
+  for (let i = from - 1; i >= 0; i--)
+    for (let j = to - 1; j >= 0; j--) {
+      const pair = score(i, j);
+      best[i]![j] = Math.max(
+        pair > 0 ? best[i + 1]![j + 1]! + pair : 0,
+        best[i + 1]![j]!,
+        best[i]![j + 1]!,
+      );
+    }
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0, j = 0; i < from && j < to;) {
+    const pair = score(i, j);
+    if (pair > 0 && best[i]![j] === best[i + 1]![j + 1]! + pair) pairs.push([i++, j++]);
+    else if (best[i]![j] === best[i + 1]![j]) i++;
+    else j++;
+  }
+  return pairs;
+}
+
+/**
  * Make the live document read as `version` does.
  *
  * A CRDT edit like any other, so it merges with whoever is typing and appears
  * in every open editor — never a write to `ystate`, which the next store would
- * clobber. Every block comes back under a NEW id with a copy of the version's
- * content: the old ids' fragments may hold later edits, and leaving them
- * untouched keeps them exactly as recoverable as a deleted block's are.
+ * clobber.
  *
- * Content is copied into the fragment only as the fragment joins the document
- * (Yjs integrates a clone's pending content on insert), which is the order
+ * It changes as little as it can (#60). Each restore used to bring every block
+ * back under a new id, leaving the old fragments behind — Yjs cannot drop a
+ * root type — so every restore roughly doubled the document's fragments, and
+ * every later store and version paid for them. Now:
+ *
+ *  - A block still in the document, in the same relative order, keeps its id.
+ *    If its content already reads as the version's it is not touched at all;
+ *    otherwise its fragment is emptied and refilled in place. A live block
+ *    under another id that already reads exactly as a version block also
+ *    stands in for it — that is the copy an earlier restore of this same
+ *    version made, and without this every repeat would copy it again. An open editor
+ *    stays bound to it and shows the restored text, keeping its focus — and
+ *    text someone types into it during the restore merges into what is
+ *    visible, where it used to land in an orphaned fragment and vanish.
+ *  - Every other block in the version — deleted since, or moved — comes back
+ *    as a copy under a NEW id, as before. That keeps one property the old code
+ *    had for free: a restore never re-inserts an id that has been in `blocks`.
+ *    A client's undo stack can still hold "delete block X" or a move of X;
+ *    undoing it re-inserts X's original entry, and had the restore put X back
+ *    too, the list would hold X twice — two editors on one fragment. A copy
+ *    under a new id cannot collide with anything. These are the only new
+ *    fragments a restore creates, so growth follows how much the document
+ *    changed, not how big it is.
+ *  - Blocks absent from the version leave `blocks`, their fragments staying
+ *    behind exactly like any deleted block's.
+ *
+ * A restore arrives at clients as a remote change, so it is on nobody's undo
+ * stack. A client's own earlier edits to a block that was refilled in place
+ * still undo against that fragment — the same as after any collaborator's
+ * edit — where before they undid into a fragment no longer on screen.
+ *
+ * Content is copied into a fragment only as it joins the document (Yjs
+ * integrates a clone's pending content on insert), which is the order
  * CLAUDE.md requires for text nodes.
  */
 export function restoreVersion(doc: Y.Doc, version: Y.Doc): void {
   const threads = new Set(doc.getMap(COMMENTS_KEY).keys());
   doc.transact(() => {
     const blocks = doc.getArray<BlockMeta>(BLOCKS_KEY);
-    blocks.delete(0, blocks.length);
+    const live = blocks.toArray();
+    const wanted = version
+      .getArray<BlockMeta>(BLOCKS_KEY)
+      .toArray()
+      .filter((meta) => meta?.id);
+    const liveKeys = live.map((meta) => contentKey(doc.getXmlFragment(blockFragmentName(meta.id))));
+    const wantedKeys = wanted.map((meta) =>
+      contentKey(version.getXmlFragment(blockFragmentName(meta.id)), threads),
+    );
+    // The same block outranks a different block that merely reads the same.
+    const kept = keptInPlace(live.length, wanted.length, (i, j) =>
+      live[i]!.type !== wanted[j]!.type
+        ? 0
+        : live[i]!.id === wanted[j]!.id
+          ? 2
+          : liveKeys[i] === wantedKeys[j]
+            ? 1
+            : 0,
+    );
+    const keptLive = new Set(kept.map(([i]) => i));
+    const keptWanted = new Set(kept.map(([, j]) => j));
 
-    for (const meta of version.getArray<BlockMeta>(BLOCKS_KEY).toArray()) {
-      if (!meta?.id) continue;
-      const copy: BlockMeta = { ...meta, id: randomUUID() };
-      blocks.push([copy]);
-      const target = doc.getXmlFragment(blockFragmentName(copy.id));
-      const source = version.getXmlFragment(blockFragmentName(meta.id));
+    const fill = (target: Y.XmlFragment, sourceId: string) => {
+      const source = version.getXmlFragment(blockFragmentName(sourceId));
       target.insert(
         0,
         source.toArray().map((node) => node.clone() as Y.XmlElement | Y.XmlText),
       );
       dropOrphanedCommentMarks(target, threads);
+    };
+
+    // Kept blocks: rewrite only the ones whose content differs.
+    for (const [i, j] of kept) {
+      if (liveKeys[i] === wantedKeys[j]) continue;
+      const target = doc.getXmlFragment(blockFragmentName(live[i]!.id));
+      target.delete(0, target.length);
+      fill(target, wanted[j]!.id);
     }
+
+    // Leaves exactly the kept entries, in order, so the version's other
+    // blocks can be slotted in between them by position.
+    for (let i = live.length - 1; i >= 0; i--) if (!keptLive.has(i)) blocks.delete(i, 1);
+    wanted.forEach((meta, j) => {
+      if (keptWanted.has(j)) return;
+      const copy: BlockMeta = { ...meta, id: randomUUID() };
+      blocks.insert(j, [copy]);
+      fill(doc.getXmlFragment(blockFragmentName(copy.id)), meta.id);
+    });
     // Every document has at least one block to type into.
     if (blocks.length === 0) blocks.push([{ id: randomUUID(), type: 'paragraph' }]);
 
     const title = doc.getText(TITLE_KEY);
-    const wanted = version.getText(TITLE_KEY).toString();
-    if (title.toString() !== wanted) {
+    const wantedTitle = version.getText(TITLE_KEY).toString();
+    if (title.toString() !== wantedTitle) {
       title.delete(0, title.length);
-      title.insert(0, wanted);
+      title.insert(0, wantedTitle);
     }
   });
 }
