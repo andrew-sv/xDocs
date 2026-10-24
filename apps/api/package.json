@@ -7,8 +7,8 @@
     "dev": "dotenv -e ../../.env.local -- tsx watch src/server.ts",
     "db:generate": "dotenv -e ../../.env.local -- drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit",
-    "start": "tsx src/server.ts",
+    "build": "node scripts/build.mjs",
+    "start": "node --enable-source-maps dist/server.js",
     "db:migrate": "dotenv -e ../../.env.local -- drizzle-kit migrate",
     "db:check": "dotenv -e ../../.env.local -- drizzle-kit check",
     "db:check-destructive": "dotenv -e ../../.env.local -- node scripts/check-migrations.mjs",
@@ -32,6 +32,7 @@
     "@types/pg": "^8.15.6",
     "dotenv-cli": "^11.0.0",
     "drizzle-kit": "^0.31.10",
+    "esbuild": "0.28.2",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3"
   },
