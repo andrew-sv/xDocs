@@ -21,6 +21,9 @@ if (!connectionString) {
   process.exit(1);
 }
 
+// No pool.on('error') here, unlike the API (#81): a dropped connection ending
+// this short, operator-run script loudly is the right outcome, and a re-run
+// picks up exactly the rows it had not reached.
 const pool = new Pool({ connectionString });
 const { rows } = await pool.query(
   `SELECT id, ystate FROM documents WHERE content_text IS NULL AND ystate IS NOT NULL`,

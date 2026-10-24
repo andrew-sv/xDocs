@@ -17,6 +17,18 @@ export function getDb() {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error('DATABASE_URL is not set — run `vercel env pull .env.local`');
     pool = new pg.Pool({ connectionString: url, max: 10 });
+    /*
+     * An idle client the server drops — Neon does on compute suspend, restart
+     * or idle timeout — emits 'error' on the pool, and an EventEmitter with no
+     * listener throws it: the whole process exits, taking every editor and any
+     * change still inside the store debounce with it (#81). The pool has
+     * already discarded that client and connects afresh on the next checkout,
+     * so logging is all there is to do. Errors on a checked-out client still
+     * reject the query that was using it.
+     */
+    pool.on('error', (error) => {
+      console.error(`database: idle client dropped (${error.message})`);
+    });
     dbInstance = drizzle(pool, { schema });
   }
   return dbInstance;
