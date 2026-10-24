@@ -1,0 +1,15 @@
+{
+  "name": "@xdocs/test-support",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./auth": "./auth.mjs",
+    "./cleanup": "./cleanup.mjs",
+    "./harness": "./harness.mjs",
+    "./store": "./store.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -8,22 +8,18 @@
  */
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
-import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
-import { flushStore } from './test-store.mjs';
+import { check, cleanup, finish } from '@xdocs/test-support/harness';
+import { authHeaders, createDisposableUser, signInForTests } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
+import { flushStore } from '@xdocs/test-support/store';
 
-// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+// Everything this suite creates is purged when it ends; see @xdocs/test-support/cleanup.
 const tracker = trackCreatedDocuments();
+cleanup(() => tracker.purge());
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -80,15 +76,15 @@ const NEEDLE = `zorblat${Date.now()}`;
 // --- title search -----------------------------------------------------------
 const titled = await create(owner, `Quarterly ${NEEDLE} report`);
 let hits = await search(owner, NEEDLE);
-ck(
+check(
   'a title match is found',
   hits.some((h) => h.document.id === titled.id),
 );
-ck('the hit carries the full document', hits[0]?.document?.visibility === 'private');
+check('the hit carries the full document', hits[0]?.document?.visibility === 'private');
 
 // --- prefix matching, so results narrow as you type -------------------------
 hits = await search(owner, NEEDLE.slice(0, 10));
-ck(
+check(
   'a partial word still matches (prefix search)',
   hits.some((h) => h.document.id === titled.id),
 );
@@ -98,12 +94,12 @@ const bodied = await create(owner, 'Ordinary title');
 await writeBody(bodied.id, `The minutes mention ${NEEDLE} exactly once.`);
 hits = await search(owner, NEEDLE);
 const bodyHit = hits.find((h) => h.document.id === bodied.id);
-ck('block text is searchable once the CRDT has been stored', Boolean(bodyHit));
-ck('the snippet quotes the surrounding text', (bodyHit?.snippet ?? '').includes('minutes'));
-ck('the snippet marks the match for highlighting', (bodyHit?.snippet ?? '').includes('[['));
+check('block text is searchable once the CRDT has been stored', Boolean(bodyHit));
+check('the snippet quotes the surrounding text', (bodyHit?.snippet ?? '').includes('minutes'));
+check('the snippet marks the match for highlighting', (bodyHit?.snippet ?? '').includes('[['));
 
 // --- ranking ----------------------------------------------------------------
-ck(
+check(
   'a title match outranks a body match',
   hits.findIndex((h) => h.document.id === titled.id) <
     hits.findIndex((h) => h.document.id === bodied.id),
@@ -114,24 +110,24 @@ const parent = await create(owner, `Folder ${NEEDLE}-parent`);
 const child = await create(owner, `Child ${NEEDLE}-deep`, parent.id);
 hits = await search(owner, `${NEEDLE}`);
 const childHit = hits.find((h) => h.document.id === child.id);
-ck('a nested result is found', Boolean(childHit));
-ck(
+check('a nested result is found', Boolean(childHit));
+check(
   'it carries its ancestor path',
   childHit?.path?.length === 1 && childHit.path[0].id === parent.id,
 );
-ck(
+check(
   'the path is ordered root first',
   (hits.find((h) => h.document.id === parent.id)?.path ?? []).length === 0,
 );
 
 // --- visibility: the load-bearing part --------------------------------------
-ck(
+check(
   'a stranger cannot find a private document',
   !(await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id),
 );
 
 await setVisibility(owner, titled.id, 'public');
-ck(
+check(
   'made public, a stranger can find it',
   (await search(stranger, NEEDLE)).some((h) => h.document.id === titled.id),
 );
@@ -139,23 +135,30 @@ ck(
 // A public child under a private parent must stay unreachable — the same
 // ancestor gate the listing and the collab handshake use.
 await setVisibility(owner, child.id, 'public');
-ck(
+check(
   'a public child of a private parent is NOT findable',
   !(await search(stranger, NEEDLE)).some((h) => h.document.id === child.id),
 );
 
 // --- deleted documents drop out ---------------------------------------------
 await fetch(`${API}/api/documents/${titled.id}`, { method: 'DELETE', headers: H(owner) });
-ck(
+check(
   'a deleted document leaves the index',
   !(await search(owner, NEEDLE)).some((h) => h.document.id === titled.id),
 );
 
 // --- degenerate queries -----------------------------------------------------
-ck('an empty query returns nothing rather than everything', (await search(owner, '')).length === 0);
-ck('a punctuation-only query is empty, not an error', (await search(owner, '  ??? ')).length === 0);
-ck('an unmatched word returns no hits', (await search(owner, 'qqzzxx' + Date.now())).length === 0);
+check(
+  'an empty query returns nothing rather than everything',
+  (await search(owner, '')).length === 0,
+);
+check(
+  'a punctuation-only query is empty, not an error',
+  (await search(owner, '  ??? ')).length === 0,
+);
+check(
+  'an unmatched word returns no hits',
+  (await search(owner, 'qqzzxx' + Date.now())).length === 0,
+);
 
-await tracker.purge();
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail === 0 ? 0 : 1);
+await finish();

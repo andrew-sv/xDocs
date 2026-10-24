@@ -13,6 +13,7 @@ Hocuspocus, Neon Postgres.
 apps/web     Vite + React + TipTap v3        :5173
 apps/api     Hono REST + Hocuspocus          :3001  (one server, both protocols)
 packages/shared   zod schemas + the Yjs key names both sides agree on
+packages/test-support   helpers and harness shared by every test layer
 ```
 
 ### The one design decision worth knowing
@@ -67,12 +68,18 @@ pnpm typecheck
 
 Three layers, deliberately:
 
-- **`pnpm test`** — pure logic plus jsdom-mounted editors. Fast; catches
-  teardown and keybinding bugs.
-- **`pnpm integration`** — drives Hocuspocus and REST from Node. Covers the REST
+- **`pnpm test`** — pure logic plus jsdom-mounted editors, in
+  `apps/web/*.test.mjs`. Fast; catches teardown and keybinding bugs.
+- **`pnpm integration`** — drives Hocuspocus and REST from Node, in
+  `apps/api/test/` (plus the MCP server's suite in `apps/mcp/`). Covers the REST
   contract, two-client convergence and persistence. Touches no React component.
-  Its eleven suites run concurrently (`scripts/integration.mjs`), since each one
-  creates and purges everything it asserts on; pass suite names to run a subset.
+  Its fourteen suites run concurrently (`scripts/integration.mjs`), since each
+  one creates and purges everything it asserts on; pass suite names to run a
+  subset.
+
+Both are plain Node scripts on `node:test` — `node undo.test.mjs` runs one, and
+`--test-name-pattern` picks out checks by name. The helpers they share with the
+browser suite are the `@xdocs/test-support` package in `packages/test-support`.
 - **`pnpm e2e`** — Chromium over the real stack: real clicks, real Cmd+Z, real
   HTML5 drag, two browser contexts editing one document. CI runs it as three
   shards on three runners, each with its own database.

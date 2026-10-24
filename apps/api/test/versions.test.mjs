@@ -5,26 +5,21 @@
  */
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 import * as Y from 'yjs';
-import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
-import { flushStore } from './test-store.mjs';
+import { check, cleanup, finish } from '@xdocs/test-support/harness';
+import { authHeaders, createDisposableUser, signInForTests } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
+import { flushStore } from '@xdocs/test-support/store';
 
-// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+// Everything this suite creates is purged when it ends; see @xdocs/test-support/cleanup.
 const tracker = trackCreatedDocuments();
+cleanup(() => tracker.purge());
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -99,7 +94,7 @@ async function until(predicate, ms = 5000) {
 
 // --- versions taken around a replace ----------------------------------------
 const doc = await create(owner, 'History test');
-ck(
+check(
   'a new document has no history',
   (await listVersions(owner, doc.id).then((r) => r.json())).length === 0,
 );
@@ -108,45 +103,45 @@ await putContent(owner, doc.id, {
   title: 'First title',
   blocks: ['First wording with [a link](https://example.com)'],
 });
-ck(
+check(
   'replacing an empty document keeps no version of the emptiness',
   (await listVersions(owner, doc.id).then((r) => r.json())).length === 0,
 );
 
 await putContent(owner, doc.id, { title: 'Second title', blocks: ['Second wording'] });
 let versions = await listVersions(owner, doc.id).then((r) => r.json());
-ck(
+check(
   'replacing real content keeps what it replaced',
   versions.length === 1 && versions[0].reason === 'before-replace',
 );
-ck(
+check(
   'the version lists its title without its content',
   versions[0].title === 'First title' && !('ystate' in versions[0]),
 );
-ck('and who replaced it', versions[0].author?.name?.length > 0);
+check('and who replaced it', versions[0].author?.name?.length > 0);
 const firstVersion = versions[0];
 
 const read = await getVersion(owner, doc.id, firstVersion.id).then((r) => r.json());
-ck(
+check(
   'a version reads back in the shape of a content read',
   read.content.title === 'First title' &&
     texts(read.content).join('|') === 'First wording with [a link](https://example.com)',
 );
-ck(
+check(
   'the live document is untouched by reading one',
   texts(await getContent(owner, doc.id)).join('|') === 'Second wording',
 );
 
 // --- manual versions ----------------------------------------------------------
 const manual = await saveVersion(owner, doc.id);
-ck('a version can be saved on request', manual.status === 201);
+check('a version can be saved on request', manual.status === 201);
 const manualVersion = await manual.json();
-ck(
+check(
   'as a manual version of the document as it stands',
   manualVersion.reason === 'manual' && manualVersion.title === 'Second title',
 );
 versions = await listVersions(owner, doc.id).then((r) => r.json());
-ck(
+check(
   'history is newest first',
   versions.map((v) => v.id).join() === [manualVersion.id, firstVersion.id].join(),
 );
@@ -156,23 +151,23 @@ const watcher = connect(doc.id, owner);
 await watcher.synced;
 
 const restored = await restore(owner, doc.id, firstVersion.id);
-ck('a version can be restored', restored.status === 200);
+check('a version can be restored', restored.status === 200);
 const restoredBody = await restored.json();
-ck(
+check(
   'the response is the restored content',
   restoredBody.title === 'First title' &&
     texts(restoredBody).join('|') === 'First wording with [a link](https://example.com)',
 );
-ck(
+check(
   'a connected editor sees the restore live, links and all',
   await until(() => clientTexts(watcher.doc).join('|') === 'First wording with a link'),
 );
-ck('including the title', watcher.doc.getText('title').toString() === 'First title');
+check('including the title', watcher.doc.getText('title').toString() === 'First title');
 
 versions = await listVersions(owner, doc.id).then((r) => r.json());
-ck('what the restore replaced is kept first', versions[0].reason === 'before-restore');
+check('what the restore replaced is kept first', versions[0].reason === 'before-restore');
 const beforeRestore = await getVersion(owner, doc.id, versions[0].id).then((r) => r.json());
-ck(
+check(
   'so a wrong restore can itself be undone',
   texts(beforeRestore.content).join('|') === 'Second wording',
 );
@@ -200,7 +195,10 @@ const commented = await saveVersion(owner, doc.id).then((r) => r.json());
 watcher.doc.transact(() => watcher.doc.getMap('comments').delete('gone'));
 await sleep(300);
 await restore(owner, doc.id, commented.id);
-ck('the restored text arrives', await until(() => clientTexts(watcher.doc).includes('kept gone')));
+check(
+  'the restored text arrives',
+  await until(() => clientTexts(watcher.doc).includes('kept gone')),
+);
 const marks = new Set();
 for (const block of watcher.doc.getArray('blocks').toArray()) {
   const walk = (n) => {
@@ -210,9 +208,9 @@ for (const block of watcher.doc.getArray('blocks').toArray()) {
   };
   walk(watcher.doc.getXmlFragment(`block-${block.id}`));
 }
-ck('a highlight whose thread still exists comes back', marks.has('comment--a'));
-ck('a highlight whose thread was deleted does not', !marks.has('comment--b'));
-ck(
+check('a highlight whose thread still exists comes back', marks.has('comment--a'));
+check('a highlight whose thread was deleted does not', !marks.has('comment--b'));
+check(
   'the thread list is left as it is',
   [...watcher.doc.getMap('comments').keys()].join() === 'kept',
 );
@@ -247,17 +245,17 @@ const idsBefore = blockIds(editor.doc);
 const fragmentsBefore = fragmentCount(editor.doc);
 
 for (let n = 0; n < 3; n++) await restore(owner, repeated.id, kept.id);
-ck(
+check(
   'restoring repeatedly lands the version',
   await until(() => clientTexts(editor.doc).join('|') === 'One|Two|Three'),
 );
 await sleep(300);
 const fragmentsAfter = fragmentCount(editor.doc);
-ck(
+check(
   `three restores add one fragment, the deleted block's copy — not one per block each time (${fragmentsBefore} -> ${fragmentsAfter})`,
   fragmentsAfter === fragmentsBefore + 1,
 );
-ck(
+check(
   'a block still in the document keeps its id, so an open editor stays on it',
   blockIds(editor.doc).slice(0, 2).join() === idsBefore.join(),
 );
@@ -267,7 +265,7 @@ editor.doc.destroy();
 await flushStore(API, H(owner), repeated.id);
 const reloaded = connect(repeated.id, owner);
 await reloaded.synced;
-ck(
+check(
   'the stored document holds no more fragments than the client saw',
   fragmentCount(reloaded.doc) === fragmentsAfter &&
     clientTexts(reloaded.doc).join('|') === 'One|Two|Three',
@@ -303,12 +301,12 @@ await session(setText('Wording from the first session'));
 await session(setText('Wording from the second session'));
 versions = await listVersions(owner, auto.id).then((r) => r.json());
 const autos = versions.filter((v) => v.reason === 'auto');
-ck('saving over a stored state archives it automatically', autos.length === 1);
-ck('an automatic version has no single author', autos[0]?.author === null);
+check('saving over a stored state archives it automatically', autos.length === 1);
+check('an automatic version has no single author', autos[0]?.author === null);
 const autoRead = autos[0]
   ? await getVersion(owner, auto.id, autos[0].id).then((r) => r.json())
   : null;
-ck(
+check(
   'and holds the wording the session ended with',
   autoRead !== null && texts(autoRead.content).join('|') === 'Wording from the first session',
 );
@@ -317,22 +315,17 @@ ck(
 await session((ydoc) => ydoc.getText('title').insert(0, 'Renamed '));
 await session(setText('Wording from the third session'));
 versions = await listVersions(owner, auto.id).then((r) => r.json());
-ck('automatic versions are throttled', versions.filter((v) => v.reason === 'auto').length === 1);
+check('automatic versions are throttled', versions.filter((v) => v.reason === 'auto').length === 1);
 
 // --- retention (#63) ----------------------------------------------------------------
 // History older than a day is made by writing backdated rows straight into
 // document_versions — only ever for documents this suite created — and the
 // store hook prunes when the next session archives a version. The rule itself,
-// edge by edge, is retention.test.mjs; this is that the hook applies it.
-const require = createRequire(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../api/package.json'),
-);
-const pg = require('pg');
-if (!process.env.DATABASE_URL) {
-  process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../.env.local'));
-}
+// edge by edge, is apps/web/retention.test.mjs; this is that the hook applies it.
+if (!process.env.DATABASE_URL) process.loadEnvFile(new URL('../../../.env.local', import.meta.url));
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
+cleanup(() => db.end());
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -409,30 +402,30 @@ let stored = await storedIds(pruned.id);
 const has = (...keys) => keys.every((k) => stored.has(old[k]));
 const lacks = (...keys) => keys.every((k) => !stored.has(old[k]));
 
-ck(
+check(
   'archiving a version prunes the history it joins',
   [...stored].some((id) => !beforeArchive.has(id)) && lacks('sameDay1'),
 );
-ck(
+check(
   'old automatic versions on one day collapse to the newest of them',
   has('sameDay3') && lacks('sameDay1', 'sameDay2'),
 );
-ck('a manual version survives pruning, however old', has('manual'));
-ck(
+check('a manual version survives pruning, however old', has('manual'));
+check(
   'the newest before-restore survives beside a newer version of its day',
   has('restoreNew', 'afterRestoreNew'),
 );
-ck(
+check(
   'the newest before-replace survives beside a newer version of its day',
   has('replaceNew', 'afterReplaceNew'),
 );
-ck(
+check(
   'older before-restore and before-replace versions thin out like automatic ones',
   lacks('restoreOld', 'replaceOld') && has('afterRestoreOld', 'afterReplaceOld'),
 );
-ck('beyond 30 days, one version per week: its newest', has('wednesday') && lacks('tuesday'));
-ck('every version from the last 24 hours is kept', has('recent1', 'recent2'));
-ck(
+check('beyond 30 days, one version per week: its newest', has('wednesday') && lacks('tuesday'));
+check('every version from the last 24 hours is kept', has('recent1', 'recent2'));
+check(
   "pruning one document leaves another's history alone",
   await storedIds(bystander.id).then((ids) => bystanderOld.every((id) => ids.has(id))),
 );
@@ -445,7 +438,7 @@ const unpruned = [
 ];
 await session(setText('Retention wording three'), pruned.id);
 stored = await storedIds(pruned.id);
-ck(
+check(
   'a store that archives nothing prunes nothing',
   unpruned.every((id) => stored.has(id)),
 );
@@ -456,7 +449,7 @@ const pruneScript = (...args) =>
   execFileSync(
     process.execPath,
     [
-      resolve(dirname(fileURLToPath(import.meta.url)), '../api/scripts/prune-versions.mjs'),
+      fileURLToPath(new URL('../scripts/prune-versions.mjs', import.meta.url)),
       '--document',
       bystander.id,
       ...args,
@@ -466,45 +459,46 @@ const pruneScript = (...args) =>
     { encoding: 'utf8', env: process.env, stdio: ['ignore', 'pipe', 'pipe'] },
   );
 const dry = pruneScript('--dry-run');
-ck(
+check(
   'the backfill script reports what it would prune, and a dry run keeps it',
   /would delete 1 of \d+ version\(s\) across 1 document/.test(dry) &&
     (await storedIds(bystander.id).then((ids) => bystanderOld.every((id) => ids.has(id)))),
 );
 pruneScript();
 const bystanderLeft = await storedIds(bystander.id);
-ck(
+check(
   'and a real run collapses the day to its newest version',
   bystanderLeft.has(bystanderOld[1]) && !bystanderLeft.has(bystanderOld[0]),
 );
 await db.end();
 
 // --- access ------------------------------------------------------------------------
-ck(
+check(
   "a stranger cannot list a private document's history",
   (await listVersions(stranger, doc.id)).status === 404,
 );
-ck('or read a version of it', (await getVersion(stranger, doc.id, firstVersion.id)).status === 404);
-ck('or save one', (await saveVersion(stranger, doc.id)).status === 404);
-ck('or restore one', (await restore(stranger, doc.id, firstVersion.id)).status === 404);
-ck(
+check(
+  'or read a version of it',
+  (await getVersion(stranger, doc.id, firstVersion.id)).status === 404,
+);
+check('or save one', (await saveVersion(stranger, doc.id)).status === 404);
+check('or restore one', (await restore(stranger, doc.id, firstVersion.id)).status === 404);
+check(
   'a version is only reachable through its own document',
   (await getVersion(owner, auto.id, firstVersion.id)).status === 404 &&
     (await restore(owner, auto.id, firstVersion.id)).status === 404,
 );
-ck(
+check(
   'a malformed document id is a 404, not a 500',
   (await listVersions(owner, 'not-a-uuid')).status === 404,
 );
-ck(
+check(
   'a malformed version id is a 404, not a 500',
   (await getVersion(owner, doc.id, 'nope')).status === 404,
 );
-ck(
+check(
   'an unauthenticated request is refused',
   (await fetch(`${API}/api/documents/${doc.id}/versions`)).status === 401,
 );
 
-await tracker.purge();
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail === 0 ? 0 : 1);
+await finish();

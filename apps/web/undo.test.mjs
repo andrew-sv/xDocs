@@ -6,6 +6,7 @@
  * across block editors stops recording as soon as ANY block unmounts. Pure
  * CRDT tests cannot see this — it only happens on editor teardown.
  */
+import { check } from '@xdocs/test-support/harness';
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
@@ -34,12 +35,6 @@ const Collaboration = (await import('@tiptap/extension-collaboration')).default;
 const { ySyncPluginKey } = await import('@tiptap/y-tiptap');
 const { DocumentUndo } = await import('./src/lib/documentUndo.ts');
 const Y = await import('yjs');
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 function makeDoc() {
   const ydoc = new Y.Doc();
@@ -101,12 +96,15 @@ function stillRecordsAfterUnmount(shareWithPlugin) {
 
 // The old wiring, kept as an executable record of the bug.
 const shared = stillRecordsAfterUnmount(true);
-ck('old wiring (shared with plugin) stops recording after an unmount', shared.recorded === false);
+check(
+  'old wiring (shared with plugin) stops recording after an unmount',
+  shared.recorded === false,
+);
 
 // The shipped wiring.
 const fixed = stillRecordsAfterUnmount(false);
-ck('fixed wiring still records after an unmount', fixed.recorded === true);
-ck('fixed wiring undo restores the deleted block', fixed.restored === true);
+check('fixed wiring still records after an unmount', fixed.recorded === true);
+check('fixed wiring undo restores the deleted block', fixed.restored === true);
 
 // And undo must survive several editors coming and going.
 const { ydoc, blocks, undoManager } = makeDoc();
@@ -124,11 +122,8 @@ const remounted = makeEditor(ydoc, 'b', undoManager, { shareWithPlugin: false })
 undoManager.clear();
 
 blocks.delete(2, 1);
-ck('records after repeated mount/unmount churn', undoManager.undoStack.length === 1);
+check('records after repeated mount/unmount churn', undoManager.undoStack.length === 1);
 undoManager.undo();
-ck('undo restores after churn', blocks.length === 3 && blocks.toArray()[2].id === 'c');
+check('undo restores after churn', blocks.length === 3 && blocks.toArray()[2].id === 'c');
 editors[0].destroy();
 remounted.destroy();
-
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail ? 1 : 0);

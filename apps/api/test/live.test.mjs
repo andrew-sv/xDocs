@@ -8,21 +8,17 @@
  */
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
-import { authHeaders, signInForTests } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { check, cleanup, finish } from '@xdocs/test-support/harness';
+import { authHeaders, signInForTests } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
 
-// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+// Everything this suite creates is purged when it ends; see @xdocs/test-support/cleanup.
 const tracker = trackCreatedDocuments();
+cleanup(() => tracker.purge());
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const owner = await signInForTests(API);
 const H = (t, extra) => authHeaders(t, extra);
@@ -59,7 +55,7 @@ async function pingAfter(pings, from, timeout = 6000) {
 
 const a = listen(owner);
 const b = listen(owner);
-ck('a signed-in user can listen on the workspace channel', await a.ready);
+check('a signed-in user can listen on the workspace channel', await a.ready);
 await b.ready;
 
 // --- routes ping ---------------------------------------------------------------
@@ -69,8 +65,8 @@ const created = await fetch(`${API}/api/documents`, {
   headers: H(owner, { 'content-type': 'application/json' }),
   body: JSON.stringify({ title: 'Live test' }),
 }).then((r) => r.json());
-ck('creating a document pings', await pingAfter(a.pings, seen));
-ck('and the ping carries nothing but the signal', a.pings.at(-1) === 'documents-changed');
+check('creating a document pings', await pingAfter(a.pings, seen));
+check('and the ping carries nothing but the signal', a.pings.at(-1) === 'documents-changed');
 
 seen = a.pings.length;
 await fetch(`${API}/api/documents/${created.id}/visibility`, {
@@ -78,13 +74,13 @@ await fetch(`${API}/api/documents/${created.id}/visibility`, {
   headers: H(owner, { 'content-type': 'application/json' }),
   body: JSON.stringify({ visibility: 'public' }),
 });
-ck('changing visibility pings', await pingAfter(a.pings, seen));
+check('changing visibility pings', await pingAfter(a.pings, seen));
 
 seen = a.pings.length;
 await fetch(`${API}/api/documents`, { headers: H(owner) });
 await fetch(`${API}/api/documents/${created.id}`, { headers: H(owner) });
 await sleep(500);
-ck('reads do not ping', a.pings.length === seen);
+check('reads do not ping', a.pings.length === seen);
 
 seen = a.pings.length;
 const refused = await fetch(`${API}/api/documents/${created.id}/parent`, {
@@ -93,7 +89,7 @@ const refused = await fetch(`${API}/api/documents/${created.id}/parent`, {
   body: JSON.stringify({ parentId: created.id }),
 });
 await sleep(500);
-ck('a refused change does not ping', refused.status >= 400 && a.pings.length === seen);
+check('a refused change does not ping', refused.status >= 400 && a.pings.length === seen);
 
 // --- renaming by typing pings too, once the title is stored ----------------------
 const editor = new HocuspocusProvider({
@@ -107,9 +103,9 @@ seen = a.pings.length;
 const title = editor.document.getText('title');
 title.delete(0, title.length);
 title.insert(0, 'Renamed by typing');
-ck('a rename typed in an editor pings once it is stored', await pingAfter(a.pings, seen, 8000));
+check('a rename typed in an editor pings once it is stored', await pingAfter(a.pings, seen, 8000));
 const listed = await fetch(`${API}/api/documents`, { headers: H(owner) }).then((r) => r.json());
-ck(
+check(
   'and by then the list has the new title',
   listed.find((d) => d.id === created.id)?.title === 'Renamed by typing',
 );
@@ -123,25 +119,23 @@ const paragraph = new Y.XmlElement('paragraph');
 paragraph.insert(0, [new Y.XmlText()]);
 fragment.insert(fragment.length, [paragraph]);
 await sleep(4000);
-ck('typing that leaves the title alone does not ping', a.pings.length === seen);
+check('typing that leaves the title alone does not ping', a.pings.length === seen);
 editor.destroy();
 
 // --- the channel is read-only ------------------------------------------------------
 a.doc.getText('smuggled').insert(0, 'hello from a');
 await sleep(800);
-ck(
+check(
   'nothing written into the channel reaches other listeners',
   b.doc.getText('smuggled').toString() === '',
 );
 
 // --- and closed to strangers ---------------------------------------------------------
 const forged = listen('not-a-real-session');
-ck('a forged session cannot listen', !(await forged.ready));
+check('a forged session cannot listen', !(await forged.ready));
 forged.provider.destroy();
 
 a.provider.destroy();
 b.provider.destroy();
 
-await tracker.purge();
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail === 0 ? 0 : 1);
+await finish();

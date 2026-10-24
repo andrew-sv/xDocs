@@ -113,7 +113,7 @@ test.describe('moving documents', () => {
 
   test('a document owned by someone else offers no move control', async ({ page, doc }) => {
     // `doc` belongs to the shared account; make it public so it is visible.
-    const { authHeaders } = await import('../test-auth.mjs');
+    const { authHeaders } = await import('@xdocs/test-support/auth');
     const { getTestToken } = await import('./fixtures');
     const token = await getTestToken();
     await page.request.patch(`http://localhost:3001/api/documents/${doc.id}/visibility`, {

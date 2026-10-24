@@ -3,7 +3,7 @@
  *
  * Every run of the e2e and integration suites signs up fresh
  * `disposable-<timestamp>-<random>@xdocs.test` users (`createDisposableUser`
- * in apps/web/test-auth.mjs), and nothing else removes them. Deleting a user
+ * in packages/test-support/auth.mjs), and nothing else removes them. Deleting a user
  * cascades to its sessions, accounts and API keys through their FKs.
  *
  * Documents do NOT cascade: `documents.created_by` is ON DELETE SET NULL, so

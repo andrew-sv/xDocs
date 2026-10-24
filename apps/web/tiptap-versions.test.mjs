@@ -13,13 +13,8 @@
  * actually resolved. To upgrade, change every `@tiptap/*` version together,
  * then `pnpm install`.
  */
+import { check } from '@xdocs/test-support/harness';
 import { readFileSync } from 'node:fs';
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 const declared = Object.entries({ ...pkg.dependencies, ...pkg.devDependencies }).filter(([name]) =>
@@ -29,7 +24,7 @@ const EXACT = /^\d+\.\d+\.\d+$/;
 
 // --- declarations -------------------------------------------------------------
 const loose = declared.filter(([, version]) => !EXACT.test(version));
-ck(
+check(
   `every @tiptap/* dependency is an exact version${loose.length ? ` (loose: ${loose.map(([n, v]) => `${n}@${v}`).join(', ')})` : ''}`,
   loose.length === 0,
 );
@@ -37,7 +32,7 @@ ck(
 // y-tiptap is the Yjs binding, released on its own version line.
 const lockstep = declared.filter(([name]) => name !== '@tiptap/y-tiptap');
 const versions = new Set(lockstep.map(([, version]) => version));
-ck(
+check(
   `and all of them except y-tiptap are the same version (${[...versions].join(', ')})`,
   versions.size === 1,
 );
@@ -50,18 +45,15 @@ for (const [, name, version] of lock.matchAll(/^ {2}'?(@tiptap\/[a-z-]+)@(\d+\.\
   resolved.get(name).add(version);
 }
 const doubled = [...resolved].filter(([, set]) => set.size > 1);
-ck('the lockfile lists TipTap packages at all', resolved.has('@tiptap/core'));
-ck(
+check('the lockfile lists TipTap packages at all', resolved.has('@tiptap/core'));
+check(
   `each resolves to exactly one version${doubled.length ? ` (doubled: ${doubled.map(([n, s]) => `${n} ${[...s].join('/')}`).join(', ')})` : ''}`,
   doubled.length === 0,
 );
 const installed = new Set(
   [...resolved].filter(([name]) => name !== '@tiptap/y-tiptap').flatMap(([, set]) => [...set]),
 );
-ck(
+check(
   `and the whole family resolves to the declared one (${[...installed].join(', ')})`,
   installed.size === 1 && versions.has([...installed][0]),
 );
-
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail ? 1 : 0);

@@ -11,7 +11,7 @@
  * document made as a disposable user is purged as that user. Documents made in
  * another process — by the MCP server — are registered with `add()`.
  */
-import { TEST_ORIGIN, signInForTests } from './test-auth.mjs';
+import { TEST_ORIGIN, signInForTests } from './auth.mjs';
 
 export function trackCreatedDocuments() {
   const realFetch = globalThis.fetch;

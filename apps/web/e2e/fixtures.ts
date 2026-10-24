@@ -5,7 +5,12 @@ import {
   type APIResponse,
   type Page,
 } from '@playwright/test';
-import { TEST_ORIGIN, authHeaders, createDisposableUser, signInForTests } from '../test-auth.mjs';
+import {
+  TEST_ORIGIN,
+  authHeaders,
+  createDisposableUser,
+  signInForTests,
+} from '@xdocs/test-support/auth';
 
 const API = 'http://localhost:3001';
 const TOKEN_KEY = 'xdocs.session-token';

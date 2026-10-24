@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { TEST_USER, authHeaders } from '../test-auth.mjs';
+import { TEST_USER, authHeaders } from '@xdocs/test-support/auth';
 import {
   blockEditor,
   expect,
