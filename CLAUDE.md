@@ -221,24 +221,28 @@ Each of these caused a real bug. Changing them silently breaks things.
   hand-built prefix query (search-as-you-type, which plainto cannot do). Each
   side ANDs its own terms, so the OR does not loosen matching.
 - **Every list response must be discardable, and fetches must not cancel each
-  other.** `refresh()` in `App.tsx` drops a response when the level changed, when
-  a local mutation (`invalidateList`) happened after it was sent, or when it is
-  older than the list on screen. The level guard alone misses same-level races:
+  other.** `ListFreshness` (`src/lib/listFreshness.ts`, wired into React by
+  `useDocumentList`) drops a response when the level changed, when a local
+  mutation (`invalidateList`) happened after it was sent, or when it is older
+  than the list on screen. The level guard alone misses same-level races:
   creating a document while the first list fetch is in flight lets that response
   land afterwards and wipe the new row (`e2e/stale.spec.ts`). "Older" is the
   server's read time, `x-list-as-of`, not the order sent: under load the server
   answers out of order, and a list read before a restore landed last and hid the
   restored row. And no fetch may retire another merely by starting — with pings
   arriving faster than responses, that froze the sidebar entirely. Sign-out
-  latches `signedOut` before it awaits anything, and `refresh()` reads that
-  latch on both sides of its fetch: otherwise a list read by the session that
-  just ended lands, calls `setLocked(false)` and puts that account's documents
-  back on screen under the gate that should have replaced them (#28). It has to
+  latches the session as ended (`endSession`) before it awaits anything, and
+  `load()` reads that latch on both sides of its fetch: otherwise a list read
+  by the session that just ended lands, calls `setLocked(false)` and puts that
+  account's documents back on screen under the gate that should have replaced
+  them (#28). It has to
   be a latch, not a sequence number compared across the await — a refetch
   *starting* during the sign-out sees the bumped number and still carries the
   token, which is cleared a moment later, so it agrees with itself and lands.
   Signing back in clears the latch; without that the gate accepts the password
-  and leaves an empty sidebar, every response dropped.
+  and leaves an empty sidebar, every response dropped. These rules have no
+  React in them so `listFreshness.test.mjs` can play each race out in the
+  order that broke it (#72); add a scenario there when you add a rule.
 - **Only one ping-driven refetch runs at a time** (`useDocumentsChanged`).
   Pings arriving during one collapse into a single trailing refetch. The 250ms
   debounce alone does not bound this: a workspace being edited by several
@@ -253,8 +257,8 @@ Each of these caused a real bug. Changing them silently breaks things.
   `documents-changed` on the read-only `workspace` collab channel; open apps
   refetch over REST. Never put ids or titles in the ping — every signed-in user
   hears it. A refetch can land before the debounced save of a title being typed,
-  so `App.tsx` keeps unsaved titles (`withUnsavedTitles`) over fetched rows;
-  without that, the name you are typing flips back to "Untitled".
+  so `ListFreshness` keeps unsaved titles (`withUnsavedTitles`) over fetched
+  rows; without that, the name you are typing flips back to "Untitled".
 - **REST content writes go through `withDocument()` in `src/collab.ts`, never
   the `ystate` column.** It opens a Hocuspocus direct connection, so the edit is
   a real CRDT operation: it merges with what people are typing and appears in
