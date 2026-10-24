@@ -148,6 +148,72 @@ await patchAs(owner, 'private');
 ck('stranger loses it from their list', !(await listIds(stranger)).includes(doc.id));
 ck('stranger is refused the websocket again', !(await canConnect(stranger, doc.id)));
 
+/*
+ * hasChildren counts only children the caller can reach (#82). Counting any
+ * live child gave a stranger an expand arrow on a public document whose
+ * children were all private — opening onto nothing, and confirming private
+ * documents sat beneath it.
+ */
+const post = (body) =>
+  fetch(`${API}/api/documents`, {
+    method: 'POST',
+    headers: H(owner, { 'content-type': 'application/json' }),
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+const setVisibility = (id, visibility) =>
+  fetch(`${API}/api/documents/${id}/visibility`, {
+    method: 'PATCH',
+    headers: H(owner, { 'content-type': 'application/json' }),
+    body: JSON.stringify({ visibility }),
+  });
+
+// A unique word, so search finds this parent and nothing another suite made.
+const marker = `haschildren${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+const parent = await post({ title: `parent ${marker}` });
+await setVisibility(parent.id, 'public');
+// A new child copies its parent's visibility, so make this one private by hand.
+const hidden = await post({ title: 'private child', parentId: parent.id });
+await setVisibility(hidden.id, 'private');
+
+/** The parent's hasChildren, as each route that returns it reports it. */
+const reported = async (token) => {
+  const get = (path) =>
+    fetch(`${API}/api/documents${path}`, { headers: H(token) }).then((r) => r.json());
+  const [level, flat, one, found] = await Promise.all([
+    get(''),
+    get('?flat=1'),
+    get(`/${parent.id}`),
+    get(`/search?q=${marker}`),
+  ]);
+  return {
+    level: level.find((d) => d.id === parent.id)?.hasChildren,
+    flat: flat.find((d) => d.id === parent.id)?.hasChildren,
+    get: one.hasChildren,
+    search: found.find((r) => r.document.id === parent.id)?.document.hasChildren,
+  };
+};
+const ROUTES = ['level', 'flat', 'get', 'search'];
+
+const ownerOnlyPrivate = await reported(owner);
+const strangerOnlyPrivate = await reported(stranger);
+for (const route of ROUTES) {
+  ck(`only a private child: owner sees hasChildren (${route})`, ownerOnlyPrivate[route] === true);
+  ck(
+    `only a private child: stranger does NOT see hasChildren (${route})`,
+    strangerOnlyPrivate[route] === false,
+  );
+}
+
+const shown = await post({ title: 'public child', parentId: parent.id });
+ck('the second child inherits public', shown.visibility === 'public');
+const strangerWithPublic = await reported(stranger);
+for (const route of ROUTES) {
+  ck(
+    `with a public child: stranger sees hasChildren (${route})`,
+    strangerWithPublic[route] === true,
+  );
+}
+
 await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(owner) });
 await tracker.purge();
 console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);

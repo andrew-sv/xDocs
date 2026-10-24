@@ -86,18 +86,24 @@ function toDTO(row: DocumentColumns, userId: string, hasChildren: boolean): Docu
   };
 }
 
-/** Which of these documents have at least one live child? One query, not N. */
-async function childBearing(ids: string[]): Promise<Set<string>> {
+/**
+ * Which of these documents have at least one child this user can reach? One
+ * query, not N.
+ *
+ * Every id passed in is already reachable by the caller, so a child is
+ * reachable exactly when the rule admits the child itself — `admittedRow`,
+ * no ancestor walk. Counting any live child instead marked a public document
+ * as having children when all of them were private, so a stranger saw an
+ * expand arrow that opened onto nothing: proof private documents sat beneath
+ * it, the probe the 404-not-403 rule exists to prevent (#82).
+ */
+async function childBearing(ids: string[], userId: string): Promise<Set<string>> {
   if (ids.length === 0) return new Set();
   const rows = await getDb()
     .selectDistinct({ parentId: documents.parentId })
     .from(documents)
     .where(
-      and(
-        isNull(documents.deletedAt),
-        isNotNull(documents.parentId),
-        inArray(documents.parentId, ids),
-      ),
+      and(admittedRow(userId), isNotNull(documents.parentId), inArray(documents.parentId, ids)),
     );
   return new Set(rows.map((row) => row.parentId!).filter(Boolean));
 }
@@ -256,7 +262,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
         .from(documents)
         .where(and(isNull(documents.deletedAt), inArray(documents.id, ids)))
         .orderBy(desc(documents.updatedAt));
-      const parents = await childBearing(all.map((row) => row.id));
+      const parents = await childBearing(
+        all.map((row) => row.id),
+        userId,
+      );
       return c.json(all.map((row) => toDTO(row, userId, parents.has(row.id))));
     }
 
@@ -282,7 +291,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       )
       .orderBy(desc(documents.updatedAt));
 
-    const withChildren = await childBearing(allowed.map((row) => row.id));
+    const withChildren = await childBearing(
+      allowed.map((row) => row.id),
+      userId,
+    );
     return c.json(allowed.map((row) => toDTO(row, userId, withChildren.has(row.id))));
   })
 
@@ -375,7 +387,10 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     const rows = (result as unknown as { rows?: SearchRow[] }).rows ?? [];
     if (rows.length === 0) return c.json([]);
 
-    const withChildren = await childBearing(rows.map((row) => row.id));
+    const withChildren = await childBearing(
+      rows.map((row) => row.id),
+      userId,
+    );
     const paths = await ancestorPaths(
       rows.map((row) => row.id),
       userId,
@@ -468,7 +483,7 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
 
     const [row] = await getDb().select(columns).from(documents).where(eq(documents.id, id));
     if (!row) return c.json({ error: 'Not found' }, 404);
-    const withChildren = await childBearing([row.id]);
+    const withChildren = await childBearing([row.id], userId);
     return c.json(toDTO(row, userId, withChildren.has(row.id)));
   })
 
@@ -642,7 +657,7 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     });
     if (!moved) return c.json({ error: 'A document cannot be moved inside itself' }, 400);
 
-    const withChildren = await childBearing([id]);
+    const withChildren = await childBearing([id], userId);
     return c.json(toDTO(moved, userId, withChildren.has(id)));
   })
 
@@ -664,7 +679,7 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
       )
       .returning(columns);
     if (!row) return c.json({ error: 'Only the owner can change visibility.' }, 403);
-    const withChildren = await childBearing([row.id]);
+    const withChildren = await childBearing([row.id], userId);
     return c.json(toDTO(row, userId, withChildren.has(row.id)));
   })
 
@@ -732,6 +747,6 @@ export const documentsRoute = new Hono<{ Variables: Variables }>()
     }
 
     const [row] = await getDb().select(columns).from(documents).where(eq(documents.id, id));
-    const withChildren = await childBearing([id]);
+    const withChildren = await childBearing([id], userId);
     return c.json(toDTO(row!, userId, withChildren.has(id)));
   });

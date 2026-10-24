@@ -532,6 +532,9 @@ the owner and `visibility` is `private` (the default) or `public`:
 - That file is the whole boundary: REST, the sidebar listing and the collab
   handshake (`onAuthenticate`) all go through it. A new route that reaches a
   document must call `canAccessDocument`, and answer 404 when it fails.
+  Anything that reports on other documents applies the rule too: `hasChildren`
+  counts only children the caller can reach, or a stranger sees an expand
+  arrow over private sub-documents (#82).
 - Public means **edit**, not read-only: anyone who can reach a document can
   type in it, which is what keeps live collaboration working.
 - Owner-only, answered with 403: changing visibility, moving, deleting,
