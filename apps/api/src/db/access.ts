@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { getDb } from './index.js';
+import { getDb, rowsOf } from './index.js';
 
 /**
  * The visibility rule for a document tree.
@@ -43,7 +43,7 @@ export const visibleTreeSql = (userId: string) => sql`
 /** Every document id this user may reach. Costs the size of the workspace. */
 export async function visibleDocumentIds(userId: string): Promise<Set<string>> {
   const result = await getDb().execute(sql`${visibleTreeSql(userId)} SELECT id FROM visible`);
-  const rows = (result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+  const rows = rowsOf<{ id: string }>(result);
   return new Set(rows.map((row) => row.id));
 }
 
@@ -77,7 +77,7 @@ export async function canAccessDocument(userId: string, documentId: string): Pro
     )
     SELECT 1 AS ok FROM chain WHERE parent_id IS NULL LIMIT 1
   `);
-  const rows = (result as unknown as { rows?: unknown[] }).rows ?? [];
+  const rows = rowsOf<unknown>(result);
   return rows.length > 0;
 }
 
@@ -112,7 +112,7 @@ export async function subtreeIds(documentId: string, db: Executor = getDb()): Pr
     )
     SELECT id FROM subtree
   `);
-  const rows = (result as unknown as { rows?: Array<{ id: string }> }).rows ?? [];
+  const rows = rowsOf<{ id: string }>(result);
   return rows.map((row) => row.id);
 }
 

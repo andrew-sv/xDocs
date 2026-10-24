@@ -40,4 +40,15 @@ export async function closeDb(): Promise<void> {
   dbInstance = null;
 }
 
+/**
+ * The rows of a `db.execute(sql...)` result. Drizzle types a raw execute
+ * loosely, but with the node-postgres driver it resolves to pg's QueryResult,
+ * whose rows sit under `.rows` — this is the one place that shape is assumed,
+ * instead of a cast repeated at every raw query (#71). The caller names the
+ * row type; nothing checks it, so it must match the SELECT list.
+ */
+export function rowsOf<T>(result: unknown): T[] {
+  return (result as { rows?: T[] }).rows ?? [];
+}
+
 export { schema };
