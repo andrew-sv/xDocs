@@ -220,6 +220,61 @@ ck(
 watcher.provider.destroy();
 watcher.doc.destroy();
 
+// --- a restore reuses the blocks it can (#60) -----------------------------------
+// Every restore used to bring each block back under a new id, leaving the old
+// fragments behind, so restoring N times added N fragments per block for good.
+const repeated = await create(owner, 'Repeated restore test');
+await putContent(owner, repeated.id, { title: 'Repeated', blocks: ['One', 'Two', 'Three'] });
+const kept = await saveVersion(owner, repeated.id).then((r) => r.json());
+const editor = connect(repeated.id, owner);
+await editor.synced;
+/** Root types of the `block-<id>` kind: live blocks and every one left behind. */
+const fragmentCount = (ydoc) => [...ydoc.share.keys()].filter((k) => k.startsWith('block-')).length;
+const blockIds = (ydoc) =>
+  ydoc
+    .getArray('blocks')
+    .toArray()
+    .map((b) => b.id);
+// Edit the first block's text and delete the last block, as a person would.
+editor.doc.transact(() => {
+  const [first] = editor.doc.getArray('blocks').toArray();
+  const text = editor.doc.getXmlFragment(`block-${first.id}`).get(0).get(0);
+  text.insert(text.length, ' edited');
+  editor.doc.getArray('blocks').delete(2, 1);
+});
+await sleep(300);
+const idsBefore = blockIds(editor.doc);
+const fragmentsBefore = fragmentCount(editor.doc);
+
+for (let n = 0; n < 3; n++) await restore(owner, repeated.id, kept.id);
+ck(
+  'restoring repeatedly lands the version',
+  await until(() => clientTexts(editor.doc).join('|') === 'One|Two|Three'),
+);
+await sleep(300);
+const fragmentsAfter = fragmentCount(editor.doc);
+ck(
+  `three restores add one fragment, the deleted block's copy — not one per block each time (${fragmentsBefore} -> ${fragmentsAfter})`,
+  fragmentsAfter === fragmentsBefore + 1,
+);
+ck(
+  'a block still in the document keeps its id, so an open editor stays on it',
+  blockIds(editor.doc).slice(0, 2).join() === idsBefore.join(),
+);
+editor.provider.destroy();
+editor.doc.destroy();
+// What reaches Postgres is the same: nothing piled up behind the editor.
+await flushStore(API, H(owner), repeated.id);
+const reloaded = connect(repeated.id, owner);
+await reloaded.synced;
+ck(
+  'the stored document holds no more fragments than the client saw',
+  fragmentCount(reloaded.doc) === fragmentsAfter &&
+    clientTexts(reloaded.doc).join('|') === 'One|Two|Three',
+);
+reloaded.provider.destroy();
+reloaded.doc.destroy();
+
 // --- automatic versions from the store hook -------------------------------------
 const auto = await create(owner, 'Autosave test');
 /** One editing session: connect, change something, leave, and let it store. */

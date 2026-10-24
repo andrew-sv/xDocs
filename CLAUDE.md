@@ -138,10 +138,16 @@ about to overwrite — inside its own transaction, at most once per
 first save of a session keeps how the last one ended. `PUT /content` and a
 restore record the live state first (`before-replace`, `before-restore`)
 through the same direct connection that then rewrites it. A restore writes
-through the CRDT like any content route, copying each block under a NEW id
-with `clone()`; it leaves comment threads alone and strips only marks whose
-thread is gone. Reading a version over REST does not break the "no content over
-HTTP" rule: a version is immutable, so there is nothing to clobber.
+through the CRDT like any content route, and changes as little as it can
+(#60): a block still in the document keeps its id and has its fragment
+refilled in place with `clone()`s — or is left alone when it already reads as
+the version — while a block deleted or moved since comes back under a NEW id.
+Bringing every block back under a new id, as it first did, doubled the
+document's fragments on every restore; but re-inserting an id that has been in
+`blocks` would let a client's undo of that deletion put the block in twice. It
+leaves comment threads alone and strips only marks whose thread is gone.
+Reading a version over REST does not break the "no content over HTTP" rule: a
+version is immutable, so there is nothing to clobber.
 
 Versions are pruned by a retention policy (#63), `versionsToPrune` in
 `src/retention.ts`: every version from the last 24h, then the newest per UTC
