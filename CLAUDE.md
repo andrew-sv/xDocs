@@ -20,17 +20,38 @@ Tests — see **Test layers** below for what each one actually covers:
 
 ```bash
 pnpm test          # jsdom + pure-logic suites (apps/web/*.test.mjs)
-pnpm integration   # server integration, all suites at once (scripts/integration.mjs)
+pnpm integration   # server integration, apps/api/test/ (+ mcp), all at once
 pnpm e2e           # Playwright, real Chromium (apps/web/e2e/)
 ```
 
-`pnpm test` and `pnpm integration` use no test runner: each suite is a plain
-Node script printing `PASS`/`FAIL` and exiting non-zero. `.ts` files are
-imported straight from `.mjs` via Node 24 type stripping. To run one:
+Where they live: the unit and jsdom suites in `apps/web/*.test.mjs`, the
+server integration suites in `apps/api/test/`, the MCP server's in
+`apps/mcp/mcp.test.mjs`. What they share with each other and with the browser
+suite is the `@xdocs/test-support` workspace package (`packages/test-support`):
+`auth` (sign-in), `cleanup` (purging), `store` (`flushStore`) and `harness` —
+a package rather than a folder in one app, so `apps/api/test`, `apps/mcp` and
+`apps/web/e2e` all import it by name instead of reaching across packages.
+
+`pnpm test` and `pnpm integration` use no runner beyond Node itself: each suite
+is a plain Node script on `node:test` and `node:assert`, through the shared
+harness (#70) — `check(name, ok)` is one named test, and Node's spec reporter
+prints them and sets the exit code. `.ts` files are imported straight from
+`.mjs` via Node 24 type stripping. `pnpm test` is `node --test "*.test.mjs"`
+in `apps/web`, so a new unit suite is discovered by its name, with no list to
+add it to. To run one suite, or one check by name:
 
 ```bash
 cd apps/web && node undo.test.mjs
+cd apps/web && node --test-name-pattern="restores the deleted" undo.test.mjs
+cd apps/api/test && node search.test.mjs        # needs `pnpm dev`
 ```
+
+A name pattern narrows what is REPORTED, not what runs: a suite is a story
+whose later checks read state the earlier steps built, so every step still
+executes and only the matching checks print. See the header of
+`packages/test-support/harness.mjs` for why checks are evaluated by the suite
+and only reported through node:test, and why a suite must not use top-level
+`before`/`after` or `--test-force-exit`.
 
 `pnpm integration` runs its suites concurrently through
 `scripts/integration.mjs`, which is also where the list of them lives — adding
@@ -53,7 +74,8 @@ npx playwright test --ui        # interactive debugging
 
 pnpm workspace: `apps/api` (Hono REST + Hocuspocus on ONE port), `apps/web`
 (Vite + React + TipTap v3), `apps/mcp` (an MCP server over the REST API),
-`packages/shared` (zod schemas and the Yjs key names both sides must agree on).
+`packages/shared` (zod schemas and the Yjs key names both sides must agree on),
+`packages/test-support` (test helpers and the `node:test` harness, see Commands).
 
 **Hocuspocus owns the HTTP server; Hono is delegated to from its `onRequest`
 hook** — not the other way round. Hocuspocus 4 handles upgrades through crossws
@@ -190,7 +212,7 @@ Each of these caused a real bug. Changing them silently breaks things.
   given, so appending run by run wrote every run at 0 — the text came out
   backwards. And text inserted beside a link inherits its formatting, so plain
   runs pass `{ link: null }`; without it the words after a link were swallowed
-  into it. Both are covered in `content.test.mjs` (#25).
+  into it. Both are covered in `apps/api/test/content.test.mjs` (#25).
 
 - **Never pass the document-wide `UndoManager` to Collaboration's
   `yUndoOptions`.** That plugin assumes it owns its manager and calls
@@ -410,9 +432,9 @@ Each of these caused a real bug. Changing them silently breaks things.
 
 | Command | Layer | Catches |
 |---|---|---|
-| `pnpm test` | pure logic + jsdom editors | index math, editor teardown, keybindings |
-| `pnpm integration` | Node against the running servers | REST contract, CRDT convergence, persistence |
-| `pnpm e2e` | Playwright, real Chromium | layout, focus, event routing, multi-client UI |
+| `pnpm test` | pure logic + jsdom editors (`apps/web/*.test.mjs`) | index math, editor teardown, keybindings |
+| `pnpm integration` | Node against the running servers (`apps/api/test/`, `apps/mcp/`) | REST contract, CRDT convergence, persistence |
+| `pnpm e2e` | Playwright, real Chromium (`apps/web/e2e/`) | layout, focus, event routing, multi-client UI |
 
 `pnpm integration` and `pnpm e2e` both need the stack running (`pnpm dev`);
 Playwright will start it itself if it is not, and reuses it if it is.
@@ -481,14 +503,27 @@ Notes for writing tests here:
   (a reconnect, search indexing) or deliberately shorter than it.
 - **Tests purge what they create.** Both server suites run against the dev
   database, and leftovers showed up in real sidebars. An integration suite
-  calls `trackCreatedDocuments()` from `test-cleanup.mjs` before its first
-  request and `await tracker.purge()` before exiting; documents made in another
+  calls `trackCreatedDocuments()` from `@xdocs/test-support/cleanup` before its
+  first request, registers `cleanup(() => tracker.purge())` straight after it,
+  and ends with `await finish()`, which runs it; documents made in another
   process (the MCP server) are registered with `tracker.add()`. In the browser
   suite the `doc` and `page` fixtures do it. Do not sweep "everything the test
   account owns" instead: e2e and integration share that account and can run at
   once.
-- **To see persisted state, call `flushStore()` from `test-store.mjs` — never
-  sleep out the store debounce.** Hocuspocus writes on a 2s debounce, so suites
+- **Register what a suite opens with `cleanup()`, and close it** (#70). The
+  old footer's `process.exit` ended a suite however many sockets it left
+  open; node:test exits only when nothing is, so a provider never destroyed
+  now keeps the suite running. Cleanups also run when a step throws — the
+  harness catches it, prints it, cleans up and fails the run, where most
+  suites used to skip their purge. Register a purge AFTER the
+  server it purges through, since cleanups run in reverse.
+- **Check names are test names.** `check('...', ok)` is one node:test test,
+  so the name is what `--test-name-pattern` matches and what a failure lists.
+  Keep it unique in its suite, and keep values out of it where you can —
+  `content`'s table check embeds a timestamp, so it can only be matched by a
+  part of its name.
+- **To see persisted state, call `flushStore()` from
+  `@xdocs/test-support/store` — never sleep out the store debounce.** Hocuspocus writes on a 2s debounce, so suites
   used to `sleep(3500)` and hope, which is both slow and a guess. A direct
   connection disconnecting instead runs the store hook with a debounce of zero
   and awaits it, then unloads the document — and `withDocument()` opens exactly
@@ -584,7 +619,7 @@ Two choices that are load-bearing:
 and CI because Google OAuth cannot be automated. Staging leaves it unset.
 
 Better Auth requires an `Origin` header on state-changing requests (CSRF).
-Browsers always send one; Node's `fetch` does not — `test-auth.mjs` adds it.
+Browsers always send one; Node's `fetch` does not — `@xdocs/test-support/auth` adds it.
 
 Any test that signs **out** must use `createDisposableUser` /
 `seedDisposableSession`: sign-out revokes the session server-side, so using the

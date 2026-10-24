@@ -1,5 +1,5 @@
 import { ACCOUNT_NOT_ALLOWED } from '@xdocs/shared';
-import { authHeaders, createDisposableUser } from '../test-auth.mjs';
+import { authHeaders, createDisposableUser } from '@xdocs/test-support/auth';
 import { expect, test } from './fixtures';
 
 const API = 'http://localhost:3001';

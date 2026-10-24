@@ -1,13 +1,27 @@
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { createRequire } from 'node:module';
 import * as Y from 'yjs';
-import { resolveMove, applyMove } from './src/lib/reorder.ts';
-import { ySyncPluginKey } from '@tiptap/y-tiptap';
-import { authHeaders, signInForTests } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
-import { flushStore } from './test-store.mjs';
+/*
+ * The web client's own code, driven against the real collab server: the move
+ * a drag-and-drop makes, and the origin the editor's undo manager tracks. The
+ * point is that THIS code converges through the server, so it is imported
+ * rather than copied — reorder.ts has only type imports, so it loads as is.
+ */
+import { resolveMove, applyMove } from '../../web/src/lib/reorder.ts';
 
-// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+// Resolved through apps/web, which owns TipTap and pins every @tiptap/* package
+// exactly (#69): declared here too, it would be one more pin to keep in step.
+const { ySyncPluginKey } = createRequire(new URL('../../web/package.json', import.meta.url))(
+  '@tiptap/y-tiptap',
+);
+import { check, cleanup, finish } from '@xdocs/test-support/harness';
+import { authHeaders, signInForTests } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
+import { flushStore } from '@xdocs/test-support/store';
+
+// Everything this suite creates is purged when it ends; see @xdocs/test-support/cleanup.
 const tracker = trackCreatedDocuments();
+cleanup(() => tracker.purge());
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
@@ -17,12 +31,6 @@ const frag = (id) => `block-${id}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const token = await signInForTests(API);
 const H = (extra) => authHeaders(token, extra);
-
-let failures = 0;
-const check = (label, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${label}`);
-  if (!ok) failures++;
-};
 
 function connect(docId) {
   const doc = new Y.Doc();
@@ -280,6 +288,4 @@ D.provider.destroy();
 // 10. Cleanup
 await fetch(`${API}/api/documents/${id}`, { method: 'DELETE', headers: H() });
 
-await tracker.purge();
-console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILED`);
-process.exit(failures === 0 ? 0 : 1);
+await finish();

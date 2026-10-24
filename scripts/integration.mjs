@@ -2,20 +2,21 @@
 /**
  * Run the server integration suites, most of them at once.
  *
- * Each suite is a plain Node script that prints PASS/FAIL lines and exits
- * non-zero — there is no test runner (see CLAUDE.md). Run one after another
+ * Each suite is a plain Node script on `node:test` — one named test per check,
+ * reported by Node's spec reporter, exit code non-zero on any failure — with
+ * no runner beyond Node itself (see CLAUDE.md). Run one after another
  * they spend nearly all of their time waiting: on round trips to Neon, on the
  * Hocuspocus store, on an MCP subprocess starting. Run together they overlap
  * that waiting, and the whole thing finishes in about the time of the slowest
  * suite (#32).
  *
- * Output is buffered per suite and printed when that suite ends, so the
- * PASS/FAIL lines stay in their own block instead of interleaving. Failures
+ * Output is buffered per suite and printed when that suite ends, so its
+ * ✔/✖ lines stay in their own block instead of interleaving. Failures
  * are reprinted at the end, because a failure that scrolled past ten other
  * suites is a failure nobody sees.
  *
  * Suites may run together because each one creates everything it asserts on
- * and purges it afterwards (test-cleanup.mjs) — the same property the browser
+ * and purges it afterwards (@xdocs/test-support/cleanup) — the same property the browser
  * suite needs to shard. Anything that cannot is marked `alone` below, with the
  * reason.
  */
@@ -24,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const web = resolve(root, 'apps/web');
+const api = resolve(root, 'apps/api/test');
 const mcp = resolve(root, 'apps/mcp');
 
 /*
@@ -33,35 +34,35 @@ const mcp = resolve(root, 'apps/mcp');
  * leaves it running alone at the end.
  */
 const SUITES = [
-  { name: 'attachments', cwd: web, file: 'attachments.test.mjs' },
+  { name: 'attachments', cwd: api, file: 'attachments.test.mjs' },
   /*
    * Starts its own API on :3011 with a 1 MB quota, so it needs nothing from
    * the shared server and can overlap everything else.
    */
-  { name: 'quota-race', cwd: web, file: 'quota-race.test.mjs' },
+  { name: 'quota-race', cwd: api, file: 'quota-race.test.mjs' },
   /*
    * Starts its own API on :3012 and terminates that API's database
    * connections — only its own, picked out by a per-run application_name — so
    * it overlaps everything else too (#81).
    */
-  { name: 'pool-errors', cwd: web, file: 'pool-errors.test.mjs' },
-  { name: 'content', cwd: web, file: 'content.test.mjs' },
-  { name: 'versions', cwd: web, file: 'versions.test.mjs' },
-  { name: 'nested', cwd: web, file: 'nested.test.mjs' },
+  { name: 'pool-errors', cwd: api, file: 'pool-errors.test.mjs' },
+  { name: 'content', cwd: api, file: 'content.test.mjs' },
+  { name: 'versions', cwd: api, file: 'versions.test.mjs' },
+  { name: 'nested', cwd: api, file: 'nested.test.mjs' },
   { name: 'mcp', cwd: mcp, file: 'mcp.test.mjs' },
-  { name: 'move', cwd: web, file: 'move.test.mjs' },
-  { name: 'integration', cwd: web, file: 'integration.test.mjs' },
-  { name: 'trash', cwd: web, file: 'trash.test.mjs' },
-  { name: 'search', cwd: web, file: 'search.test.mjs' },
-  { name: 'apikeys', cwd: web, file: 'apikeys.test.mjs' },
-  { name: 'visibility', cwd: web, file: 'visibility.test.mjs' },
+  { name: 'move', cwd: api, file: 'move.test.mjs' },
+  { name: 'integration', cwd: api, file: 'integration.test.mjs' },
+  { name: 'trash', cwd: api, file: 'trash.test.mjs' },
+  { name: 'search', cwd: api, file: 'search.test.mjs' },
+  { name: 'apikeys', cwd: api, file: 'apikeys.test.mjs' },
+  { name: 'visibility', cwd: api, file: 'visibility.test.mjs' },
   /*
    * Alone: it counts pings on the workspace channel, which every signed-in
    * user shares, and three of its assertions are that NOTHING pinged. Every
    * successful non-GET on the documents routes pings, so any suite running
    * beside it fails those three.
    */
-  { name: 'live', cwd: web, file: 'live.test.mjs', alone: true },
+  { name: 'live', cwd: api, file: 'live.test.mjs', alone: true },
 ];
 
 const wanted = process.argv.slice(2);
@@ -92,6 +93,13 @@ const results = [];
 function run(suite) {
   const started = Date.now();
   return new Promise((done) => {
+    /*
+     * Run as a script, exactly as `node <file>` runs it by hand — not under
+     * `node --test`, whose per-file subprocess and summary would only wrap the
+     * one this already gives. Never with `--test-force-exit`: a suite's checks
+     * are registered as its story reaches them, and that flag ends the process
+     * the first time the queue drains (see the harness).
+     */
     const child = spawn(process.execPath, [suite.file], {
       cwd: suite.cwd,
       // Merged, and captured rather than inherited: interleaved PASS lines from
@@ -116,6 +124,9 @@ function run(suite) {
         code,
         seconds: (Date.now() - started) / 1000,
         output: output.trimEnd(),
+        // From the spec reporter's own summary, for the table at the end.
+        passed: Number(output.match(/^ℹ pass (\d+)$/m)?.[1] ?? 0),
+        failed: Number(output.match(/^ℹ fail (\d+)$/m)?.[1] ?? 0),
       };
       results.push(result);
       report(result);
@@ -171,24 +182,29 @@ const slowest = results.reduce((max, r) => Math.max(max, r.seconds), 0);
 
 console.log(`\n${'═'.repeat(60)}`);
 for (const r of [...results].sort((a, b) => b.seconds - a.seconds)) {
-  console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(14)} ${r.seconds.toFixed(1)}s`);
+  const counts = `${r.passed} passed${r.failed ? `, ${r.failed} failed` : ''}`;
+  console.log(
+    `${r.ok ? 'PASS' : 'FAIL'}  ${r.name.padEnd(14)} ${r.seconds.toFixed(1).padStart(5)}s  ${counts}`,
+  );
 }
 
 if (failed.length === 0) {
-  console.log(`\nALL PASS — ${results.length} suite(s), slowest ${slowest.toFixed(1)}s`);
+  const checks = results.reduce((n, r) => n + r.passed, 0);
+  console.log(
+    `\nALL PASS — ${results.length} suite(s), ${checks} checks, slowest ${slowest.toFixed(1)}s`,
+  );
   process.exit(0);
 }
 
-// Reprinted: the failure itself is thousands of lines back by now.
+// Reprinted: the failure itself is thousands of lines back by now. The spec
+// reporter ends with its own "failing tests" section — each failed check with
+// its assertion and location — so that is the part worth repeating. A suite
+// that died before reporting anything has no such section; all of it is shown.
 console.log(`\n${failed.length} suite(s) FAILED\n`);
 for (const r of failed) {
   console.log(`── ${r.name} (exit ${r.code}) ──`);
-  console.log(
-    r.output
-      .split('\n')
-      .filter((line) => /^FAIL|Error|error:/.test(line))
-      .join('\n') || r.output,
-  );
+  const section = r.output.indexOf('✖ failing tests:');
+  console.log(section >= 0 ? r.output.slice(section) : r.output);
   console.log();
 }
 process.exit(1);

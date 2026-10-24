@@ -5,6 +5,7 @@
  * node is not one, and re-appends it as soon as you delete it. Correct for a
  * single whole-document editor; wrong when every block is its own editor.
  */
+import { check } from '@xdocs/test-support/harness';
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
@@ -33,12 +34,6 @@ for (const key of [
 const { Editor } = await import('@tiptap/react');
 const StarterKit = (await import('@tiptap/starter-kit')).default;
 
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
-
 function build(trailingNode) {
   const element = dom.window.document.createElement('div');
   dom.window.document.body.appendChild(element);
@@ -63,15 +58,15 @@ function afterToggle(trailingNode, kind) {
 
 // The behaviour the user hit, pinned so the cause stays visible.
 const headingOn = afterToggle(undefined, 'heading');
-ck('with trailingNode ON a heading gains a trailing paragraph', headingOn.count === 2);
+check('with trailingNode ON a heading gains a trailing paragraph', headingOn.count === 2);
 
 const headingOff = afterToggle(false, 'heading');
-ck('with trailingNode OFF a heading is a single node', headingOff.count === 1);
-ck('heading block has no empty trailing <p>', !/<p><\/p>/.test(headingOff.html));
+check('with trailingNode OFF a heading is a single node', headingOff.count === 1);
+check('heading block has no empty trailing <p>', !/<p><\/p>/.test(headingOff.html));
 
 const listOff = afterToggle(false, 'bulletList');
-ck('with trailingNode OFF a list is a single node', listOff.count === 1);
-ck('list block has no empty trailing <p>', !/<p><\/p>/.test(listOff.html));
+check('with trailingNode OFF a list is a single node', listOff.count === 1);
+check('list block has no empty trailing <p>', !/<p><\/p>/.test(listOff.html));
 
 // The real complaint was that it could not be removed: it came back.
 const editor = build(false);
@@ -84,8 +79,5 @@ editor.commands.deleteRange({
   from: editor.state.doc.content.size - 2,
   to: editor.state.doc.content.size,
 });
-ck('a manually added trailing paragraph stays deleted', editor.state.doc.childCount < withExtra);
+check('a manually added trailing paragraph stays deleted', editor.state.doc.childCount < withExtra);
 editor.destroy();
-
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail ? 1 : 0);

@@ -14,23 +14,19 @@
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { authHeaders, createDisposableUser } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { check } from '@xdocs/test-support/harness';
+import { authHeaders, createDisposableUser } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
 
 const tracker = trackCreatedDocuments();
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const KB = 1024;
 const QUOTA = 1024 * KB;
 const PORT = 3011;
 const API = `http://localhost:${PORT}`;
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+// The repository root: this suite lives in apps/api/test.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const apiDir = resolve(root, 'apps/api');
 // dotenv-cli does not override variables already set, so PORT and the quota
 // below win over anything in .env.local.
@@ -70,7 +66,7 @@ try {
   const H = (extra) => authHeaders(token, extra);
   const usage = () => fetch(`${API}/api/attachments/usage`, { headers: H() }).then((r) => r.json());
 
-  ck('the server runs with the small quota', (await usage()).quotaBytes === QUOTA);
+  check('the server runs with the small quota', (await usage()).quotaBytes === QUOTA);
 
   const doc = await fetch(`${API}/api/documents`, {
     method: 'POST',
@@ -95,10 +91,10 @@ try {
   const refused = statuses.filter((s) => s === 413).length;
   const used = (await usage()).usedBytes;
 
-  ck(`exactly two of six concurrent uploads are accepted (got ${accepted})`, accepted === 2);
-  ck(`and the other four refused with 413 (got ${refused})`, refused === 4);
-  ck(`usage never passes the quota (${used} of ${QUOTA})`, used <= QUOTA);
-  ck('and is exactly what was accepted', used === accepted * 400 * KB);
+  check(`exactly two of six concurrent uploads are accepted (got ${accepted})`, accepted === 2);
+  check(`and the other four refused with 413 (got ${refused})`, refused === 4);
+  check(`usage never passes the quota (${used} of ${QUOTA})`, used <= QUOTA);
+  check('and is exactly what was accepted', used === accepted * 400 * KB);
 
   // Sequentially, as before the fix: the lock must not stop a later upload
   // that does fit.
@@ -109,11 +105,8 @@ try {
     headers: H(),
     body: small,
   });
-  ck('a later upload that fits is still accepted', after.status === 201);
+  check('a later upload that fits is still accepted', after.status === 201);
 } finally {
   await tracker.purge();
   server.kill();
 }
-
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail ? 1 : 0);

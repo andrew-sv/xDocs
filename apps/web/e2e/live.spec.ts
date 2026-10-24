@@ -1,5 +1,5 @@
 import type { APIRequestContext } from '@playwright/test';
-import { authHeaders } from '../test-auth.mjs';
+import { authHeaders } from '@xdocs/test-support/auth';
 import { expect, getTestToken, openDocument, test, type TestDocument } from './fixtures';
 
 const API = 'http://localhost:3001';

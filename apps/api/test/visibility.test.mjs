@@ -7,21 +7,17 @@
  */
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import * as Y from 'yjs';
-import { authHeaders, createDisposableUser, signInForTests } from './test-auth.mjs';
-import { trackCreatedDocuments } from './test-cleanup.mjs';
+import { check, cleanup, finish } from '@xdocs/test-support/harness';
+import { authHeaders, createDisposableUser, signInForTests } from '@xdocs/test-support/auth';
+import { trackCreatedDocuments } from '@xdocs/test-support/cleanup';
 
-// Everything this suite creates is purged when it ends; see test-cleanup.mjs.
+// Everything this suite creates is purged when it ends; see @xdocs/test-support/cleanup.
 const tracker = trackCreatedDocuments();
+cleanup(() => tracker.purge());
 
 const API = 'http://localhost:3001';
 const WS = 'ws://localhost:3001';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-let fail = 0;
-const ck = (l, ok) => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${l}`);
-  if (!ok) fail++;
-};
 
 const owner = await signInForTests(API);
 const stranger = (await createDisposableUser(API)).token;
@@ -58,16 +54,16 @@ const doc = await fetch(`${API}/api/documents`, {
   body: JSON.stringify({ title: 'visibility test' }),
 }).then((r) => r.json());
 
-ck('a new document defaults to private', doc.visibility === 'private');
-ck('the creator is the owner', doc.isOwner === true);
-ck('owner sees it in their list', (await listIds(owner)).includes(doc.id));
-ck('stranger does NOT see it in their list', !(await listIds(stranger)).includes(doc.id));
-ck(
+check('a new document defaults to private', doc.visibility === 'private');
+check('the creator is the owner', doc.isOwner === true);
+check('owner sees it in their list', (await listIds(owner)).includes(doc.id));
+check('stranger does NOT see it in their list', !(await listIds(stranger)).includes(doc.id));
+check(
   'stranger gets 404 fetching it directly',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) })).status === 404,
 );
-ck('owner can open the websocket', await canConnect(owner, doc.id));
-ck('stranger CANNOT open the websocket', !(await canConnect(stranger, doc.id)));
+check('owner can open the websocket', await canConnect(owner, doc.id));
+check('stranger CANNOT open the websocket', !(await canConnect(stranger, doc.id)));
 
 // --- a stranger cannot administer someone else's document ------------------
 const patchAs = (token, visibility) =>
@@ -76,13 +72,16 @@ const patchAs = (token, visibility) =>
     headers: H(token, { 'content-type': 'application/json' }),
     body: JSON.stringify({ visibility }),
   });
-ck('stranger cannot change visibility (403)', (await patchAs(stranger, 'public')).status === 403);
-ck(
+check(
+  'stranger cannot change visibility (403)',
+  (await patchAs(stranger, 'public')).status === 403,
+);
+check(
   'stranger cannot delete (403)',
   (await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(stranger) }))
     .status === 403,
 );
-ck(
+check(
   'document is still private after those attempts',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(owner) }).then((r) => r.json()))
     .visibility === 'private',
@@ -100,24 +99,30 @@ const refusal = await fetch(`${API}/api/documents/${doc.id}`, {
   method: 'DELETE',
   headers: H(stranger),
 }).then((r) => r.json());
-ck('the refusal carries no account_not_allowed code', refusal.code === undefined);
-ck('and explains itself in words', typeof refusal.error === 'string' && refusal.error.length > 0);
+check('the refusal carries no account_not_allowed code', refusal.code === undefined);
+check(
+  'and explains itself in words',
+  typeof refusal.error === 'string' && refusal.error.length > 0,
+);
 
 // --- owner makes it public --------------------------------------------------
 const madePublic = await patchAs(owner, 'public').then((r) => r.json());
-ck('owner can make it public', madePublic.visibility === 'public');
-ck('stranger now sees it listed', (await listIds(stranger)).includes(doc.id));
-ck(
+check('owner can make it public', madePublic.visibility === 'public');
+check('stranger now sees it listed', (await listIds(stranger)).includes(doc.id));
+check(
   'stranger can now fetch it',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) })).status === 200,
 );
-ck(
+check(
   'stranger is not marked as owner',
   (await fetch(`${API}/api/documents/${doc.id}`, { headers: H(stranger) }).then((r) => r.json()))
     .isOwner === false,
 );
-ck('stranger can now open the websocket', await canConnect(stranger, doc.id));
-ck('stranger still cannot change visibility', (await patchAs(stranger, 'private')).status === 403);
+check('stranger can now open the websocket', await canConnect(stranger, doc.id));
+check(
+  'stranger still cannot change visibility',
+  (await patchAs(stranger, 'private')).status === 403,
+);
 
 // --- public means EDIT, not just read --------------------------------------
 const a = new HocuspocusProvider({
@@ -135,7 +140,7 @@ const b = new HocuspocusProvider({
 await Promise.all([new Promise((r) => a.on('synced', r)), new Promise((r) => b.on('synced', r))]);
 b.document.getArray('blocks').push([{ id: crypto.randomUUID(), type: 'paragraph' }]);
 await sleep(800);
-ck(
+check(
   'a non-owner can edit a public document (collaboration works)',
   a.document.getArray('blocks').length === b.document.getArray('blocks').length &&
     a.document.getArray('blocks').length > 1,
@@ -145,8 +150,8 @@ b.destroy();
 
 // --- back to private revokes access ----------------------------------------
 await patchAs(owner, 'private');
-ck('stranger loses it from their list', !(await listIds(stranger)).includes(doc.id));
-ck('stranger is refused the websocket again', !(await canConnect(stranger, doc.id)));
+check('stranger loses it from their list', !(await listIds(stranger)).includes(doc.id));
+check('stranger is refused the websocket again', !(await canConnect(stranger, doc.id)));
 
 /*
  * hasChildren counts only children the caller can reach (#82). Counting any
@@ -197,24 +202,25 @@ const ROUTES = ['level', 'flat', 'get', 'search'];
 const ownerOnlyPrivate = await reported(owner);
 const strangerOnlyPrivate = await reported(stranger);
 for (const route of ROUTES) {
-  ck(`only a private child: owner sees hasChildren (${route})`, ownerOnlyPrivate[route] === true);
-  ck(
+  check(
+    `only a private child: owner sees hasChildren (${route})`,
+    ownerOnlyPrivate[route] === true,
+  );
+  check(
     `only a private child: stranger does NOT see hasChildren (${route})`,
     strangerOnlyPrivate[route] === false,
   );
 }
 
 const shown = await post({ title: 'public child', parentId: parent.id });
-ck('the second child inherits public', shown.visibility === 'public');
+check('the second child inherits public', shown.visibility === 'public');
 const strangerWithPublic = await reported(stranger);
 for (const route of ROUTES) {
-  ck(
+  check(
     `with a public child: stranger sees hasChildren (${route})`,
     strangerWithPublic[route] === true,
   );
 }
 
 await fetch(`${API}/api/documents/${doc.id}`, { method: 'DELETE', headers: H(owner) });
-await tracker.purge();
-console.log(fail === 0 ? '\nALL PASS' : `\n${fail} FAILED`);
-process.exit(fail ? 1 : 0);
+await finish();

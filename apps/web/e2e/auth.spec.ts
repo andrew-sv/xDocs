@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { TEST_USER } from '../test-auth.mjs';
+import { TEST_USER } from '@xdocs/test-support/auth';
 import { blocks, expect, getTestToken, seedDisposableSession, test } from './fixtures';
 
 /**

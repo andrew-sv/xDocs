@@ -108,7 +108,7 @@ test.describe('trash', () => {
 
   test('trash shows only your own deleted documents', async ({ page, doc, request }) => {
     // `doc` belongs to the shared test account; delete it as its owner.
-    const { authHeaders } = await import('../test-auth.mjs');
+    const { authHeaders } = await import('@xdocs/test-support/auth');
     const { getTestToken } = await import('./fixtures');
     const token = await getTestToken();
     await request.delete(`http://localhost:3001/api/documents/${doc.id}`, {

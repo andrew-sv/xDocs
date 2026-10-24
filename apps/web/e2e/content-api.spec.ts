@@ -1,4 +1,4 @@
-import { authHeaders } from '../test-auth.mjs';
+import { authHeaders } from '@xdocs/test-support/auth';
 import {
   blockEditor,
   blocks,
