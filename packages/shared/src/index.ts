@@ -137,6 +137,7 @@ export const apiKeySchema = z.object({
   /** First characters of the key, so a row is identifiable without the secret. */
   prefix: z.string(),
   createdAt: z.iso.datetime(),
+  /** Accurate to about a minute: it is rewritten only once it is that stale (#66). */
   lastUsedAt: z.iso.datetime().nullable(),
 });
 export type ApiKeyDTO = z.infer<typeof apiKeySchema>;

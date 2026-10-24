@@ -503,11 +503,16 @@ open and edit it — as long as every document above it is public too.
 401s without a session, and the websocket refuses a forged one. Run it after any
 backend deploy.
 
-Railway builds from the root `start` script (`pnpm -F @xdocs/api start`), which
-runs the API with `tsx` — `packages/shared` exports raw TypeScript, so the
-runtime has to compile it. Deliberately **not** using `.railway/railway.ts`:
-that config is declarative and would delete every variable it does not itself
-declare, which would mean committing `DATABASE_URL` and the password.
+Railway runs the root `build` script, then the root `start` script
+(`pnpm -F @xdocs/api start`), which runs `dist/server.js` with plain `node`.
+That file is an esbuild bundle (`apps/api/scripts/build.mjs`): `packages/shared`
+exports raw TypeScript, so it is inlined, while every npm dependency stays
+external and loads from `node_modules`. Without the build step, start fails on
+a missing `dist/server.js`. `tsx` is only for `pnpm dev`.
+
+Deliberately **not** using `.railway/railway.ts`: that config is declarative and
+would delete every variable it does not itself declare, which would mean
+committing `DATABASE_URL` and the password.
 
 CORS is pinned to `WEB_ORIGIN`, so Vercel preview deployments will not reach
 staging unless their URL is added.

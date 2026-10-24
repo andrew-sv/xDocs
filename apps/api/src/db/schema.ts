@@ -131,7 +131,11 @@ export const apiKeys = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    /** Rough: written on use, so "is this key still in use" is answerable. */
+    /**
+     * Rough: written on use, so "is this key still in use" is answerable — and
+     * only when over a minute old, so a busy key is not a write per request
+     * (LAST_USED_RESOLUTION_SECONDS in apiKeys.ts, #66).
+     */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     /** Revocation is a soft delete, so a revoked key's history survives it. */
     revokedAt: timestamp('revoked_at', { withTimezone: true }),

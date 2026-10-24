@@ -13,7 +13,7 @@ pnpm dev                       # api+collab :3001, web :5173
 pnpm typecheck                 # all packages, plus the e2e specs
 pnpm lint                      # ESLint, type-aware; CI runs it
 pnpm format                    # Prettier; CI runs format:check
-pnpm build
+pnpm build                     # apps/api: esbuild bundle to dist/server.js
 ```
 
 Tests — see **Test layers** below for what each one actually covers:
@@ -221,24 +221,28 @@ Each of these caused a real bug. Changing them silently breaks things.
   hand-built prefix query (search-as-you-type, which plainto cannot do). Each
   side ANDs its own terms, so the OR does not loosen matching.
 - **Every list response must be discardable, and fetches must not cancel each
-  other.** `refresh()` in `App.tsx` drops a response when the level changed, when
-  a local mutation (`invalidateList`) happened after it was sent, or when it is
-  older than the list on screen. The level guard alone misses same-level races:
+  other.** `ListFreshness` (`src/lib/listFreshness.ts`, wired into React by
+  `useDocumentList`) drops a response when the level changed, when a local
+  mutation (`invalidateList`) happened after it was sent, or when it is older
+  than the list on screen. The level guard alone misses same-level races:
   creating a document while the first list fetch is in flight lets that response
   land afterwards and wipe the new row (`e2e/stale.spec.ts`). "Older" is the
   server's read time, `x-list-as-of`, not the order sent: under load the server
   answers out of order, and a list read before a restore landed last and hid the
   restored row. And no fetch may retire another merely by starting — with pings
   arriving faster than responses, that froze the sidebar entirely. Sign-out
-  latches `signedOut` before it awaits anything, and `refresh()` reads that
-  latch on both sides of its fetch: otherwise a list read by the session that
-  just ended lands, calls `setLocked(false)` and puts that account's documents
-  back on screen under the gate that should have replaced them (#28). It has to
+  latches the session as ended (`endSession`) before it awaits anything, and
+  `load()` reads that latch on both sides of its fetch: otherwise a list read
+  by the session that just ended lands, calls `setLocked(false)` and puts that
+  account's documents back on screen under the gate that should have replaced
+  them (#28). It has to
   be a latch, not a sequence number compared across the await — a refetch
   *starting* during the sign-out sees the bumped number and still carries the
   token, which is cleared a moment later, so it agrees with itself and lands.
   Signing back in clears the latch; without that the gate accepts the password
-  and leaves an empty sidebar, every response dropped.
+  and leaves an empty sidebar, every response dropped. These rules have no
+  React in them so `listFreshness.test.mjs` can play each race out in the
+  order that broke it (#72); add a scenario there when you add a rule.
 - **Only one ping-driven refetch runs at a time** (`useDocumentsChanged`).
   Pings arriving during one collapse into a single trailing refetch. The 250ms
   debounce alone does not bound this: a workspace being edited by several
@@ -253,8 +257,8 @@ Each of these caused a real bug. Changing them silently breaks things.
   `documents-changed` on the read-only `workspace` collab channel; open apps
   refetch over REST. Never put ids or titles in the ping — every signed-in user
   hears it. A refetch can land before the debounced save of a title being typed,
-  so `App.tsx` keeps unsaved titles (`withUnsavedTitles`) over fetched rows;
-  without that, the name you are typing flips back to "Untitled".
+  so `ListFreshness` keeps unsaved titles (`withUnsavedTitles`) over fetched
+  rows; without that, the name you are typing flips back to "Untitled".
 - **REST content writes go through `withDocument()` in `src/collab.ts`, never
   the `ystate` column.** It opens a Hocuspocus direct connection, so the edit is
   a real CRDT operation: it merges with what people are typing and appears in
@@ -352,6 +356,17 @@ Each of these caused a real bug. Changing them silently breaks things.
   `pool-errors.test.mjs` terminates its own API's backends to prove it; it
   matches them by a per-run `application_name`, because the dev database is
   shared and ending anyone else's connection breaks them.
+- **Production runs `apps/api/dist/server.js` with plain `node`, not `tsx`
+  (#68).** `build` bundles it with esbuild (`scripts/build.mjs`), inlining
+  `@xdocs/shared` — it exports raw `.ts`, which node will not load from a
+  dependency, so `tsc` emit would need a second build for it — and leaving
+  every other `dependencies` entry external, because CJS packages like `pg`
+  bundled into ESM break on `require`. So a package the API imports must be in
+  its `dependencies`, or the bundle inlines it. The bundle only transpiles;
+  `pnpm typecheck` checks types. `start` reads env from the host, not
+  `.env.local` — locally, `node --env-file=../../.env.local dist/server.js`.
+  Node's own type stripping (`node src/server.ts`) is not an option: the
+  imports say `.js`, which it does not map to `.ts`.
 - **`drizzle-kit` and `tsx` do not read `.env.local`**; every script wraps them
   in `dotenv-cli`.
 - **There is no `db:push`, deliberately.** Schema changes go through committed
