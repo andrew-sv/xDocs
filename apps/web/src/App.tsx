@@ -10,6 +10,7 @@ import { Toast } from './components/Toast';
 import { api } from './lib/api';
 import { ForbiddenError, UnauthorizedError, clearToken, signOut, useSession } from './lib/auth';
 import { useDocumentsChanged } from './lib/collab';
+import { useDocumentList } from './hooks/useDocumentList';
 import { documentIdFromLocation, documentPath } from './lib/route';
 
 /**
@@ -31,16 +32,6 @@ function pathTo(trail: DocumentDTO[], doc: DocumentDTO): DocumentDTO[] {
 }
 
 export function App() {
-  const [documents, setDocuments] = useState<DocumentDTO[]>([]);
-  /*
-   * Which level the loaded list belongs to.
-   *
-   * Without this the sidebar keeps rendering the previous level's rows until
-   * the new fetch returns — you see the old tree for a moment after clicking
-   * into a document. Comparing it against the current level tells us the list
-   * is stale, so we show a loading state instead of the wrong documents.
-   */
-  const [documentsParentId, setDocumentsParentId] = useState<string | null>(null);
   const [selected, setSelected] = useState<DocumentDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   /*
@@ -70,21 +61,6 @@ export function App() {
 
   const [pendingRestore, setPendingRestore] = useState<{ id: string; title: string } | null>(null);
   const [locked, setLocked] = useState(false);
-
-  /*
-   * Whether this account is on its way out, or already gone.
-   *
-   * Everything fetched here is scoped to the signed-in account, so once sign-out
-   * starts nothing it reads may reach the screen. A ref, not state, because the
-   * fetches that have to see it are already running and hold a stale closure.
-   *
-   * A sequence number compared across the await is NOT enough, and that was the
-   * first attempt at this: a refetch STARTING during sign-out reads the number
-   * after the bump and still carries the token, which is cleared a moment later.
-   * It then agrees with itself and lands. What matters is not which session a
-   * response belongs to but whether any session is still current.
-   */
-  const signedOut = useRef(false);
 
   /*
    * Breadcrumb trail; empty means the top level. Clicking a document both opens
@@ -119,6 +95,28 @@ export function App() {
   const [moveLoading, setMoveLoading] = useState(false);
   const { data: session } = useSession();
 
+  const currentParentId = trail.length > 0 ? trail[trail.length - 1]!.id : null;
+
+  /*
+   * The sidebar's rows, and every rule about which list response may reach the
+   * screen: the level guard, local changes retiring in-flight fetches, the
+   * x-list-as-of comparison, the sign-out latch and unsaved titles. Each rule
+   * exists because of a real race (#22, #28); they live in
+   * lib/listFreshness.ts, where they are tested without a browser (#72).
+   */
+  const {
+    documents,
+    setDocuments,
+    documentsParentId,
+    refresh,
+    invalidateList,
+    withUnsavedTitles,
+    noteTitle,
+    endSession,
+    resumeSession,
+    sessionEnded,
+  } = useDocumentList(currentParentId, { setLocked, setError, setDeniedReason });
+
   const handleVisibilityChange = useCallback(
     async (id: string, visibility: DocumentDTO['visibility']) =>
       attempt(async () => {
@@ -126,7 +124,7 @@ export function App() {
         setDocuments((prev) => prev.map((d) => (d.id === id ? updated : d)));
         setSelected((prev) => (prev?.id === id ? updated : prev));
       }),
-    [attempt],
+    [attempt, setDocuments],
   );
 
   const handleSignOut = useCallback(async () => {
@@ -138,7 +136,7 @@ export function App() {
      * the gate never appeared and the sidebar filled back up with the
      * documents the session that just ended could see (#28).
      */
-    signedOut.current = true;
+    endSession();
     await signOut();
     clearToken();
     setDocuments([]);
@@ -149,12 +147,12 @@ export function App() {
     setQuery('');
     setResults([]);
     setLocked(true);
-  }, []);
+  }, [endSession, setDocuments]);
 
   /*
    * Debounced search.
    *
-   * The guard is the same shape as the level guard above and exists for the
+   * The guard is the same shape as the list's level guard and exists for the
    * same reason: responses can arrive out of order, and an older one landing
    * last would show results for a query the user has already moved past.
    */
@@ -192,106 +190,15 @@ export function App() {
   }, []);
 
   const refreshTrash = useCallback(async () => {
-    if (signedOut.current) return;
+    if (sessionEnded()) return;
     try {
       const rows = await api.listTrash();
-      if (signedOut.current) return; // signed out meanwhile
+      if (sessionEnded()) return; // signed out meanwhile
       setTrash(rows);
     } catch {
       // The count is decoration; a failure here must not blank the sidebar.
     }
-  }, []);
-
-  const currentParentId = trail.length > 0 ? trail[trail.length - 1]!.id : null;
-
-  /*
-   * The level a response must still be for to be applied.
-   *
-   * Two level fetches can be in flight at once (open a document while the root
-   * list is still loading). Without this guard a slower EARLIER response
-   * overwrites the newer one, leaving the list pinned to a level nobody is
-   * looking at — and the sidebar stuck on its loading state.
-   */
-  const latestLevel = useRef<string | null>(currentParentId);
-  latestLevel.current = currentParentId;
-
-  /*
-   * Titles typed in this tab that the server has not stored yet.
-   *
-   * The title column is written on the collab server's debounced save, so a
-   * list fetched in the meantime still carries the old title — and since any
-   * change anywhere now triggers a refetch (#22), one can land at any moment.
-   * Applied as-is, it flipped a title being typed back to "Untitled". An entry
-   * goes once a fetched row agrees with it, or after 30s as a backstop (the
-   * save itself pings, so agreement normally comes within seconds).
-   */
-  const unsavedTitles = useRef(new Map<string, { title: string; at: number }>());
-  const withUnsavedTitles = useCallback((rows: DocumentDTO[]): DocumentDTO[] => {
-    const pending = unsavedTitles.current;
-    return rows.map((row) => {
-      const typed = pending.get(row.id);
-      if (!typed) return row;
-      if (row.title === typed.title || Date.now() - typed.at > 30_000) {
-        pending.delete(row.id);
-        return row;
-      }
-      return { ...row, title: typed.title };
-    });
-  }, []);
-
-  /*
-   * Which list responses may still be applied, beyond the level guard above.
-   *
-   * - A local change (`invalidateList`) retires every fetch already in flight:
-   *   creating a document while the FIRST list fetch is outstanding is the
-   *   same level, so that response would land afterwards and wipe the row just
-   *   added — the new document open but missing from the sidebar.
-   * - Otherwise a list older than the one on screen is dropped. "Older" is the
-   *   server's read time (x-list-as-of), not the order fetches were sent:
-   *   under load the server answers out of order, and a list sent later but
-   *   read earlier used to land last and hide a document just restored.
-   *
-   * Fetches deliberately do not cancel each other. Every ping from the server
-   * starts one (#22), and when each new fetch retired the last, a steady
-   * stream of pings meant no response ever landed and the sidebar froze.
-   */
-  const changeSeq = useRef(0);
-  const shownList = useRef<{ level: string | null; asOf: number } | null>(null);
-  const invalidateList = () => {
-    changeSeq.current += 1;
-  };
-
-  const refresh = useCallback(async () => {
-    if (signedOut.current) return;
-    const changesAtStart = changeSeq.current;
-    try {
-      const { rows, asOf } = await api.listLevel(currentParentId);
-      if (signedOut.current) return; // signed out meanwhile
-      if (latestLevel.current !== currentParentId) return; // navigated elsewhere
-      if (changeSeq.current !== changesAtStart) return; // fetched before a local change
-      const shown = shownList.current;
-      if (shown?.level === currentParentId && asOf < shown.asOf) return; // older than what is shown
-      shownList.current = { level: currentParentId, asOf };
-      setDocuments(withUnsavedTitles(rows));
-      setDocumentsParentId(currentParentId);
-      setLocked(false);
-      setError(null);
-    } catch (e) {
-      // A gated deployment answers 401 until a valid password is supplied;
-      // that is a login prompt, not an error to render.
-      if (e instanceof UnauthorizedError) {
-        setLocked(true);
-        return;
-      }
-      if (e instanceof ForbiddenError) {
-        // Signed in, but not on the allowlist — say so instead of looping.
-        setDeniedReason(e.message);
-        setLocked(true);
-        return;
-      }
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [currentParentId, withUnsavedTitles]);
+  }, [sessionEnded]);
 
   useEffect(() => {
     void refresh();
@@ -522,39 +429,45 @@ export function App() {
   }, []);
 
   /** "+ Add document" inside a document: create a child and drill into it. */
-  const addSubDocument = useCallback(async (parent: DocumentDTO) => {
-    const child = await api.createDocument('Untitled', parent.id);
-    invalidateList();
-    /*
-     * The parent now has a child, and both the trail and the list hold DTO
-     * snapshots — without this they keep reporting hasChildren: false, so the
-     * sidebar loses its ▸ marker and the delete dialog stops warning that
-     * sub-documents will go too.
-     */
-    const withChild = (d: DocumentDTO) => (d.id === parent.id ? { ...d, hasChildren: true } : d);
-    setTrail((prev) => {
-      const updated = prev.map(withChild);
-      return updated.some((d) => d.id === parent.id)
-        ? updated
-        : [...updated, { ...parent, hasChildren: true }];
-    });
-    setSelected(child);
-    setDocuments((prev) => [child, ...prev.map(withChild)]);
-  }, []);
+  const addSubDocument = useCallback(
+    async (parent: DocumentDTO) => {
+      const child = await api.createDocument('Untitled', parent.id);
+      invalidateList();
+      /*
+       * The parent now has a child, and both the trail and the list hold DTO
+       * snapshots — without this they keep reporting hasChildren: false, so the
+       * sidebar loses its ▸ marker and the delete dialog stops warning that
+       * sub-documents will go too.
+       */
+      const withChild = (d: DocumentDTO) => (d.id === parent.id ? { ...d, hasChildren: true } : d);
+      setTrail((prev) => {
+        const updated = prev.map(withChild);
+        return updated.some((d) => d.id === parent.id)
+          ? updated
+          : [...updated, { ...parent, hasChildren: true }];
+      });
+      setSelected(child);
+      setDocuments((prev) => [child, ...prev.map(withChild)]);
+    },
+    [invalidateList, setDocuments],
+  );
 
   // The DB copy of the title is only written on Hocuspocus's debounce, so keep
   // the sidebar in step with what the author is typing right now.
-  const handleTitleChange = useCallback((id: string, title: string) => {
-    unsavedTitles.current.set(id, { title, at: Date.now() });
-    setDocuments((prev) =>
-      prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
-    );
-    // The open document is usually NOT a sidebar row any more — it is the last
-    // breadcrumb — so the trail has to track renames or the crumb goes stale.
-    setTrail((prev) =>
-      prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
-    );
-  }, []);
+  const handleTitleChange = useCallback(
+    (id: string, title: string) => {
+      noteTitle(id, title);
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
+      );
+      // The open document is usually NOT a sidebar row any more — it is the last
+      // breadcrumb — so the trail has to track renames or the crumb goes stale.
+      setTrail((prev) =>
+        prev.map((d) => (d.id === id ? (d.title === title ? d : { ...d, title }) : d)),
+      );
+    },
+    [noteTitle, setDocuments],
+  );
 
   const startMove = useCallback(async (doc: DocumentDTO) => {
     setPendingMove(doc);
@@ -586,7 +499,7 @@ export function App() {
       setSelected((prev) => (prev?.id === doc.id ? moved : prev));
       await refresh();
     },
-    [refresh],
+    [refresh, invalidateList, setDocuments],
   );
 
   async function deleteDocument(doc: DocumentDTO) {
@@ -651,7 +564,7 @@ export function App() {
         onSignedIn={() => {
           // There is a session again, so reads may reach the screen once more.
           // Without this, signing back in after a sign-out would load nothing.
-          signedOut.current = false;
+          resumeSession();
           setDeniedReason(null);
           void refresh();
           // A link opened while signed out is resolved now.
