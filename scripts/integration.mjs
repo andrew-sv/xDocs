@@ -39,6 +39,12 @@ const SUITES = [
    * the shared server and can overlap everything else.
    */
   { name: 'quota-race', cwd: web, file: 'quota-race.test.mjs' },
+  /*
+   * Starts its own API on :3012 and terminates that API's database
+   * connections — only its own, picked out by a per-run application_name — so
+   * it overlaps everything else too (#81).
+   */
+  { name: 'pool-errors', cwd: web, file: 'pool-errors.test.mjs' },
   { name: 'content', cwd: web, file: 'content.test.mjs' },
   { name: 'versions', cwd: web, file: 'versions.test.mjs' },
   { name: 'nested', cwd: web, file: 'nested.test.mjs' },

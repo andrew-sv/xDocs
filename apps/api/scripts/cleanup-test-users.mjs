@@ -54,6 +54,9 @@ if (!connectionString) {
   process.exit(1);
 }
 
+// No pool.on('error') here, unlike the API (#81): a dropped connection ending
+// this short, operator-run script loudly is the right outcome: its one
+// transaction dies with the connection, and running it again is safe.
 const pool = new Pool({ connectionString });
 const client = await pool.connect();
 

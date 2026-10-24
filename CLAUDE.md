@@ -346,6 +346,12 @@ Each of these caused a real bug. Changing them silently breaks things.
 - **DB driver:** `drizzle-orm/node-postgres` with a `pg` Pool, not `neon-http` —
   the API is a long-lived process. The app uses the pooled `DATABASE_URL`;
   drizzle-kit needs the direct `DATABASE_URL_UNPOOLED`.
+- **The API's `pg.Pool` must keep its `'error'` listener (#81).** A dropped
+  idle client — Neon suspending or restarting — emits `error` on the pool, and
+  with no listener that throws and kills the one Hocuspocus process.
+  `pool-errors.test.mjs` terminates its own API's backends to prove it; it
+  matches them by a per-run `application_name`, because the dev database is
+  shared and ending anyone else's connection breaks them.
 - **`drizzle-kit` and `tsx` do not read `.env.local`**; every script wraps them
   in `dotenv-cli`.
 - **There is no `db:push`, deliberately.** Schema changes go through committed
