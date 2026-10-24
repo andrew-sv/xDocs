@@ -117,6 +117,98 @@ export async function subtreeIds(documentId: string, db: Executor = getDb()): Pr
 }
 
 /**
+ * Soft-delete a document and the part of its subtree the deleter can reach,
+ * under ONE shared `deleted_at` — the value restore and the trash listing
+ * group by. The caller has already proven `userId` owns the live root.
+ *
+ * You cannot delete what you cannot see (#87). A descendant the rule refuses
+ * the deleter — someone else's private document under their public one — is
+ * not trashed but moved to the top level, and its own subtree goes with it
+ * untouched, as `cleanup:test-users` does with other people's sub-documents.
+ * Since #82 the deleter's `hasChildren`, and so the delete dialog's warning,
+ * counts only what they can reach; this makes the delete act on exactly that.
+ *
+ * The walk carries whether each row is reachable and descends only through
+ * reachable ones, so the unreachable rows it finds are the TOPMOST ones — the
+ * roots of what to spare. Rows already in the trash are skipped with what is
+ * under them, as before: they keep the timestamp of their own deletion.
+ *
+ * One statement, so the cascade and the re-parenting cannot be split by a
+ * concurrent move, and `parent_id`'s NO ACTION FK (#64) is never in play: no
+ * row is removed. UNION, not UNION ALL, so a parent cycle ends the walk (#55).
+ */
+export async function trashSubtree(
+  documentId: string,
+  userId: string,
+  deletedAt: Date,
+  db: Executor = getDb(),
+): Promise<void> {
+  await db.execute(sql`
+    WITH RECURSIVE walk AS (
+      SELECT id, true AS reachable FROM documents WHERE id = ${documentId}
+      UNION
+      SELECT d.id, ${admits('d', userId)} AS reachable
+        FROM documents d
+        JOIN walk w ON d.parent_id = w.id
+       WHERE w.reachable AND d.deleted_at IS NULL
+    ),
+    spared AS (
+      UPDATE documents SET parent_id = NULL
+       WHERE id IN (SELECT id FROM walk WHERE NOT reachable)
+      RETURNING id
+    )
+    UPDATE documents SET deleted_at = ${deletedAt.toISOString()}::timestamptz
+     WHERE id IN (SELECT id FROM walk WHERE reachable)
+       AND deleted_at IS NULL
+  `);
+}
+
+/**
+ * Permanently delete a trashed document and the trashed part of its subtree
+ * the purger can reach — the only hard delete the app performs. The caller has
+ * already proven `userId` owns the root and that it is in the trash.
+ *
+ * The same rule as `trashSubtree`, for trash that predates it (#87): a delete
+ * used to cascade over everything, so a trashed subtree can still hold someone
+ * else's private document, and purging it destroyed that document — one its
+ * owner never deleted and the purger never knew was there. Such a row, or a
+ * live one, is the topmost of a part to spare: it moves to the top level with
+ * everything beneath it, keeping its `deleted_at`, so a trashed one becomes a
+ * deletion root in its owner's trash, to restore or purge themselves.
+ *
+ * Reachable here ignores `deleted_at`, which every row walked through has:
+ * public or the purger's own, as `admits` would judge it were it live.
+ *
+ * One statement: the re-parenting lands before `parent_id`'s NO ACTION FK
+ * (#64) is checked at its end, so no spared row is left pointing at a deleted
+ * parent. UNION, not UNION ALL, so a parent cycle ends the walk (#55).
+ */
+export async function purgeSubtree(
+  documentId: string,
+  userId: string,
+  db: Executor = getDb(),
+): Promise<void> {
+  await db.execute(sql`
+    WITH RECURSIVE walk AS (
+      SELECT id, true AS doomed FROM documents WHERE id = ${documentId}
+      UNION
+      SELECT d.id,
+             d.deleted_at IS NOT NULL
+             AND (d.visibility = 'public' OR d.created_by = ${userId}) AS doomed
+        FROM documents d
+        JOIN walk w ON d.parent_id = w.id
+       WHERE w.doomed
+    ),
+    spared AS (
+      UPDATE documents SET parent_id = NULL
+       WHERE id IN (SELECT id FROM walk WHERE NOT doomed)
+      RETURNING id
+    )
+    DELETE FROM documents WHERE id IN (SELECT id FROM walk WHERE doomed)
+  `);
+}
+
+/**
  * Would making `parentId` the parent of `documentId` create a cycle?
  * Impossible through the UI, but a hand-made request could otherwise detach a
  * subtree into a loop that the recursive queries would never terminate on.

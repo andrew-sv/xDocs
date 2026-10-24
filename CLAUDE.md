@@ -100,7 +100,10 @@ Delete cascades to the subtree under **one shared `deleted_at`**, and that
 timestamp is the grouping key everywhere afterwards: restore brings back rows
 matching it, and `GET /documents/trash` treats a deleted document whose parent
 does *not* share it as a deletion root. Do not "tidy" the cascade into
-per-row timestamps — both would break.
+per-row timestamps — both would break. The cascade stops at documents the
+deleter cannot reach (#87): those move to the top level, subtree and all, in
+the same statement (`trashSubtree` in `src/db/access.ts`) — you cannot delete
+what you cannot see, and since #82 the delete warning counts only what you can.
 
 `content_text` is a second denormalised mirror, written by the same store hook
 as `title`, holding the plain text of every block so search has something
@@ -115,7 +118,10 @@ lookup filters on it, so a revoked key stops working on the next request.
 
 `DELETE /documents/:id/permanent` is the only hard delete the app performs. Its
 `where` clause requires `deleted_at IS NOT NULL` as well as ownership, so a live
-document can never be destroyed even if the UI asks; keep it that way.
+document can never be destroyed even if the UI asks; keep it that way. Below
+the root it destroys only trashed rows the purger can reach (`purgeSubtree`):
+trash from before #87 can hold someone else's private document, which is moved
+to the top level instead — still trashed, so it lands in its owner's trash.
 
 `parent_id` is a self-referencing FK with NO ACTION (#64), so no row can point
 at a parent that does not exist. That is why both hard deletes remove a whole

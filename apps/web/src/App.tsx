@@ -646,6 +646,8 @@ export function App() {
           title="Delete document"
           message={`“${pendingDelete.title || 'Untitled'}” will be moved to the bin. You can undo this straight afterwards.`}
           warning={
+            // hasChildren counts only children you can reach (#82), and the
+            // delete trashes only those — the rest move to the top level (#87).
             pendingDelete.hasChildren
               ? 'Its sub-documents will be deleted too, and restored together if you undo.'
               : null
